@@ -28,6 +28,7 @@
 #   updateinterval: Statistics update interval in seconds (default: 1)
 
 
+import sys
 import curses
 import threading
 import atexit
@@ -158,6 +159,7 @@ class CursesUI(object):
         cy = cy + 1
 
   def mainloop(self):
+    sys.excepthook = self.miner.uncaughthandler
     while True:
       with self.miner.poollock:
         pooldata = self.miner.collectstatistics(self.miner.pools)

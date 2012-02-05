@@ -33,6 +33,7 @@
 #   scaninterval: Bus scan interval in seconds (default: 10)
 
 
+import sys
 import time
 import datetime
 import threading
@@ -122,6 +123,9 @@ class X6500HotplugWorker(object):
   # Main thread entry point
   # This thread is responsible for scanning for boards and spawning worker modules for them
   def main(self):
+
+    # Handle uncaught exceptions gracefully
+    sys.excepthook = self.miner.uncaughthandler
 
     if self.useftd2xx: import d2xx
     if not self.useftd2xx or self.takeover: import usb

@@ -38,6 +38,7 @@
 #   longpolltimeout: Long poll connection inactivity timeout (default: global setting)
 
 
+import sys
 import common
 import base64
 import datetime
@@ -110,6 +111,7 @@ class JSONRPCPool(object):
     uploader.start()
 
   def uploadresult(self, job, data, nonce, difficulty, worker):
+    sys.excepthook = self.miner.uncaughthandler
     while True:
       try:
         conn = http_client.HTTPConnection(self.host, self.port, True, self.sendsharetimeout)
@@ -171,6 +173,7 @@ class JSONRPCPool(object):
     return common.Job(self.miner, self, self.longpollepoch, state, data, target)
 
   def longpollingworker(self, host, port, path):
+    sys.excepthook = self.miner.uncaughthandler
     while True:
       try:
         conn = http_client.HTTPConnection(host, port, True, self.longpolltimeout)

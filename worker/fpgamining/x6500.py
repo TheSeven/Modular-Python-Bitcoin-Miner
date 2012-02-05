@@ -33,6 +33,7 @@
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
 
 
+import sys
 import common
 import binascii
 import threading
@@ -158,6 +159,9 @@ class X6500Worker(object):
   # Main thread entry point
   # This thread is responsible for booting the individual FPGAs and spawning worker threads for them
   def main(self):
+
+    # Handle uncaught exceptions gracefully
+    sys.excepthook = self.miner.uncaughthandler
 
     try:
       fpga_list = [FPGA(self.miner, self.name + " FPGA 0", self.device, 0), FPGA(self.miner, self.name + " FPGA 1", self.device, 1)]
@@ -316,6 +320,9 @@ class X6500FPGA(object):
   # This thread is responsible for fetching work and pushing it to the device.
   def main(self):
 
+    # Handle uncaught exceptions gracefully
+    sys.excepthook = self.miner.uncaughthandler
+
     # Make sure the FPGA is put to sleep when MPBM exits
     atexit.register(self.fpga.sleep)
     
@@ -450,6 +457,9 @@ class X6500FPGA(object):
 
   # Device response listener thread (polls for nonces)
   def listener(self):
+
+    # Handle uncaught exceptions gracefully
+    sys.excepthook = self.miner.uncaughthandler
 
     # Catch all exceptions and forward them to the main thread
     try:

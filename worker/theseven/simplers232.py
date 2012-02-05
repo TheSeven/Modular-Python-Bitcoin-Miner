@@ -30,6 +30,7 @@
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
 
 
+import sys
 import common
 import serial
 import binascii
@@ -130,6 +131,9 @@ class SimpleRS232Worker(object):
   # Main thread entry point
   # This thread is responsible for fetching work and pushing it to the device.
   def main(self):
+  
+    # Handle uncaught exceptions gracefully
+    sys.excepthook = self.miner.uncaughthandler
 
     # Loop forever. If anything fails, restart threads.
     while True:
@@ -271,6 +275,9 @@ class SimpleRS232Worker(object):
 
   # Device response listener thread
   def listener(self):
+
+    # Handle uncaught exceptions gracefully
+    sys.excepthook = self.miner.uncaughthandler
 
     # Catch all exceptions and forward them to the main thread
     try:

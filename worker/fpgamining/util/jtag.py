@@ -182,6 +182,7 @@ class JTAG:
       self.jtagClock(tms=0)
       
   def bitstream_preparation_thread(self, bitstream, buffer):
+    sys.excepthook = self.miner.uncaughthandler
     python2 = sys.hexversion // 0x1000000 < 3
     bytetotal = len(bitstream)
     for i in range(0, bytetotal, 1024):

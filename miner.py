@@ -66,6 +66,7 @@ import sys
 import time
 import datetime
 import threading
+import traceback
 import struct
 import binascii
 import traceback
@@ -88,6 +89,7 @@ class Miner(object):
     self.logqueue.put((datetime.datetime.now(), str, format))
     
   def logger(self):
+    sys.excepthook = self.uncaughthandler
     while True:
       (timestamp, str, format) = self.logqueue.get()
       datestr = ""
@@ -98,6 +100,9 @@ class Miner(object):
             i.message(datestr, line, format)
         self.loglf = str[-1:] == "\n"
       self.logqueue.task_done()
+      
+  def uncaughthandler(self, type, value, traceback):
+    self.log("Uncaught exception: %s\n" % traceback.format_exception(type, value, traceback), "rB")
 
   def run(self):
     self.conlock = threading.RLock()
@@ -105,17 +110,17 @@ class Miner(object):
     self.fetcherlock = threading.RLock()
     self.poollock = threading.RLock()
     self.workerlock = threading.RLock()
-    self.bufferseconds = getattr(config, "bufferseconds", 50)
-    self.getworktimeout = getattr(config, "getworktimeout", 2)
-    self.sendsharetimeout = getattr(config, "sendsharetimeout", 10)
-    self.longpolltimeout = getattr(config, "longpolltimeout", 900)
-    self.longpollgrouptime = getattr(config, "longpollgrouptime", 30)
-    self.getworkbias = getattr(config, "getworkbias", -1)
-    self.getworkfailbias = getattr(config, "getworkfailbias", -3000)
-    self.sharebias = getattr(config, "sharebias", 4000)
-    self.uploadfailbias = getattr(config, "uploadfailbias", -100)
-    self.stalebias = getattr(config, "stalebias", -15000)
-    self.biasdecay = getattr(config, "biasdecay", 0.9995)
+    self.bufferseconds = getattr(self.config, "bufferseconds", 50)
+    self.getworktimeout = getattr(self.config, "getworktimeout", 2)
+    self.sendsharetimeout = getattr(self.config, "sendsharetimeout", 10)
+    self.longpolltimeout = getattr(self.config, "longpolltimeout", 900)
+    self.longpollgrouptime = getattr(self.config, "longpollgrouptime", 30)
+    self.getworkbias = getattr(self.config, "getworkbias", -1)
+    self.getworkfailbias = getattr(self.config, "getworkfailbias", -3000)
+    self.sharebias = getattr(self.config, "sharebias", 4000)
+    self.uploadfailbias = getattr(self.config, "uploadfailbias", -100)
+    self.stalebias = getattr(self.config, "stalebias", -15000)
+    self.biasdecay = getattr(self.config, "biasdecay", 0.9995)
     self.queue = queue.Queue()
     self.queuelength = 3
     self.jobspersecond = 0.1
@@ -138,6 +143,7 @@ class Miner(object):
     self.log("Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh or,\n", "y")
     self.log("even better, donating a small share of your hashing power if you want\n", "y")
     self.log("to support further development of the Modular Python Bitcoin Miner.\n", "y")
+    sys.excepthook = self.uncaughthandler
     for b in config.blockchains:
       blockchain = Blockchain(self)
       for p in b["pools"]:
@@ -177,6 +183,7 @@ class Miner(object):
         time.sleep(0.1)
 
   def fetcher(self, pool):
+    sys.excepthook = self.uncaughthandler
     with self.queuelock:
       if (datetime.datetime.utcnow() - pool.blockchain.lastlongpoll).total_seconds() > self.longpollgrouptime:
         pool.longpollepoch = pool.blockchain.longpollepoch
