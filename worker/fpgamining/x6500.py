@@ -51,7 +51,7 @@ from .util.format import formatNumber, formatTime
 class X6500Worker(object):
 
   # Constructor, gets passed a reference to the miner core and the config dict for this worker
-  def __init__(self, miner, dict):
+  def __init__(self, miner, dict, hotplug = False):
 
     # Make config dict entries accessible via self.foo
     self.__dict__ = dict
@@ -65,6 +65,8 @@ class X6500Worker(object):
     self.children = []
 
     # Validate arguments, filling them with default values if not present
+    self.hotplug = hotplug
+    self.dead = False
     nameattr = getattr(self, "name", None)
     self.name = nameattr
     self.deviceid = getattr(self, "deviceid", "")
@@ -80,7 +82,9 @@ class X6500Worker(object):
       self.miner.log(self.name + ": %s\n" % e, "rB")
     if self.device != None: self.deviceid = self.device.serial
     if nameattr == None: self.name = "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver"
-    if self.device == None: self.name = self.name + " (disconnected)"
+    if self.device == None:
+      self.name = self.name + " (disconnected)"
+      self.dead = True
     self.firmware = getattr(self, "firmware", "worker/fpgamining/firmware/x6500.bit")
     self.jobinterval = getattr(self, "jobinterval", 30)
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
@@ -106,7 +110,7 @@ class X6500Worker(object):
       self.mainthread.start()
 
 
-  # Report statistics about this worker module and its (non-existant) children.
+  # Report statistics about this worker module and its children.
   def getstatistics(self, childstats):
     # Acquire the statistics lock to stop statistics from changing while we deal with them
     with self.statlock:
@@ -169,6 +173,7 @@ class X6500Worker(object):
           self.miner.log(self.name + ": FPGA %d: %s\n" % (id, JTAG.decodeIdcode(idcode)))
         if fpga.jtag.deviceCount != 1:
           self.miner.log(self.name + ": Warning: This module needs two JTAG buses with one FPGA each!\n", "rB")
+          self.dead = True
           return
 
       if self.uploadfirmware:
@@ -178,7 +183,7 @@ class X6500Worker(object):
           bitfile = BitFile.read(self.firmware)
         except BitFileReadError as e:
           self.miner.log(self.name + ": Error while reading firmware: %s\n" % e, "rB")
-          # Let the worker die
+          self.dead = True
           return
         self.miner.log(self.name + ": Firmware file details:\n", "B")
         self.miner.log(self.name + ":   Design Name: %s\n" % bitfile.designname)
@@ -194,6 +199,7 @@ class X6500Worker(object):
           for idcode in fpga.jtag.idcodes:
             if idcode & 0x0FFFFFFF != bitfile.idcode:
               self.miner.log(self.name + ": Device IDCode does not match bitfile IDCode! Was this bitstream built for this FPGA?\n", "r")
+              self.dead = True
               return
         FPGA.programBitstream(self.miner, self.device, jtag, bitfile.bitstream, self.progresshandler)
         self.miner.log(self.name + ": Programmed FPGAs in %f seconds\n" % (time.time() - start_time))
@@ -205,6 +211,7 @@ class X6500Worker(object):
     except Exception as e:
       import traceback
       self.miner.log(self.name + ": Error while booting board: %s\n" % traceback.format_exc(), "rB")
+      self.dead = True
     
     # Read FPGA temperatures every second   
     try:    
@@ -423,10 +430,19 @@ class X6500FPGA(object):
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
         try: self.wakeup.release()
         except: pass
+        if self.parent.hotplug:
+          with self.parent.childlock:
+            for child in self.parent.children:
+              child.error = Exception("Sibling FPGA worker died, restarting board")
+          try: self.parent.device.close()
+          except: pass
         # Wait for the listener thread to terminate.
         # If it doens't within 10 seconds, continue anyway. We can't do much about that.
         try: self.listenerthread.join(10)
         except: pass
+        if self.parent.hotplug:
+          self.parent.dead = True
+          return
         # Wait for a second to avoid 100% CPU load if something fails reproducibly
         time.sleep(1)
         # Restart (handled by "while True:" loop above)

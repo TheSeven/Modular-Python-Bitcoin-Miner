@@ -9,7 +9,7 @@
 import frontend.theseven.cursesui
 import frontend.theseven.simplelogger
 import pool.theseven.bcjsonrpc
-import worker.fpgamining.x6500
+import worker.fpgamining.x6500hotplug
 
 
 ###################
@@ -86,12 +86,26 @@ interfaces = [ \
 
 workers = [ \
 
-  # SimpleRS232 worker
+#  # SimpleRS232 worker
+#  { \
+#    # Worker module
+#    "type": worker.theseven.simplers232.SimpleRS232Worker, \
+#    # Worker module parameters, in this case serial port name (default: /dev/ttyS0)
+#    "port": "/dev/ttyUSB0", \
+#  }, \
+
+#  # Single X6500 worker
+#  { \
+#    # Worker module
+#    "type": worker.fpgamining.x6500.X6500Worker, \
+#    # Worker module parameters, in this case board serial number (default: take first available)
+#    #"deviceid": "ABCDEFGH", \
+#  }, \
+
+  # X6500 hotplug worker
   { \
     # Worker module
-    "type": worker.fpgamining.x6500.X6500Worker, \
-    # Worker module parameters, in this case board serial number (default: take first available)
-    #"deviceid": "ABCDEFGH", \
+    "type": worker.fpgamining.x6500hotplug.X6500HotplugWorker, \
   }, \
 
 ]
