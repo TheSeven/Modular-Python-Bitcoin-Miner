@@ -1,0 +1,29 @@
+Modular Python Bitcoin Miner
+Copyright (C) 2011-2012 Michael Sparmann (TheSeven)
+
+v0.0.4 (alpha)
+===================
+- X6500 board support
+- Internal cleanup
+- Python 3 compatibility
+- Rewrote statistics engine
+
+v0.0.3 (2012-01-08)
+===================
+- Announce actual share difficulties on the console
+- Internal cleanup
+- Python 3 compatibility
+- Handle terminal resizing more gracefully
+- More accurate timestamps in log
+- More accurate hashrate measurement of SimpleRS232 workers
+- Support for X-Reject-Reason header
+
+v0.0.2 (2012-01-07)
+===================
+- Support for work sources with difficulty >1
+- Separated the UI into a module
+- Handle terminal resizing more gracefully
+
+v0.0.1 (2011-07-06)
+===================
+- Initial release
