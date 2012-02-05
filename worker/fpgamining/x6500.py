@@ -28,6 +28,9 @@
 #   deviceid: Serial number of the device to be used (default: take first available device)
 #   firmware: Path to the firmware file (default: "worker/fpgamining/firmware/x6500.bit")
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
+#   useftd2xx: Use FTDI D2XX driver instead direct access via PyUSB (default: false)
+#   takeover: Forcibly grab control over the USB device (default: false, not supported by D2XX)
+#   uploadfirmware: Upload FPGA firmware during startup (default: false)
 
 
 import common
@@ -37,11 +40,11 @@ import time
 import datetime
 import struct
 import atexit
-from util.ft232r_pyusb import FT232R, FT232R_PortList
-from util.jtag import JTAG
-from util.BitstreamReader import BitFile, BitFileReadError
-from util.fpga import FPGA
-from util.format import formatNumber, formatTime
+from .util.ft232r import FT232R_PyUSB, FT232R_D2XX, FT232R_PortList
+from .util.jtag import JTAG
+from .util.BitstreamReader import BitFile, BitFileReadError
+from .util.fpga import FPGA
+from .util.format import formatNumber, formatTime
 
 
 # Worker main class, referenced from config.py
@@ -62,14 +65,21 @@ class X6500Worker(object):
     self.children = []
 
     # Validate arguments, filling them with default values if not present
+    nameattr = getattr(self, "name", None)
+    self.name = nameattr
     self.deviceid = getattr(self, "deviceid", "")
-    self.name = getattr(self, "name", "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver")
-    try: self.device = FT232R(self.miner, self, self.deviceid)
+    if nameattr == None: self.name = "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver"
+    self.useftd2xx = getattr(self, "useftd2xx", False)
+    self.takeover = getattr(self, "takeover", False)
+    self.uploadfirmware = getattr(self, "uploadfirmware", False)
+    try:
+      if self.useftd2xx: self.device = FT232R_D2XX(self.miner, self, self.deviceid)
+      else: self.device = FT232R_PyUSB(self.miner, self, self.deviceid, self.takeover)
     except Exception as e:
       self.device = None
       self.miner.log(self.name + ": %s\n" % e, "rB")
     if self.device != None: self.deviceid = self.device.serial
-    self.name = getattr(self, "name", "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver")
+    if nameattr == None: self.name = "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver"
     if self.device == None: self.name = self.name + " (disconnected)"
     self.firmware = getattr(self, "firmware", "worker/fpgamining/firmware/x6500.bit")
     self.jobinterval = getattr(self, "jobinterval", 30)
@@ -145,22 +155,6 @@ class X6500Worker(object):
   # This thread is responsible for booting the individual FPGAs and spawning worker threads for them
   def main(self):
 
-    # Try to load the firmware file
-    try:
-      bitfile = BitFile.read(self.firmware)
-    except BitFileReadError as e:
-      self.miner.log(self.name + ": Error while reading firmware: %s\n" % e, "rB")
-      # Let the worker die
-      return
-
-    # Print some information about the firmware file
-    self.miner.log(self.name + ": Firmware file details:\n", "B")
-    self.miner.log(self.name + ":   Design Name: %s\n" % bitfile.designname)
-    self.miner.log(self.name + ":   Part Name: %s\n" % bitfile.part)
-    self.miner.log(self.name + ":   Date: %s\n" % bitfile.date)
-    self.miner.log(self.name + ":   Time: %s\n" % bitfile.time)
-    self.miner.log(self.name + ":   Bitstream Length: %d\n" % len(bitfile.bitstream))
-
     try:
       fpga_list = [FPGA(self.miner, self.name + " FPGA 0", self.device, 0), FPGA(self.miner, self.name + " FPGA 1", self.device, 1)]
       channelmask = 0
@@ -171,31 +165,46 @@ class X6500Worker(object):
         self.miner.log(self.name + ": Discovering FPGA %d...\n" % id)
         fpga.jtag.detect()
         #self.miner.log(self.name + ": Found %i device%s\n" % (fpga.jtag.deviceCount, 's' if fpga.jtag.deviceCount != 1 else ''))
-        if fpga.jtag.deviceCount != 1:
-          self.miner.log(self.name + ": Warning: This module needs two JTAG buses with one FPGA each!\n", "r")
-          return
-
         for idcode in fpga.jtag.idcodes:
           self.miner.log(self.name + ": FPGA %d: %s\n" % (id, JTAG.decodeIdcode(idcode)))
-          if idcode & 0x0FFFFFFF != bitfile.idcode:
-            self.miner.log(self.name + ": Device IDCode does not match bitfile IDCode! Was this bitstream built for this FPGA?\n", "r")
-            continue
-      
-      jtag = JTAG(self.miner, self.name, self.device, 2)
-      jtag.deviceCount = 1
-      jtag.idcodes = [bitfile.idcode]
-      jtag._processIdcodes()
-      
-      self.miner.log(self.name + ": Programming FPGAs...\n")
-      start_time = time.time()
-      #FPGA.programBitstream(self.miner, self.device, jtag, bitfile.bitstream, self.progresshandler)
-      self.miner.log(self.name + ": Programmed FPGAs in %f seconds\n" % (time.time() - start_time))
+        if fpga.jtag.deviceCount != 1:
+          self.miner.log(self.name + ": Warning: This module needs two JTAG buses with one FPGA each!\n", "rB")
+          return
+
+      if self.uploadfirmware:
+        self.miner.log(self.name + ": Programming FPGAs...\n")
+        start_time = time.time()
+        try:
+          bitfile = BitFile.read(self.firmware)
+        except BitFileReadError as e:
+          self.miner.log(self.name + ": Error while reading firmware: %s\n" % e, "rB")
+          # Let the worker die
+          return
+        self.miner.log(self.name + ": Firmware file details:\n", "B")
+        self.miner.log(self.name + ":   Design Name: %s\n" % bitfile.designname)
+        self.miner.log(self.name + ":   Part Name: %s\n" % bitfile.part)
+        self.miner.log(self.name + ":   Date: %s\n" % bitfile.date)
+        self.miner.log(self.name + ":   Time: %s\n" % bitfile.time)
+        self.miner.log(self.name + ":   Bitstream Length: %d\n" % len(bitfile.bitstream))
+        jtag = JTAG(self.miner, self.name, self.device, 2)
+        jtag.deviceCount = 1
+        jtag.idcodes = [bitfile.idcode]
+        jtag._processIdcodes()
+        for fpga in fpga_list:
+          for idcode in fpga.jtag.idcodes:
+            if idcode & 0x0FFFFFFF != bitfile.idcode:
+              self.miner.log(self.name + ": Device IDCode does not match bitfile IDCode! Was this bitstream built for this FPGA?\n", "r")
+              return
+        FPGA.programBitstream(self.miner, self.device, jtag, bitfile.bitstream, self.progresshandler)
+        self.miner.log(self.name + ": Programmed FPGAs in %f seconds\n" % (time.time() - start_time))
+        bitfile = None  # Free memory
       
       with self.childlock:
         self.children.append(X6500FPGA(self.miner, self, fpga_list[0]))
         self.children.append(X6500FPGA(self.miner, self, fpga_list[1]))
     except Exception as e:
-      self.miner.log(self.name + ": Error while booting board: %s\n" % e, "rB")
+      import traceback
+      self.miner.log(self.name + ": Error while booting board: %s\n" % traceback.format_exc(), "rB")
     
     # Read FPGA temperatures every second   
     try:    

@@ -36,9 +36,8 @@
 # The last field is the raw bitstream.
 #
 
-import os.path
-import cPickle as pickle
 import time
+import struct
 
 # Dictionary for looking up idcodes from device names:
 idcode_lut = {'6slx150fgg484': 0x401d093, '6slx45csg324': 0x4008093}
@@ -75,13 +74,13 @@ class BitFile:
       
       BitFile._readOrDie(f, 11)
       
-      bitfile.designname = BitFile._readField(f, 'a').rstrip('\0')
-      bitfile.part = BitFile._readField(f, 'b').rstrip('\0')
-      bitfile.date = BitFile._readField(f, 'c').rstrip('\0')
-      bitfile.time = BitFile._readField(f, 'd').rstrip('\0')
+      bitfile.designname = BitFile._readField(f, b"a").decode("latin1").rstrip('\0')
+      bitfile.part = BitFile._readField(f, b"b").decode("latin1").rstrip('\0')
+      bitfile.date = BitFile._readField(f, b"c").decode("latin1").rstrip('\0')
+      bitfile.time = BitFile._readField(f, b"d").decode("latin1").rstrip('\0')
       bitfile.idcode = idcode_lut[bitfile.part]
       
-      if BitFile._readOrDie(f, 1) != 'e':
+      if BitFile._readOrDie(f, 1) != b"e":
         raise BitFileReadError()
       
       length = BitFile._readLength4(f)
@@ -92,15 +91,11 @@ class BitFile:
   # Read a 2-byte, unsigned, Big Endian length.
   @staticmethod
   def _readLength(filestream):
-    length = BitFile._readOrDie(filestream, 2)
-
-    return (ord(length[0]) << 8) | ord(length[1])
+    return struct.unpack(">H", BitFile._readOrDie(filestream, 2))[0]
 
   @staticmethod
   def _readLength4(filestream):
-    length = BitFile._readOrDie(filestream, 4)
-
-    return (ord(length[0]) << 24) | (ord(length[1]) << 16) | (ord(length[2]) << 8) | ord(length[3])
+    return struct.unpack(">I", BitFile._readOrDie(filestream, 4))[0]
 
   # Read length bytes, or throw an exception
   @staticmethod

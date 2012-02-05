@@ -24,8 +24,10 @@
 #   blah blah blah ...
 #
 
-from TAP import TAP
+from .TAP import TAP
+import sys
 import time
+import struct
 import threading
 try: import queue
 except ImportError: import Queue as queue
@@ -168,8 +170,8 @@ class JTAG:
     data = self.ft232r.read_data(num)
     self._log("read_tdo(%d): len(data) = %d" % (num, len(data)), 2)
     bits = []
-    for n in range(len(data)/3):
-      bits.append((ord(data[n*3+2]) >> self.portlist.tdo)&1)
+    for n in range(len(data)//3):
+      bits.append((struct.unpack("B", data[n*3+2:n*3+3])[0] >> self.portlist.tdo)&1)
     
     return bits
   
@@ -180,11 +182,12 @@ class JTAG:
       self.jtagClock(tms=0)
       
   def bitstream_preparation_thread(self, bitstream, buffer):
+    python2 = sys.hexversion // 0x1000000 < 3
     bytetotal = len(bitstream)
     for i in range(0, bytetotal, 1024):
-      chunk = ""
-      for b in bitstream[i : min(bytetotal - 1, i + 1024)]:
-        d = ord(b)
+      chunk = b""
+      for d in bitstream[i : min(bytetotal - 1, i + 1024)]:
+        if python2: d = ord(d)
         val7 = (d >> 6) & 2
         val7 = val7 | (val7 << 4)
         val6 = (d >> 5) & 2
@@ -201,14 +204,10 @@ class JTAG:
         val1 = val1 | (val1 << 4)
         val0 = (d & 1) << 1
         val0 = val0 | (val0 << 4)
-        chunk += chr(val7) + chr(val7 | 0x88) \
-               + chr(val6) + chr(val6 | 0x88) \
-               + chr(val5) + chr(val5 | 0x88) \
-               + chr(val4) + chr(val4 | 0x88) \
-               + chr(val3) + chr(val3 | 0x88) \
-               + chr(val2) + chr(val2 | 0x88) \
-               + chr(val1) + chr(val1 | 0x88) \
-               + chr(val0) + chr(val0 | 0x88)
+        chunk += struct.pack("16B", val7, val7 | 0x88, val6, val6 | 0x88, \
+                                    val5, val5 | 0x88, val4, val4 | 0x88, \
+                                    val3, val3 | 0x88, val2, val2 | 0x88, \
+                                    val1, val1 | 0x88, val0, val0 | 0x88)
       buffer.put(chunk)               
     buffer.put(None)
   
@@ -242,7 +241,7 @@ class JTAG:
     self.ft232r._setSyncMode()
     self.ft232r._purgeBuffers()
     
-    d = ord(bitstream[-1])
+    d = struct.unpack("B", bitstream[-1:])[0]
     for i in range(7, 0, -1):
       self.jtagClock(tdi=(d >> i) & 1)
     self.jtagClock(tdi=d & 1, tms=1)

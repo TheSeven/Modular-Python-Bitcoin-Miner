@@ -19,8 +19,7 @@
 # THE SOFTWARE.
 
 import struct
-from Queue import Queue, Empty, Full
-from jtag import JTAG
+from .jtag import JTAG
 
 class Object(object):
   pass
@@ -163,7 +162,7 @@ class FPGA:
       data = midstate + data + b"\0"
 
       for i in range(len(data)):
-        x = ord(data[i])
+        x = struct.unpack("B", data[i : i + 1])[0]
 
         if i != 0:
           x = 0x100 | x

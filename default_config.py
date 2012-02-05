@@ -142,6 +142,8 @@ blockchains = [ \
         "priority": 20, \
         # Host name of the pool
         "host": "rr.btcmp.com", \
+        # HTTP port of the pool (default: 8332)
+        "port": 7332, \
         # HTTP authentication user name (default: no authentication)
         "username": "TheSeven.worker", \
         # HTTP authentication password (default: empty)
