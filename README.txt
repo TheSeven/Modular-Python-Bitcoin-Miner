@@ -43,9 +43,9 @@ are documented at the top of the corresponding python module file.
 Customizing
 ===========
 
-If you don't want to use the Simple RS232 interface that's provided as an example,
-you will need to write your own worker module. Just duplicate simplers232.py,
-adapt it to fit your needs, and reference your copy from config.py.
+If you don't want to use one of the already supported mining workers,
+you will have to write your own worker module. Just duplicate e.g. simplers232.py,
+adapt it to fit your needs, and reference your new module from config.py.
 Things are mostly straightforward and that file has more comments than code,
 but if you run into trouble or didn't understand some details, feel free to contact
 TheSeven (or [7]) on irc.freenode.net. I'll try to help if I have time.
