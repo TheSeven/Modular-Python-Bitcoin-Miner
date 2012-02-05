@@ -56,7 +56,6 @@ class JSONRPCPool(object):
     self.miner = miner
     self.blockchain = blockchain
     self.children = []
-    self.childlock = threading.RLock()
     if not hasattr(self, "host"): raise Exception("Missing attribute: host")
     self.useragent = self.miner.useragent + " (bcjsonrpc.JSONRPCPool v0.0.1)"
     self.getworktimeout = getattr(self, "getworktimeout", self.miner.getworktimeout)
@@ -111,7 +110,6 @@ class JSONRPCPool(object):
     uploader.start()
 
   def uploadresult(self, job, data, nonce, difficulty, worker):
-    sys.excepthook = self.miner.uncaughthandler
     while True:
       try:
         conn = http_client.HTTPConnection(self.host, self.port, True, self.sendsharetimeout)
@@ -173,7 +171,6 @@ class JSONRPCPool(object):
     return common.Job(self.miner, self, self.longpollepoch, state, data, target)
 
   def longpollingworker(self, host, port, path):
-    sys.excepthook = self.miner.uncaughthandler
     while True:
       try:
         conn = http_client.HTTPConnection(host, port, True, self.longpolltimeout)

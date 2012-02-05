@@ -60,8 +60,6 @@ class X6500Worker(object):
     # Store reference to the miner core object
     self.miner = miner
 
-    # Child lock, ensures that child array modifications don't interfere with iterators
-    self.childlock = threading.RLock()
     # Initialize child array
     self.children = []
 
@@ -136,12 +134,10 @@ class X6500Worker(object):
   # This function is usually called when the work source gets a long poll response.
   # If we're currently doing work for a different blockchain, we don't need to care.
   def cancel(self, blockchain):
-    # Lock the child lock to ensure that nobody creates/deletes children while we're processing them
-    with self.childlock:
-      # Check all running children
-      for child in self.children:
-        # Forward the request to the child
-        child.cancel(blockchain)
+    # Check all running children
+    for child in self.children:
+      # Forward the request to the child
+      child.cancel(blockchain)
 
 
   # Firmware upload progess indicator
@@ -159,9 +155,6 @@ class X6500Worker(object):
   # Main thread entry point
   # This thread is responsible for booting the individual FPGAs and spawning worker threads for them
   def main(self):
-
-    # Handle uncaught exceptions gracefully
-    sys.excepthook = self.miner.uncaughthandler
 
     try:
       fpga_list = [FPGA(self.miner, self.name + " FPGA 0", self.device, 0), FPGA(self.miner, self.name + " FPGA 1", self.device, 1)]
@@ -209,9 +202,8 @@ class X6500Worker(object):
         self.miner.log(self.name + ": Programmed FPGAs in %f seconds\n" % (time.time() - start_time))
         bitfile = None  # Free memory
       
-      with self.childlock:
-        self.children.append(X6500FPGA(self.miner, self, fpga_list[0]))
-        self.children.append(X6500FPGA(self.miner, self, fpga_list[1]))
+      self.children.append(X6500FPGA(self.miner, self, fpga_list[0]))
+      self.children.append(X6500FPGA(self.miner, self, fpga_list[1]))
     except Exception as e:
       import traceback
       self.miner.log(self.name + ": Error while booting board: %s\n" % traceback.format_exc(), "rB")
@@ -222,9 +214,8 @@ class X6500Worker(object):
       while True:
         time.sleep(3)
         (temp0, temp1) = self.device.read_temps()
-        with self.childlock:
-          self.children[0].temperature = temp0
-          self.children[1].temperature = temp1
+        self.children[0].temperature = temp0
+        self.children[1].temperature = temp1
     except Exception as e:
       self.miner.log(self.name + ": Reading FPGA temperatures failed: %s\n" % e, "y")
         
@@ -245,8 +236,6 @@ class X6500FPGA(object):
     self.jobinterval = parent.jobinterval
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
     
-    # Child lock, ensures that child array modifications don't interfere with iterators
-    self.childlock = threading.RLock()
     # Initialize child array (we won't ever have any)
     self.children = []
 
@@ -319,9 +308,6 @@ class X6500FPGA(object):
   # Main thread entry point
   # This thread is responsible for fetching work and pushing it to the device.
   def main(self):
-
-    # Handle uncaught exceptions gracefully
-    sys.excepthook = self.miner.uncaughthandler
 
     # Make sure the FPGA is put to sleep when MPBM exits
     atexit.register(self.fpga.sleep)
@@ -438,9 +424,8 @@ class X6500FPGA(object):
         try: self.wakeup.release()
         except: pass
         if self.parent.hotplug:
-          with self.parent.childlock:
-            for child in self.parent.children:
-              child.error = Exception("Sibling FPGA worker died, restarting board")
+          for child in self.parent.children:
+            child.error = Exception("Sibling FPGA worker died, restarting board")
           try: self.parent.device.close()
           except: pass
         # Wait for the listener thread to terminate.
@@ -457,9 +442,6 @@ class X6500FPGA(object):
 
   # Device response listener thread (polls for nonces)
   def listener(self):
-
-    # Handle uncaught exceptions gracefully
-    sys.excepthook = self.miner.uncaughthandler
 
     # Catch all exceptions and forward them to the main thread
     try:

@@ -62,6 +62,7 @@
 #              failures until they have caught up with the configured priority.
 
 
+import os
 import sys
 import time
 import datetime
@@ -73,6 +74,16 @@ import traceback
 try: import queue
 except ImportError: import Queue as queue
 
+class OutputRedirector(object):
+  def __init__(self, miner, flags = ""):
+    self.miner = miner
+    self.flags = flags
+    
+  def write(self, data):
+    self.miner.log(data, self.flags)
+    
+  def flush(self): pass
+        
 class Blockchain(object):
   def __init__(self, miner):
     self.miner = miner
@@ -89,7 +100,6 @@ class Miner(object):
     self.logqueue.put((datetime.datetime.now(), str, format))
     
   def logger(self):
-    sys.excepthook = self.uncaughthandler
     while True:
       (timestamp, str, format) = self.logqueue.get()
       datestr = ""
@@ -108,8 +118,6 @@ class Miner(object):
     self.conlock = threading.RLock()
     self.queuelock = threading.RLock()
     self.fetcherlock = threading.RLock()
-    self.poollock = threading.RLock()
-    self.workerlock = threading.RLock()
     self.bufferseconds = getattr(self.config, "bufferseconds", 50)
     self.getworktimeout = getattr(self.config, "getworktimeout", 2)
     self.sendsharetimeout = getattr(self.config, "sendsharetimeout", 10)
@@ -143,17 +151,16 @@ class Miner(object):
     self.log("Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh or,\n", "y")
     self.log("even better, donating a small share of your hashing power if you want\n", "y")
     self.log("to support further development of the Modular Python Bitcoin Miner.\n", "y")
-    sys.excepthook = self.uncaughthandler
+    sys.stdout = OutputRedirector(self)
+    sys.stderr = OutputRedirector(self, "rB")
     for b in config.blockchains:
       blockchain = Blockchain(self)
       for p in b["pools"]:
-        with self.poollock:
-          self.pools.append(p["type"](miner, blockchain, p))
+        self.pools.append(p["type"](miner, blockchain, p))
     if len(self.pools) == 0: raise Exception("No pools defined!")
     self.adjustfetchers()
     for w in config.workers:
-      with self.workerlock:
-        self.workers.append(w["type"](miner, w))
+      self.workers.append(w["type"](miner, w))
     if len(self.workers) == 0: raise Exception("No workers defined!")
     while True: time.sleep(100)
 
@@ -183,7 +190,6 @@ class Miner(object):
         time.sleep(0.1)
 
   def fetcher(self, pool):
-    sys.excepthook = self.uncaughthandler
     with self.queuelock:
       if (datetime.datetime.utcnow() - pool.blockchain.lastlongpoll).total_seconds() > self.longpollgrouptime:
         pool.longpollepoch = pool.blockchain.longpollepoch
@@ -222,15 +228,13 @@ class Miner(object):
     mhps = 0
     jobspersec = 0
     for child in children:
-      with child.childlock:
-        (childmhps, childjobspersec) = self.calculatehashrate(child.children)
+      (childmhps, childjobspersec) = self.calculatehashrate(child.children)
       mhps = mhps + child.mhps + childmhps
       jobspersec = jobspersec + child.jobspersecond + childjobspersec
     return (mhps, jobspersec)
 
   def updatehashrate(self, worker):
-    with self.workerlock:
-      (mhps, jobspersec) = self.calculatehashrate(self.workers)
+    (mhps, jobspersec) = self.calculatehashrate(self.workers)
     self.mhps = mhps
     self.jobspersecond = jobspersec
     self.queuelength = max(1, round(jobspersec * self.bufferseconds))
@@ -270,12 +274,12 @@ class Miner(object):
         else: job.pool.longpollkilled = job.pool.longpollkilled + 1
       job.pool.difficulty = 65535.0 * 2**48 / struct.unpack("<Q", job.target[-12:-4])[0]
     self.adjustfetchers()
+    self.log("Long polling: %s indicates that a new block was found\n" % job.pool.name, "B")
     
   def collectstatistics(self, children):
     statistics = []
     for child in children:
-      with child.childlock:
-        childstats = self.collectstatistics(child.children)
+      childstats = self.collectstatistics(child.children)
       statistics.append(child.getstatistics(childstats))
     return statistics
 
@@ -294,8 +298,8 @@ class Miner(object):
     return 1. * sum / count
 
 if __name__ == "__main__":
-  try: import config
-  except ImportError: import default_config as config
+  if os.path.isfile("config.py"): import config
+  else: import default_config as config
   miner = Miner(config)
   try:
     miner.run()

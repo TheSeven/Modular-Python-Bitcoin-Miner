@@ -149,7 +149,7 @@ blockchains = [ \
       # Please leave this entry active to support further development of this software (see above)
       { \
         # Pool interface module
-        "type": bcjsonrpc.JSONRPCPool, \
+        "type": pool.theseven.bcjsonrpc.JSONRPCPool, \
         # Display name of the pool (default: host name)
         "name": "BTCMP (demo)", \
         # Priority (default: 1)
@@ -201,7 +201,7 @@ blockchains = [ \
 #     # Your own pool entry
 #     { \
 #       # Pool interface module
-#       "type": bcjsonrpc.JSONRPCPool, \
+#       "type": pool.theseven.bcjsonrpc.JSONRPCPool, \
 #       # Display name of the pool (default: host name)
 #       "name": "My primary pool", \
 #       # Priority (default: 1)
@@ -227,7 +227,7 @@ blockchains = [ \
 #   # P2Pool instance on localhost
 #   { \
 #       # Pool interface module
-#       "type": bcjsonrpc.JSONRPCPool, \
+#       "type": pool.theseven.bcjsonrpc.JSONRPCPool, \
 #       # Display name of the pool (default: host name)
 #       "name": "P2Pool", \
 #       # Priority (default: 1)

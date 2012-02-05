@@ -52,8 +52,6 @@ class SimpleRS232Worker(object):
     # Store reference to the miner core object
     self.miner = miner
     
-    # Child lock, ensures that child array modifications don't interfere with iterators
-    self.childlock = threading.RLock()
     # Initialize child array (we won't ever have any)
     self.children = []
 
@@ -132,9 +130,6 @@ class SimpleRS232Worker(object):
   # This thread is responsible for fetching work and pushing it to the device.
   def main(self):
   
-    # Handle uncaught exceptions gracefully
-    sys.excepthook = self.miner.uncaughthandler
-
     # Loop forever. If anything fails, restart threads.
     while True:
       try:
@@ -275,9 +270,6 @@ class SimpleRS232Worker(object):
 
   # Device response listener thread
   def listener(self):
-
-    # Handle uncaught exceptions gracefully
-    sys.excepthook = self.miner.uncaughthandler
 
     # Catch all exceptions and forward them to the main thread
     try:

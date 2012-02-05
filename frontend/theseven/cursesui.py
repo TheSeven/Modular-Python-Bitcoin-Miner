@@ -71,8 +71,7 @@ class CursesUI(object):
   def countchildren(self, children):
     childcount = len(children)
     for child in children:
-      with child.childlock:
-        childcount = childcount + self.countchildren(child.children)
+      childcount = childcount + self.countchildren(child.children)
     return childcount
     
   def calculatemaxfieldlen(self, children, field, indent = 0):
@@ -159,12 +158,9 @@ class CursesUI(object):
         cy = cy + 1
 
   def mainloop(self):
-    sys.excepthook = self.miner.uncaughthandler
     while True:
-      with self.miner.poollock:
-        pooldata = self.miner.collectstatistics(self.miner.pools)
-      with self.miner.workerlock:
-        workerdata = self.miner.collectstatistics(self.miner.workers)
+      pooldata = self.miner.collectstatistics(self.miner.pools)
+      workerdata = self.miner.collectstatistics(self.miner.workers)
       poolstats = []
       self.translatepooldata(pooldata, poolstats)
       poolcolumns = []

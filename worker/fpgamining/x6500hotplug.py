@@ -52,8 +52,6 @@ class X6500HotplugWorker(object):
     # Store reference to the miner core object
     self.miner = miner
 
-    # Child lock, ensures that child array modifications don't interfere with iterators
-    self.childlock = threading.RLock()
     # Initialize child array
     self.children = []
 
@@ -112,39 +110,32 @@ class X6500HotplugWorker(object):
   # This function is usually called when the work source gets a long poll response.
   # If we're currently doing work for a different blockchain, we don't need to care.
   def cancel(self, blockchain):
-    # Lock the child lock to ensure that nobody creates/deletes children while we're processing them
-    with self.childlock:
-      # Check all running children
-      for child in self.children:
-        # Forward the request to the child
-        child.cancel(blockchain)
+    # Check all running children
+    for child in self.children:
+      # Forward the request to the child
+      child.cancel(blockchain)
 
 
   # Main thread entry point
   # This thread is responsible for scanning for boards and spawning worker modules for them
   def main(self):
 
-    # Handle uncaught exceptions gracefully
-    sys.excepthook = self.miner.uncaughthandler
-
     if self.useftd2xx: import d2xx
     if not self.useftd2xx or self.takeover: import usb
 
     while True:
       try:
-        with self.childlock:
-          for child in self.children:
-            if child.dead:
-              with self.statlock:
-                with child.childlock:
-                  stats = child.getstatistics(self.miner.collectstatistics(child.children))
-                self.children.remove(child)
-                self.mhashes = self.mhashes + stats["mhashes"]
-                self.jobsaccepted = self.jobsaccepted + stats["jobsaccepted"]
-                self.accepted = self.accepted + stats["accepted"]
-                self.rejected = self.rejected + stats["rejected"]
-                self.invalid = self.invalid + stats["invalid"]
-              
+        for child in self.children:
+          if child.dead:
+            with self.statlock:
+              stats = child.getstatistics(self.miner.collectstatistics(child.children))
+              self.children.remove(child)
+              self.mhashes = self.mhashes + stats["mhashes"]
+              self.jobsaccepted = self.jobsaccepted + stats["jobsaccepted"]
+              self.accepted = self.accepted + stats["accepted"]
+              self.rejected = self.rejected + stats["rejected"]
+              self.invalid = self.invalid + stats["invalid"]
+            
         boards = []
         if self.useftd2xx:
           devices = d2xx.listDevices()
@@ -177,46 +168,45 @@ class X6500HotplugWorker(object):
                     boards.append((serial, available))
                 except: pass
                 
-        with self.childlock:
-          for deviceid, available in boards:
-            found = False
-            for child in self.children:
-              if child.deviceid == deviceid:
-                found = True
-                break
-            if found: continue
-            if not available and self.takeover:
-              try:
-                for bus in usb.busses():
+        for deviceid, available in boards:
+          found = False
+          for child in self.children:
+            if child.deviceid == deviceid:
+              found = True
+              break
+          if found: continue
+          if not available and self.takeover:
+            try:
+              for bus in usb.busses():
+                if available: break
+                for dev in bus.devices:
                   if available: break
-                  for dev in bus.devices:
-                    if available: break
-                    if dev.idVendor == 0x0403 and dev.idProduct == 0x6001:
-                      handle = dev.open()
-                      manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
-                      product = handle.getString(dev.iProduct, 100).decode("latin1")
-                      serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                      if manufacturer == "FTDI" and product == "FT232R USB UART" and serial == deviceid:
-                        handle.reset()
-                        configuration = dev.configurations[0]
-                        interface = configuration.interfaces[0][0]
-                        handle.setConfiguration(configuration.value)
-                        handle.claimInterface(interface.interfaceNumber)
-                        handle.releaseInterface()
-                        handle.setConfiguration(0)
-                        handle.reset()
-                        available = True
-              except: pass
-            if available:
-              config = { \
-                "deviceid": deviceid, \
-                "firmware": self.firmware, \
-                "jobinterval": self.jobinterval, \
-                "useftd2xx": self.useftd2xx, \
-                "takeover": False, \
-                "uploadfirmware": self.uploadfirmware, \
-              }
-              self.children.append(worker.fpgamining.x6500.X6500Worker(self.miner, config, True))
+                  if dev.idVendor == 0x0403 and dev.idProduct == 0x6001:
+                    handle = dev.open()
+                    manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
+                    product = handle.getString(dev.iProduct, 100).decode("latin1")
+                    serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
+                    if manufacturer == "FTDI" and product == "FT232R USB UART" and serial == deviceid:
+                      handle.reset()
+                      configuration = dev.configurations[0]
+                      interface = configuration.interfaces[0][0]
+                      handle.setConfiguration(configuration.value)
+                      handle.claimInterface(interface.interfaceNumber)
+                      handle.releaseInterface()
+                      handle.setConfiguration(0)
+                      handle.reset()
+                      available = True
+            except: pass
+          if available:
+            config = { \
+              "deviceid": deviceid, \
+              "firmware": self.firmware, \
+              "jobinterval": self.jobinterval, \
+              "useftd2xx": self.useftd2xx, \
+              "takeover": False, \
+              "uploadfirmware": self.uploadfirmware, \
+            }
+            self.children.append(worker.fpgamining.x6500.X6500Worker(self.miner, config, True))
               
       except Exception as e:
         self.miner.log("Caught exception: %s\n" % e, "r")
