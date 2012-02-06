@@ -1,11 +1,11 @@
 Modular Python Bitcoin Miner
 Copyright (C) 2011-2012 Michael Sparmann (TheSeven)
 
-v0.0.4 (alpha)
+v0.0.4 (beta)
 ===================
+- Subworker support
 - X6500 board support
 - Internal cleanup
-- Python 3 compatibility
 - Rewrote statistics engine
 
 v0.0.3 (2012-01-08)

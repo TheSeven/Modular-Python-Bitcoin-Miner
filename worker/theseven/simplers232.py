@@ -102,6 +102,7 @@ class SimpleRS232Worker(object):
         "rejected": self.rejected, \
         "invalid": self.invalid, \
         "starttime": self.starttime, \
+        "currentpool": self.job.pool.name if self.job != None and self.job.pool != None else None, \
       }
     # Return result
     return statistics

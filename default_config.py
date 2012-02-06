@@ -153,7 +153,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "BTCMP (demo)", \
         # Priority (default: 1)
-        "priority": 20, \
+        "priority": 35, \
         # Host name of the pool
         "host": "rr.btcmp.com", \
         # HTTP port of the pool (default: 8332)
@@ -172,7 +172,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "BTCGuild (demo)", \
         # Priority (default: 1)
-        "priority": 10, \
+        "priority": 5, \
         # Host name of the pool
         "host": "btcguild.com", \
         # HTTP authentication user name (default: no authentication)
@@ -189,7 +189,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "Eligius (demo)", \
         # Priority (default: 1)
-        "priority": 20, \
+        "priority": 10, \
         # Host name of the pool
         "host": "mining.eligius.st", \
         # HTTP port of the pool (default: 8332)

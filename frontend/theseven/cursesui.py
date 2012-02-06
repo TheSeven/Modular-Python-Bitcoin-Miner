@@ -133,7 +133,8 @@ class CursesUI(object):
         "mhps": ("%.2f" % worker["mhps"], bold, "r"), \
         "avgmhps": ("%.2f" % (worker["mhashes"] / uptime), bold, "r"), \
         "efficiency": ("%.1f%%" % efficiency, "r" + bold if efficiency < 80 else "g" + bold if efficiency > 95 else "y" + bold, "r"), \
-        "temperature": ("%.1f" % worker["temperature"], "r" + bold if worker["temperature"] > 60 else "y" + bold if worker["temperature"] > 50 else "g" + bold, "r") if "temperature" in worker and worker["temperature"] != None else ("Unknown", bold, "c")
+        "temperature": ("%.1f" % worker["temperature"], "r" + bold if worker["temperature"] > 60 else "y" + bold if worker["temperature"] > 50 else "g" + bold, "c") if "temperature" in worker and worker["temperature"] != None else ("Unknown", bold, "c"), \
+        "currentpool": (worker["currentpool"] if "currentpool" in worker and worker["currentpool"] != None else "Unknown", bold, "c"), \
       })
       self.translateworkerdata(worker["children"], workerstats, indent + 2)
       
@@ -229,6 +230,9 @@ class CursesUI(object):
         x = x + 1 + width
         width = max(11, self.calculatemaxfieldlen(workerstats, "temperature"))
         workercolumns.append({"title1": "Temperature", "title2": "(degrees C)", "field": "temperature", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(7, self.calculatemaxfieldlen(workerstats, "currentpool"))
+        workercolumns.append({"title1": "Current", "title2": "pool", "field": "currentpool", "x": x, "width": width})
         x = x + 1 + width
         width = max(6, self.calculatemaxfieldlen(workerstats, "efficiency"))
         workercolumns.append({"title1": "Effi-", "title2": "ciency", "field": "efficiency", "x": x, "width": width})

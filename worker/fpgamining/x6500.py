@@ -28,6 +28,7 @@
 #   deviceid: Serial number of the device to be used (default: take first available device)
 #   firmware: Path to the firmware file (default: "worker/fpgamining/firmware/x6500.bit")
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
+#   pollinterval: Nonce poll interval in seconds (default: 0.1)
 #   useftd2xx: Use FTDI D2XX driver instead direct access via PyUSB (default: false)
 #   takeover: Forcibly grab control over the USB device (default: false, not supported by D2XX)
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
@@ -86,6 +87,7 @@ class X6500Worker(object):
       self.dead = True
     self.firmware = getattr(self, "firmware", "worker/fpgamining/firmware/x6500.bit")
     self.jobinterval = getattr(self, "jobinterval", 30)
+    self.pollinterval = getattr(self, "pollinterval", 0.1)
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
 
     # Initialize object properties (for statistics)
@@ -124,6 +126,7 @@ class X6500Worker(object):
         "rejected": self.rejected + self.miner.calculatefieldsum(childstats, "rejected"), \
         "invalid": self.invalid + self.miner.calculatefieldsum(childstats, "invalid"), \
         "starttime": self.starttime, \
+        "currentpool": "Not applicable", \
       }
     # Return result
     return statistics
@@ -234,6 +237,7 @@ class X6500FPGA(object):
     # Fetch config information
     self.name = fpga.name
     self.jobinterval = parent.jobinterval
+    self.pollinterval = parent.pollinterval
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
     
     # Initialize child array (we won't ever have any)
@@ -281,6 +285,7 @@ class X6500FPGA(object):
         "invalid": self.invalid, \
         "starttime": self.starttime, \
         "temperature": self.temperature, \
+        "currentpool": self.job.pool.name if self.job != None and self.job.pool != None else None, \
       }
     # Return result
     return statistics
@@ -449,70 +454,13 @@ class X6500FPGA(object):
       # Loop forever unless something goes wrong
       while True:
       
-        # Poll every 100ms
-        time.sleep(0.1)
+        # Wait for a poll interval
+        time.sleep(self.pollinterval)
 
         # If the main thread has a problem, make sure we die before it restarts
         if self.error != None: break
 
-        # Try to read a nonce from the device
-        nonce = self.fpga.readNonce()
-        # If we found a nonce, handle it
-        if nonce is not None:
-          # Snapshot the current job to avoid race conditions
-          oldjob = self.job
-          # If there is no job, this must be a leftover from somewhere.
-          # In that case, just restart things to clean up the situation.
-          if oldjob == None: raise Exception("Mining device sent a share before even getting a job")
-          # Stop time measurement
-          oldjob.endtime = datetime.datetime.utcnow()
-          # Pass the nonce that we found to the work source, if there is one.
-          # Do this before calculating the hash rate as it is latency critical.
-          if oldjob != None: oldjob.sendresult(nonce, self)
-          if oldjob.check != None:
-            # This is a validation job. Validate that the nonce is correct, and complain if not.
-            if oldjob.check != nonce:
-              raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (binascii.hexlify(nonce).decode("ascii"), binascii.hexlify(self.job.check).decode("ascii")))
-            else:
-              # The nonce was correct
-              if self.seconditeration == True:
-                with self.wakeup:
-                  # This is the second iteration. We now know the actual nonce rotation time.
-                  delta = (oldjob.endtime - oldjob.starttime).total_seconds()
-                  # Calculate the hash rate based on the nonce rotation time.
-                  self.mhps = 2**32 / 1000000. / delta
-                  # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-                  self.miner.updatehashrate(self)
-                  # Update hash rate tracking information
-                  self.lasttime = oldjob.endtime
-                  self.lastnonce = struct.unpack("<I", nonce)[0]
-                  # Wake up the main thread
-                  self.checksuccess = True
-                  self.wakeup.notify()
-              else:
-                with self.wakeup:
-                  # This was the first iteration. Wait for another one to figure out nonce rotation time.
-                  oldjob.starttime = oldjob.endtime
-                  self.seconditeration = True
-          else:
-            # Adjust hash rate tracking
-            delta = (oldjob.endtime - self.lasttime).total_seconds()
-            nonce = struct.unpack("<I", nonce)[0]
-            estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
-            noncediff = nonce - (estimatednonce & 0xffffffff)
-            if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
-            elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
-            estimatednonce = estimatednonce + noncediff
-            # Calculate the hash rate based on adjusted tracking information
-            currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
-            weight = min(0.5, delta / 100.)
-            self.mhps = (1 - weight) * self.mhps + weight * currentmhps
-            # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-            self.miner.updatehashrate(self)
-            # Update hash rate tracking information
-            self.lasttime = oldjob.endtime
-            self.lastnonce = nonce
-            
+        self.checknonces()
 
     # If an exception is thrown in the listener thread...
     except Exception as e:
@@ -522,6 +470,66 @@ class X6500FPGA(object):
       with self.wakeup: self.wakeup.notify()
       # ...and terminate the listener thread.
 
+      
+  def checknonces(self):
+    # Try to read a nonce from the device
+    nonce = self.fpga.readNonce()
+    # If we found a nonce, handle it
+    if nonce is not None:
+      # Snapshot the current job to avoid race conditions
+      oldjob = self.job
+      # If there is no job, this must be a leftover from somewhere.
+      # In that case, just restart things to clean up the situation.
+      if oldjob == None: raise Exception("Mining device sent a share before even getting a job")
+      # Stop time measurement
+      oldjob.endtime = datetime.datetime.utcnow()
+      # Pass the nonce that we found to the work source, if there is one.
+      # Do this before calculating the hash rate as it is latency critical.
+      if oldjob != None: oldjob.sendresult(nonce, self)
+      if oldjob.check != None:
+        # This is a validation job. Validate that the nonce is correct, and complain if not.
+        if oldjob.check != nonce:
+          raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (binascii.hexlify(nonce).decode("ascii"), binascii.hexlify(self.job.check).decode("ascii")))
+        else:
+          # The nonce was correct
+          if self.seconditeration == True:
+            with self.wakeup:
+              # This is the second iteration. We now know the actual nonce rotation time.
+              delta = (oldjob.endtime - oldjob.starttime).total_seconds()
+              # Calculate the hash rate based on the nonce rotation time.
+              self.mhps = 2**32 / 1000000. / delta
+              # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+              self.miner.updatehashrate(self)
+              # Update hash rate tracking information
+              self.lasttime = oldjob.endtime
+              self.lastnonce = struct.unpack("<I", nonce)[0]
+              # Wake up the main thread
+              self.checksuccess = True
+              self.wakeup.notify()
+          else:
+            with self.wakeup:
+              # This was the first iteration. Wait for another one to figure out nonce rotation time.
+              oldjob.starttime = oldjob.endtime
+              self.seconditeration = True
+      else:
+        # Adjust hash rate tracking
+        delta = (oldjob.endtime - self.lasttime).total_seconds()
+        nonce = struct.unpack("<I", nonce)[0]
+        estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
+        noncediff = nonce - (estimatednonce & 0xffffffff)
+        if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
+        elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
+        estimatednonce = estimatednonce + noncediff
+        # Calculate the hash rate based on adjusted tracking information
+        currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
+        weight = min(0.5, delta / 100.)
+        self.mhps = (1 - weight) * self.mhps + weight * currentmhps
+        # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+        self.miner.updatehashrate(self)
+        # Update hash rate tracking information
+        self.lasttime = oldjob.endtime
+        self.lastnonce = nonce
+      
 
   # This function uploads a job to the device
   def sendjob(self, job):
@@ -529,11 +537,13 @@ class X6500FPGA(object):
     self.nextjob = job
     # Send it to the FPGA
     self.fpga.writeJob(job)
+    # Try to grab any left over nonces from the previous job in time
+    self.checknonces()
     now = datetime.datetime.utcnow()
     if self.job != None and self.job.starttime != None and self.job.pool != None:
       mhashes = (now - self.job.starttime).total_seconds() * self.mhps
       with self.job.pool.statlock: self.job.pool.mhashes = self.job.pool.mhashes + mhashes
-      self.mhashes = self.mhashes + mhashes
+      with self.statlock: self.mhashes = self.mhashes + mhashes
       self.job.starttime = None
     # Acknowledge the job by moving it from nextjob to job
     self.job = self.nextjob

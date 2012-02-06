@@ -27,6 +27,7 @@
 #   name: Display name for this work source (default: "X6500 hotplug controller")
 #   firmware: Path to the firmware file (default: "worker/fpgamining/firmware/x6500.bit")
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
+#   pollinterval: Nonce poll interval in seconds (default: 0.1)
 #   useftd2xx: Use FTDI D2XX driver instead direct access via PyUSB (default: false)
 #   takeover: Forcibly grab control over the USB device (default: true, requires PyUSB)
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
@@ -62,6 +63,7 @@ class X6500HotplugWorker(object):
     self.uploadfirmware = getattr(self, "uploadfirmware", False)
     self.firmware = getattr(self, "firmware", "worker/fpgamining/firmware/x6500.bit")
     self.jobinterval = getattr(self, "jobinterval", 30)
+    self.pollinterval = getattr(self, "pollinterval", 0.1)
     self.scaninterval = getattr(self, "scaninterval", 10)
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
 
@@ -100,6 +102,7 @@ class X6500HotplugWorker(object):
         "rejected": self.rejected + self.miner.calculatefieldsum(childstats, "rejected"), \
         "invalid": self.invalid + self.miner.calculatefieldsum(childstats, "invalid"), \
         "starttime": self.starttime, \
+        "currentpool": "Not applicable", \
       }
     # Return result
     return statistics
@@ -202,6 +205,7 @@ class X6500HotplugWorker(object):
               "deviceid": deviceid, \
               "firmware": self.firmware, \
               "jobinterval": self.jobinterval, \
+              "pollinterval": self.pollinterval, \
               "useftd2xx": self.useftd2xx, \
               "takeover": False, \
               "uploadfirmware": self.uploadfirmware, \
