@@ -160,7 +160,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "BTCMP (demo)", \
         # Priority (default: 1)
-        "priority": 35, \
+        "priority": 10, \
         # Host name of the pool
         "host": "rr.btcmp.com", \
         # HTTP port of the pool (default: 8332)
@@ -179,7 +179,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "BTCGuild (demo)", \
         # Priority (default: 1)
-        "priority": 5, \
+        "priority": 30, \
         # Host name of the pool
         "host": "btcguild.com", \
         # HTTP authentication user name (default: no authentication)
