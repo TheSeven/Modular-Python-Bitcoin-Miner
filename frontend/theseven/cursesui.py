@@ -109,7 +109,7 @@ class CursesUI(object):
         "uploadretries": ("%d (%.1f%%)" % (pool["uploadretries"], retrypercent), "r" + bold if retrypercent > 5 else "g" + bold if retrypercent < 1 else "y" + bold, "r"), \
         "avgmhps": ("%.2f" % (pool["mhashes"] / uptime), bold, "r"), \
         "efficiency": ("%.1f%%" % efficiency, "r" + bold if efficiency < 80 else "g" + bold if efficiency > 95 else "y" + bold, "r"), \
-        "score": ("%d" % pool["score"], bold, "r"), \
+        "score": ("%.0f" % pool["score"], bold, "r"), \
       })
       self.translatepooldata(pool["children"], poolstats, indent + 2)
     
@@ -128,7 +128,7 @@ class CursesUI(object):
       workerstats.append({ \
         "name": (" " * indent + worker["name"], bold, "l"), \
         "jobsaccepted": ("%d" % worker["jobsaccepted"], bold, "r"), \
-        "accepted": ("%d" % worker["accepted"], bold, "r"), \
+        "accepted": ("%.0f" % worker["accepted"], bold, "r"), \
         "rejected": ("%.0f (%.1f%%)" % (worker["rejected"], stalepercent), "r" + bold if stalepercent > 5 else "g" + bold if stalepercent < 1 else "y" + bold, "r"), \
         "invalid": ("%.0f (%.1f%%)" % (worker["invalid"], invalidpercent), "r" + bold if invalidpercent > 5 else "g" + bold if invalidpercent < 1 else "y" + bold, "r"), \
         "mhps": ("%.2f" % worker["mhps"], bold, "r"), \
@@ -268,8 +268,6 @@ class CursesUI(object):
             (ly, lx) = self.logwin.getmaxyx()
             self.logwin.refresh(ly - my + self.ysplit - 1, 0, self.ysplit, 0, min(my, ly - 1 + self.ysplit) - 1, min(mx, lx) - 1)
           except:
-            import traceback
-            self.miner.log(traceback.format_exc())
             try:
               self.mainwin.erase()
               self.mainwin.addstr(0, 0, "Failed to display stats!\nWindow is probably too small.", self.red | curses.A_BOLD)
