@@ -25,8 +25,6 @@ import threading
 from .jtag import JTAG
 import time
 
-DEFAULT_FREQUENCY = 3000000
-
 class DeviceNotOpened(Exception): pass
 class NoAvailableDevices(Exception): pass
 class InvalidChain(Exception): pass
@@ -87,31 +85,19 @@ class JTAG_PortList:
     return struct.pack('B', ((tck & 1) << self.tck) | ((tms & 1) << self.tms) | ((tdi & 1) << self.tdi))
 
 
-class FT232R_D2XX:
-  def __init__(self, miner, worker, deviceid):
-    import d2xx
+class FT232R:
+  def __init__(self, miner, worker, handle):
     self.mutex = threading.RLock()
     self.miner = miner
     self.worker = worker
-    self.handle = None
+    self.handle = handle
+    self.serial = handle.serial
     self.debug = 0
     self.synchronous = None
     self.write_buffer = b""
-    self.portlist = None
-    self.serial = deviceid
-    devices = d2xx.listDevices()
-    for devicenum, serial in enumerate(devices):
-      if deviceid != "" and deviceid != serial: continue
-      try:
-        self.handle = d2xx.open(devicenum)
-        self.serial = serial
-        break
-      except: pass
-    if self.handle == None: raise Exception("Can not open the specified device")
     self.portlist = FT232R_PortList(7, 6, 5, 4, 3, 2, 1, 0)
-    self._setBaudRate(DEFAULT_FREQUENCY)
     self._setSyncMode()
-    self._purgeBuffers()
+    self.handle.purgeBuffers()
     
   def __enter__(self): 
     return self
@@ -128,52 +114,19 @@ class FT232R_D2XX:
   
   def close(self):
     with self.mutex:
-      if self.handle is None:
-        return
-
-      self._log("Closing device...")
-
-      try:
-        self.handle.close()
-      finally:
-        self.handle = None
-
+      self.handle.close()
       self._log("Device closed.")
-  
-  # Purges the FT232R's buffers.
-  def _purgeBuffers(self):
-    if self.handle is None:
-      raise DeviceNotOpened()
-
-    self.handle.purge(0)
-  
-  def _setBaudRate(self, rate):
-    self._log("Setting baudrate to %i" % rate)
-
-    # Documentation says that we should set a baudrate 16 times lower than
-    # the desired transfer speed (for bit-banging). However I found this to
-    # not be the case. 3Mbaud is the maximum speed of the FT232RL
-    self.handle.setBaudRate(rate)
-    #self.handle.setDivisor(0)  # Another way to set the maximum speed.
   
   def _setSyncMode(self):
     """Put the FT232R into Synchronous mode."""
-    if self.handle is None:
-      raise DeviceNotOpened()
-
     self._log("Device entering Synchronous mode.")
-
     self.handle.setBitMode(self.portlist.output_mask(), 0)
     self.handle.setBitMode(self.portlist.output_mask(), 4)
     self.synchronous = True
 
   def _setAsyncMode(self):
     """Put the FT232R into Asynchronous mode."""
-    if self.handle is None:
-      raise DeviceNotOpened()
-
     self._log("Device entering Asynchronous mode.")
-
     self.handle.setBitMode(self.portlist.output_mask(), 0)
     self.handle.setBitMode(self.portlist.output_mask(), 1)
     self.synchronous = False
@@ -204,34 +157,20 @@ class FT232R_D2XX:
     
   def write(self, data):
     with self.mutex:
-      size = len(data)
-      offset = 0
-      while offset < size:
-        self._log("Writing: %d bytes left" % (size - offset))
-        write_size = min(4096, size - offset)
-        ret = self.handle.write(data[offset : offset + write_size])
-        offset = offset + ret
+      self.handle.write(data)
     
   def read(self, size, timeout):
     with self.mutex:
-      timeout = timeout + time.time()
-      data = b""
-      offset = 0
-      while offset < size and time.time() < timeout:
-        self._log("Reading: %d bytes left" % (size - offset))
-        ret = self.handle.read(min(4096, size - offset))
-        data = data + ret
-        offset = offset + len(ret)
-      return data
+      return self.handle.write(size, timeout)
     
   def flush(self):
     with self.mutex:
       """Write all data in the write buffer and purge the FT232R buffers"""
       self._setAsyncMode()
-      self.write(self.write_buffer)
+      self.handle.write(self.write_buffer)
       self.write_buffer = b""
       self._setSyncMode()
-      self._purgeBuffers()
+      self.handle.purgeBuffers()
   
   def read_data(self, num):
     with self.mutex:
@@ -250,7 +189,7 @@ class FT232R_D2XX:
       if len(self.write_buffer) > 0:
         self._log("Flushing out " + str(len(self.write_buffer)))
         self.flush()
-        self._purgeBuffers()
+        self.handle.purgeBuffers()
 
       data = b""
 
@@ -263,7 +202,7 @@ class FT232R_D2XX:
         #self._log("Status: " + str(self.handle.getStatus()))
         #self._log("QueueStatus: " + str(self.handle.getQueueStatus()))
         
-        data = data + self.read(bytes_to_write, 3)
+        data = data + self.handle.read(bytes_to_write, 3)
         
       self._log("Read %d bytes." % len(data))
       
@@ -308,17 +247,82 @@ class FT232R_D2XX:
       
       return (temp0, temp1)
       
-class FT232R_PyUSB:
-  def __init__(self, miner, worker, deviceid, takeover):
-    import usb
-    self.mutex = threading.RLock()
-    self.miner = miner
-    self.worker = worker
+      
+class FT232R_D2XX:
+  def __init__(self, deviceid):
+    import d2xx
     self.handle = None
-    self.debug = 0
-    self.synchronous = None
-    self.write_buffer = b""
-    self.portlist = None
+    self.serial = deviceid
+    devices = d2xx.listDevices()
+    for devicenum, serial in enumerate(devices):
+      if deviceid != "" and deviceid != serial: continue
+      try:
+        self.handle = d2xx.open(devicenum)
+        self.serial = serial
+        break
+      except: pass
+    if self.handle == None: raise Exception("Can not open the specified device")
+    self.handle.setBaudRate(3000000)
+    
+  def __enter__(self): 
+    return self
+
+  # Be sure to close the opened handle, if there is one.
+  # The device may become locked if we don't (requiring an unplug/plug cycle)
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.close()
+    return False
+  
+  def close(self):
+    if self.handle is None:
+      return
+    try:
+      self.handle.close()
+    finally:
+      self.handle = None
+  
+  def purgeBuffers(self):
+    if self.handle is None:
+      raise DeviceNotOpened()
+    self.handle.purge(0)
+  
+  def setBitMode(self, mask, mode):
+    if self.handle is None:
+      raise DeviceNotOpened()
+    self.handle.setBitMode(mask, mode)
+
+  def getBitMode(self):
+    if self.handle is None:
+      raise DeviceNotOpened()
+    return self.handle.getBitMode()
+    
+  def write(self, data):
+    if self.handle is None:
+      raise DeviceNotOpened()
+    size = len(data)
+    offset = 0
+    while offset < size:
+      write_size = min(4096, size - offset)
+      ret = self.handle.write(data[offset : offset + write_size])
+      offset = offset + ret
+    
+  def read(self, size, timeout):
+    if self.handle is None:
+      raise DeviceNotOpened()
+    timeout = timeout + time.time()
+    data = b""
+    offset = 0
+    while offset < size and time.time() < timeout:
+      ret = self.handle.read(min(4096, size - offset))
+      data = data + ret
+      offset = offset + len(ret)
+    return data
+    
+      
+class FT232R_PyUSB:
+  def __init__(self, deviceid, takeover):
+    import usb
+    self.handle = None
     self.serial = deviceid
     permissionproblem = False
     deviceinuse = False
@@ -356,10 +360,7 @@ class FT232R_PyUSB:
       if permissionproblem:
         raise Exception("Can not open the specified device, possibly due to insufficient permissions")
       raise Exception("Can not open the specified device")
-    self.portlist = FT232R_PortList(7, 6, 5, 4, 3, 2, 1, 0)
     self.handle.controlMsg(0x40, 3, None, 0, 0)
-    self._setSyncMode()
-    self._purgeBuffers()
     
   def __enter__(self): 
     return self
@@ -370,184 +371,50 @@ class FT232R_PyUSB:
     self.close()
     return False
   
-  def _log(self, msg, level=1):
-    if level <= self.debug:
-      self.miner.log(self.worker.name + ": FT232R: " + msg + "\n")
-  
   def close(self):
-    with self.mutex:
-      if self.handle is None:
-        return
-
-      self._log("Closing device...")
-
-      try:
-        self.handle.releaseInterface()
-        self.handle.setConfiguration(0)
-        self.handle.reset()
-      finally:
-        self.handle = None
-
-      self._log("Device closed.")
+    if self.handle is None:
+      return
+    try:
+      self.handle.releaseInterface()
+      self.handle.setConfiguration(0)
+      self.handle.reset()
+    finally:
+      self.handle = None
   
-  # Purges the FT232R's buffers.
-  def _purgeBuffers(self):
+  def purgeBuffers(self):
     if self.handle is None:
       raise DeviceNotOpened()
     self.handle.controlMsg(0x40, 0, None, 1, self.index)
     self.handle.controlMsg(0x40, 0, None, 2, self.index)
     
-  def _setBitMode(self, mask, mode):
+  def setBitMode(self, mask, mode):
+    if self.handle is None:
+      raise DeviceNotOpened()
     self.handle.controlMsg(0x40, 0xb, None, (mode << 8) | mask, self.index)
   
-  def _setSyncMode(self):
-    """Put the FT232R into Synchronous mode."""
+  def getBitMode(self):
     if self.handle is None:
       raise DeviceNotOpened()
-
-    self._log("Device entering Synchronous mode.")
-
-    self._setBitMode(self.portlist.output_mask(), 0)
-    self._setBitMode(self.portlist.output_mask(), 4)
-    self.synchronous = True
-
-  def _setAsyncMode(self):
-    """Put the FT232R into Asynchronous mode."""
-    if self.handle is None:
-      raise DeviceNotOpened()
-
-    self._log("Device entering Asynchronous mode.")
-
-    self._setBitMode(self.portlist.output_mask(), 0)
-    self._setBitMode(self.portlist.output_mask(), 1)
-    self.synchronous = False
-  
-  def _setCBUSBits(self, sc, cs):
-    # CBUS pins:
-    #  SIO_0 = CBUS0 = input
-    #  SIO_1 = CBUS1 = input
-    #  CS    = CBUS2 = output
-    #  SC    = CBUS3 = output
-    
-    SIO_0 = 0
-    SIO_1 = 1
-    CS    = 2
-    SC    = 3
-    read_mask = ( (1 << SC) | (1 << CS) | (0 << SIO_1) | (0 << SIO_0) ) << 4
-    CBUS_mode = 0x20
-    
-    # set up I/O and start conversion:
-    pin_state = (sc << SC) | (cs << CS)
-    self._setBitMode(read_mask | pin_state, CBUS_mode)
-
-  def _getCBUSBits(self):
-    SIO_0 = 0
-    SIO_1 = 1
-    data = self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index)
-    return (((data[0] >> SIO_0) & 1), ((data[0] >> SIO_1) & 1)) 
+    return self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index)[0]
     
   def write(self, data):
-    with self.mutex:
-      size = len(data)
-      offset = 0
-      while offset < size:
-        self._log("Writing: %d bytes left" % (size - offset))
-        write_size = min(4096, size - offset)
-        ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size])
-        offset = offset + ret
+    if self.handle is None:
+      raise DeviceNotOpened()
+    size = len(data)
+    offset = 0
+    while offset < size:
+      write_size = min(4096, size - offset)
+      ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size])
+      offset = offset + ret
     
   def read(self, size, timeout):
-    with self.mutex:
-      timeout = timeout + time.time()
-      data = b""
-      offset = 0
-      while offset < size and time.time() < timeout:
-        self._log("Reading: %d bytes left" % (size - offset))
-        ret = self.handle.bulkRead(self.inep, min(64, size - offset + 2))
-        data = data + struct.pack("%dB" % (len(ret) - 2), *ret[2:])
-        offset = offset + len(ret) - 2
-      return data
-    
-  def flush(self):
-    with self.mutex:
-      """Write all data in the write buffer and purge the FT232R buffers"""
-      self._setAsyncMode()
-      self.write(self.write_buffer)
-      self.write_buffer = b""
-      self._setSyncMode()
-      self._purgeBuffers()
-  
-  def read_data(self, num):
-    with self.mutex:
-      """Read num bytes from the FT232R and return an array of data."""
-      self._log("Reading %d bytes." % num)
-      
-      if num == 0:
-        self.flush()
-        return b""
-
-      # Repeat the last byte so we can read the last bit of TDO.
-      write_buffer = self.write_buffer[-(num*3):]
-      self.write_buffer = self.write_buffer[:-(num*3)]
-
-      # Write all data that we don't care about.
-      if len(self.write_buffer) > 0:
-        self._log("Flushing out " + str(len(self.write_buffer)))
-        self.flush()
-        self._purgeBuffers()
-
-      data = b""
-
-      while len(write_buffer) > 0:
-        bytes_to_write = min(len(write_buffer), 3072)
-        
-        self._log("Writing %d/%d bytes" % (bytes_to_write, len(write_buffer)))
-        self.write(write_buffer[:bytes_to_write])
-        write_buffer = write_buffer[bytes_to_write:]
-        #self._log("Status: " + str(self.handle.getStatus()))
-        #self._log("QueueStatus: " + str(self.handle.getQueueStatus()))
-        
-        data = data + self.read(bytes_to_write, 3)
-        
-      self._log("Read %d bytes." % len(data))
-      
-      return data
-
-  def read_temps(self):
-    with self.mutex:
-      self._log("Reading temp sensors.")
-      
-      # clock SC with CS high:
-      self._setCBUSBits(0, 1)
-      self._setCBUSBits(1, 1)
-      self._setCBUSBits(0, 1)
-      self._setCBUSBits(1, 1)
-      
-      # drop CS to start conversion:
-      self._setCBUSBits(0, 0)
-      
-      code0 = 0
-      code1 = 0
-      
-      for i in range(16):
-        self._setCBUSBits(1, 0)
-        (sio_0, sio_1) = self._getCBUSBits()
-        code0 |= sio_0 << (15 - i)
-        code1 |= sio_1 << (15 - i)
-        self._setCBUSBits(0, 0)
-      
-      # assert CS and clock SC:
-      self._setCBUSBits(0, 1)
-      self._setCBUSBits(1, 1)
-      self._setCBUSBits(0, 1)
-      
-      if code0 == 0xFFFF or code0 == 0: temp0 = None
-      else:
-        if (code0 >> 15) & 1 == 1: code0 -= (1 << 16)
-        temp0 = (code0 >> 2) * 0.03125
-      if code1 == 0xFFFF or code1 == 0: temp1 = None
-      else:
-        if (code1 >> 15) & 1 == 1: code1 -= (1 << 16)
-        temp1 = (code1 >> 2) * 0.03125
-      
-      return (temp0, temp1)
+    if self.handle is None:
+      raise DeviceNotOpened()
+    timeout = timeout + time.time()
+    data = b""
+    offset = 0
+    while offset < size and time.time() < timeout:
+      ret = self.handle.bulkRead(self.inep, min(64, size - offset + 2))
+      data = data + struct.pack("%dB" % (len(ret) - 2), *ret[2:])
+      offset = offset + len(ret) - 2
+    return data

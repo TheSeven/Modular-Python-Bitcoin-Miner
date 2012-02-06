@@ -43,7 +43,7 @@ import datetime
 import hashlib
 import struct
 import atexit
-from .util.ft232r import FT232R_PyUSB, FT232R_D2XX, FT232R_PortList
+from .util.ft232r import FT232R, FT232R_PyUSB, FT232R_D2XX, FT232R_PortList
 from .util.jtag import JTAG
 from .util.BitstreamReader import BitFile, BitFileReadError
 from .util.fpga import FPGA
@@ -76,8 +76,8 @@ class X6500Worker(object):
     self.takeover = getattr(self, "takeover", False)
     self.uploadfirmware = getattr(self, "uploadfirmware", False)
     try:
-      if self.useftd2xx: self.device = FT232R_D2XX(self.miner, self, self.deviceid)
-      else: self.device = FT232R_PyUSB(self.miner, self, self.deviceid, self.takeover)
+      if self.useftd2xx: self.device = FT232R(self.miner, self, FT232R_D2XX(self.deviceid))
+      else: self.device = FT232R(self.miner, self, FT232R_PyUSB(self.deviceid, self.takeover))
     except Exception as e:
       self.device = None
       self.miner.log(self.name + ": %s\n" % e, "rB")
