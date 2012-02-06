@@ -488,10 +488,12 @@ class X6500FPGA(object):
       # Pass the nonce that we found to the work source, if there is one.
       # Do this before calculating the hash rate as it is latency critical.
       if oldjob != None:
-        data = oldjob.data[:76] + nonce + oldjob.data[80:]
-        hash = hashlib.sha256(hashlib.sha256(struct.pack("<20I", *struct.unpack(">20I", data[:80]))).digest()).digest()
-        if hash[-4:] != b"\0\0\0\0" and nextjob != None: nextjob.sendresult(nonce, self)
+        if nextjob != None:
+          data = oldjob.data[:76] + nonce + oldjob.data[80:]
+          hash = hashlib.sha256(hashlib.sha256(struct.pack("<20I", *struct.unpack(">20I", data[:80]))).digest()).digest()
+          if hash[-4:] != b"\0\0\0\0": nextjob.sendresult(nonce, self)
         else: oldjob.sendresult(nonce, self)
+      else: oldjob.sendresult(nonce, self)
       if oldjob.check != None:
         # This is a validation job. Validate that the nonce is correct, and complain if not.
         if oldjob.check != nonce:
