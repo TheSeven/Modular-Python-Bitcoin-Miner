@@ -25,15 +25,22 @@ import worker.fpgamining.x6500hotplug
 #longpollgrouptime = 30  # Long poll aggregation timeout in seconds (default: 30)
 
 # DON'T PLAY WITH THESE UNLESS YOU KNOW WHAT YOU'RE DOING!
-#getjobbias = -1  # Bias (in MHashes) that is credited to the work source for every work
-#                 # request (default: -1). This punishes work sources which cancel their
-#                 # work very often, but the default value effectively disables this
-#                 # behavior. This needs to be negative (non-zero) though, in order
-#                 # to ensure that work requests are distributed evenly between work
-#                 # sources during startup.
-#getjobfailbias = -3000  # Bias (in MHashes) that is credited to the work source for every
-#                        # failed work request (default: -3000). This punishes work source
-#                        # downtime in general.
+#getworkbias = -1  # Bias (in MHashes) that is credited to the work source for every work
+#                  # request (default: -1). This punishes work sources which cancel their
+#                  # work very often, but the default value effectively disables this
+#                  # behavior. This needs to be negative (non-zero) though, in order
+#                  # to ensure that work requests are distributed evenly between work
+#                  # sources during startup.
+#longpollkillbias = 0  # Bias (in MHashes) that is credited to the work source for every piece
+#                      # of work that was invalidated by a long poll (default: 0). This is
+#                      # used to compensate for anomalies caused by getworkbias.
+#getworkfailbias = -3000  # Bias (in MHashes) that is credited to the work source for every
+#                         # failed work request (default: -3000). This punishes work source
+#                         # downtime in general.
+#jobstartbias = 0  # Bias (in MHashes) that is credited to the work source everytime
+#                  # a job of that work source starts being processed on a worker (default: 0).
+#jobfinishbias = 0  # Bias (in MHashes) that is credited to the work source everytime
+#                   # a job of that work source ends being processed on a worker (default: 0).
 #sharebias = 4000  # Bias (in MHashes) that is multiplied with the difficulty and credited
 #                  # to the work source for each found share (default: 4000). This rewards
 #                  # work sources with high efficiency. Keep it near the default value to

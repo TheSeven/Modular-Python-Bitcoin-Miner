@@ -32,7 +32,9 @@
 #   password: HTTP authentication password (default: empty)
 #   useragent: User agent string to be sent to the JSON RPC server
 #              (default: "Modular Python Bitcoin Miner v0.0.2 (bcjsonrpc.JSONRPCPool v0.0.2)")
-#   priority: Priority of the work source (hash rate is distributed proportionally to the priority)
+#   hashrate: Base hashrate for this pool (in MHash/s, default: 0)
+#   priority: Priority of the work source (hashrate that's available in excess of the hashrate
+#             options of all pools will be distributed proportionally to this value, default: 1)
 #   getworktimeout: Timeout (in seconds) for getwork requests (default: global setting)
 #   sendsharetimeout: Share upload timeout in seconds (default: global setting)
 #   longpolltimeout: Long poll connection inactivity timeout (default: global setting)
@@ -62,6 +64,7 @@ class JSONRPCPool(object):
     self.sendsharetimeout = getattr(self, "sendsharetimeout", self.miner.sendsharetimeout)
     self.longpolltimeout = getattr(self, "longpolltimeout", self.miner.longpolltimeout)
     self.priority = getattr(self, "priority", 1)
+    self.hashrate = getattr(self, "hashrate", 0)
     self.username = getattr(self, "username", "")
     self.password = getattr(self, "password", "")
     if self.username == "" and self.password == "": self.auth = None
@@ -101,6 +104,7 @@ class JSONRPCPool(object):
         "uploadretries": self.uploadretries, \
         "starttime": self.starttime, \
         "mhashes": self.mhashes, \
+        "score": self.score, \
       }
     return statistics
 

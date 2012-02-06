@@ -5,8 +5,9 @@ v0.0.4 (beta)
 ===================
 - Subworker support
 - X6500 board support
+- Pool target hashrate support
 - Internal cleanup
-- Rewrote statistics engine
+- New statistics engine
 
 v0.0.3 (2012-01-08)
 ===================

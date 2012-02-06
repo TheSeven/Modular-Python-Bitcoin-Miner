@@ -109,6 +109,7 @@ class CursesUI(object):
         "uploadretries": ("%d (%.1f%%)" % (pool["uploadretries"], retrypercent), "r" + bold if retrypercent > 5 else "g" + bold if retrypercent < 1 else "y" + bold, "r"), \
         "avgmhps": ("%.2f" % (pool["mhashes"] / uptime), bold, "r"), \
         "efficiency": ("%.1f%%" % efficiency, "r" + bold if efficiency < 80 else "g" + bold if efficiency > 95 else "y" + bold, "r"), \
+        "score": ("%d" % pool["score"], bold, "r"), \
       })
       self.translatepooldata(pool["children"], poolstats, indent + 2)
     
@@ -203,6 +204,9 @@ class CursesUI(object):
         x = x + 1 + width
         width = max(6, self.calculatemaxfieldlen(poolstats, "efficiency"))
         poolcolumns.append({"title1": "Effi-", "title2": "ciency", "field": "efficiency", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(7, self.calculatemaxfieldlen(poolstats, "score"))
+        poolcolumns.append({"title1": "Current", "title2": "bias", "field": "score", "x": x, "width": width})
         workerstats = []
         self.translateworkerdata(workerdata, workerstats)
         workercolumns = []
@@ -231,11 +235,11 @@ class CursesUI(object):
         width = max(11, self.calculatemaxfieldlen(workerstats, "temperature"))
         workercolumns.append({"title1": "Temperature", "title2": "(degrees C)", "field": "temperature", "x": x, "width": width})
         x = x + 1 + width
-        width = max(7, self.calculatemaxfieldlen(workerstats, "currentpool"))
-        workercolumns.append({"title1": "Current", "title2": "pool", "field": "currentpool", "x": x, "width": width})
-        x = x + 1 + width
         width = max(6, self.calculatemaxfieldlen(workerstats, "efficiency"))
         workercolumns.append({"title1": "Effi-", "title2": "ciency", "field": "efficiency", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(7, self.calculatemaxfieldlen(workerstats, "currentpool"))
+        workercolumns.append({"title1": "Current", "title2": "pool", "field": "currentpool", "x": x, "width": width})
         with self.miner.conlock:
           try:
             self.ysplit = 10 + len(poolstats) + len(workerstats)
@@ -247,7 +251,7 @@ class CursesUI(object):
             inqueue = self.miner.queue.qsize()
             try: queueseconds = (inqueue / self.miner.jobspersecond)
             except: queueseconds = 0
-            color = self.red if inqueue == 0 else self.green if inqueue >= self.miner.queuelength * 9 / 10 - 1 else self.yellow
+            color = self.red if inqueue <= self.miner.queuelength * 1 / 10 else self.green if inqueue >= self.miner.queuelength * 9 / 10 - 1 else self.yellow
             self.mainwin.addstr(2, 0, "Total speed: ")
             self.mainwin.addstr(("%.1f MH/s" % self.miner.mhps).rjust(11), curses.A_BOLD)
             self.mainwin.addstr(" - Buffer: ")

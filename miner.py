@@ -32,15 +32,22 @@
 #   sendsharetimeout: Share upload timeout in seconds (default: 10)
 #   longpolltimeout: Long poll connection inactivity timeout in seconds (default: 900)
 #   longpollgrouptime: Long poll aggregation timeout in seconds (default: 30)
-#   getjobbias: Bias (in MHashes) that is credited to the work source for every work
-#               request (default: -1). This punishes work sources which cancel their
-#               work very often, but the default value effectively disables this
-#               behavior. This needs to be negative (non-zero) though, in order
-#               to ensure that work requests are distributed evenly between work
-#               sources during startup.
-#   getjobfailbias: Bias (in MHashes) that is credited to the work source for every
-#                   failed work request (default: -3000). This punishes work source
-#                   downtime in general.
+#   getworkbias: Bias (in MHashes) that is credited to the work source for every work
+#                request (default: -1). This punishes work sources which cancel their
+#                work very often, but the default value effectively disables this
+#                behavior. This needs to be negative (non-zero) though, in order
+#                to ensure that work requests are distributed evenly between work
+#                sources during startup.
+#   longpollkillbias: Bias (in MHashes) that is credited to the work source for every
+#                     piece of work that was invalidated by a long poll (default: 0).
+#                     This is used to compensate for anomalies caused by getworkbias.
+#   getworkfailbias: Bias (in MHashes) that is credited to the work source for every
+#                    failed work request (default: -3000). This punishes work source
+#                    downtime in general.
+#   jobstartbias: Bias (in MHashes) that is credited to the work source everytime
+#                 a job of that work source starts being processed on a worker (default: 0).
+#   jobfinishbias: Bias (in MHashes) that is credited to the work source everytime
+#                  a job of that work source ends being processed on a worker (default: 0).
 #   sharebias: Bias (in MHashes) that is multiplied with the difficulty and credited
 #              to the work source for each found share (default: 4000). This rewards
 #              work sources with high efficiency. Keep it near the default value to
@@ -125,6 +132,9 @@ class Miner(object):
     self.longpollgrouptime = getattr(self.config, "longpollgrouptime", 30)
     self.getworkbias = getattr(self.config, "getworkbias", -1)
     self.getworkfailbias = getattr(self.config, "getworkfailbias", -3000)
+    self.longpollkillbias = getattr(self.config, "longpollkillbias", 0)
+    self.jobstartbias = getattr(self.config, "jobstartbias", 0)
+    self.jobfinishbias = getattr(self.config, "jobfinishbias", 0)
     self.sharebias = getattr(self.config, "sharebias", 4000)
     self.uploadfailbias = getattr(self.config, "uploadfailbias", -100)
     self.stalebias = getattr(self.config, "stalebias", -15000)
@@ -172,14 +182,20 @@ class Miner(object):
   def spawnfetcher(self):
     with self.fetcherlock:
       self.fetchersrunning = self.fetchersrunning + 1
+      queuedelay = self.queuelength / self.jobspersecond
       while True:
         now = datetime.datetime.utcnow()
         best = None
         pool = None
         for p in self.pools:
           p.score = p.score * self.biasdecay
-          if now >= p.blockeduntil and (best == None or (p.mhashes - p.score) / p.priority < best):
-            best = (p.mhashes - p.score) / p.priority
+          excessmhashes = p.mhashes - ((now - p.starttime).total_seconds() + queuedelay) * p.hashrate
+          score = excessmhashes - p.score
+          if excessmhashes - max(0, p.score) >= 0:
+            if p.priority > 0: score = max(0, score / p.priority)
+            else: score = "inf"
+          if now >= p.blockeduntil and (best == None or score < best):
+            best = score
             pool = p
         if pool != None:
           pool.score = pool.score + self.getworkbias
@@ -199,6 +215,7 @@ class Miner(object):
         with self.fetcherlock:
           self.fetchersrunning = self.fetchersrunning - 1
           self.adjustfetchers()
+        with pool.statlock: pool.score = pool.score - self.getworkbias
         return
     job = None
     try:
@@ -218,7 +235,9 @@ class Miner(object):
         self.queuelock.release()
       else:
         self.queuelock.release()
-        with pool.statlock: pool.longpollkilled = pool.longpollkilled + 1
+        with pool.statlock:
+          pool.longpollkilled = pool.longpollkilled + 1
+          pool.score = pool.score + self.longpollkillbias
       pool.difficulty = 65535.0 * 2**48 / struct.unpack("<Q", job.target[-12:-4])[0]
     with self.fetcherlock:
       self.fetchersrunning = self.fetchersrunning - 1
@@ -245,6 +264,7 @@ class Miner(object):
     self.adjustfetchers()
     with job.pool.statlock:
       job.pool.jobsaccepted = job.pool.jobsaccepted + 1
+      job.pool.score = job.pool.score + self.jobstartbias
     self.log("Mining %s:%s:%s on %s\n" % (job.pool.name, binascii.hexlify(job.state).decode("ascii"), binascii.hexlify(job.data[64:76]).decode("ascii"), worker.name))
     return job
 
@@ -260,18 +280,24 @@ class Miner(object):
           try: w.cancel(job.pool.blockchain)
           except: pass
         save = []
+        while True:
+          try:
+            j = self.queue.get(False)
+            if j.pool.blockchain != job.pool.blockchain: save.append(j)
+            else:
+              with j.pool.statlock:
+                j.pool.longpollkilled = j.pool.longpollkilled + 1
+                j.pool.score = j.pool.score + self.longpollkillbias
+          except: break
+        for j in save: self.queue.put(j)
         with job.pool.statlock:
-          while True:
-            try:
-              j = self.queue.get(False)
-              if j.pool.blockchain != job.pool.blockchain: save.append(j)
-              else: j.pool.longpollkilled = j.pool.longpollkilled + 1
-            except: break
-          for j in save: self.queue.put(j)
           job.pool.requests = job.pool.requests + 1
+          job.pool.score = job.pool.score + self.getworkbias
           if self.queue.qsize() <= self.queuelength * 1.5:
             self.queue.put(job)
-          else: job.pool.longpollkilled = job.pool.longpollkilled + 1
+          else:
+            job.pool.longpollkilled = job.pool.longpollkilled + 1
+            job.pool.score = job.pool.score + self.longpollkillbias
           job.pool.difficulty = 65535.0 * 2**48 / struct.unpack("<Q", job.target[-12:-4])[0]
     self.adjustfetchers()
     self.log("Long polling: %s indicates that a new block was found\n" % job.pool.name, "B")

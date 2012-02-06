@@ -298,8 +298,7 @@ class SimpleRS232Worker(object):
           now = datetime.datetime.utcnow()
           if self.job != None and self.job.starttime != None and self.job.pool != None:
             mhashes = (now - self.job.starttime).total_seconds() * self.mhps
-            with self.job.pool.statlock: self.job.pool.mhashes = self.job.pool.mhashes + mhashes
-            self.mhashes = self.mhashes + mhashes
+            self.job.finish(mhashes, self)
             self.job.starttime = None
 
           # Acknowledge the job by moving it from nextjob to job and wake up

@@ -69,3 +69,10 @@ class Job(object):
       with self.pool.statlock:
         self.pool.rejected = self.pool.rejected + 1
         self.pool.score = self.pool.score + self.miner.stalebias
+
+  def finish(self, mhashes, worker):
+    with self.pool.statlock:
+      self.pool.mhashes = self.pool.mhashes + mhashes
+      self.pool.score = self.pool.score + self.miner.jobfinishbias
+    with worker.statlock: worker.mhashes = worker.mhashes + mhashes
+    

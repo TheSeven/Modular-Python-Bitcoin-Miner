@@ -537,13 +537,12 @@ class X6500FPGA(object):
     self.nextjob = job
     # Send it to the FPGA
     self.fpga.writeJob(job)
-    # Try to grab any left over nonces from the previous job in time
+    # Try to grab any leftover nonces from the previous job in time
     self.checknonces()
     now = datetime.datetime.utcnow()
     if self.job != None and self.job.starttime != None and self.job.pool != None:
       mhashes = (now - self.job.starttime).total_seconds() * self.mhps
-      with self.job.pool.statlock: self.job.pool.mhashes = self.job.pool.mhashes + mhashes
-      with self.statlock: self.mhashes = self.mhashes + mhashes
+      self.job.finish(mhashes, self)
       self.job.starttime = None
     # Acknowledge the job by moving it from nextjob to job
     self.job = self.nextjob
