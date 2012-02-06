@@ -324,8 +324,11 @@ class Miner(object):
     return 1. * sum / count
 
 if __name__ == "__main__":
-  if os.path.isfile("config.py"): import config
-  else: import default_config as config
+  configfile = "default_config"
+  if os.path.isfile("config.py"): configfile = "config"
+  if len(sys.argv) == 2 and sys.argv[1] != "": configfile = sys.argv[1]
+  if configfile[-3:] == ".py": configfile = configfile[:-3]
+  exec("import " + configfile)
   miner = Miner(config)
   try:
     miner.run()
