@@ -153,11 +153,11 @@ class JSONRPCPool(object):
             url = h[1]
             try:
               if url[0] == "/": url = "http://" + self.host + ":" + str(self.port) + url
-              if url[:7] != "http://": raise Exception()
-              parts = url[7:].split("/", 2)
+              if url[:7] != "http://": raise Exception("Long poll URL isn't HTTP!")
+              parts = url[7:].split("/", 1)
               path = "/" + parts[1]
               parts = parts[0].split(":")
-              if len(parts) != 2: raise Exception()
+              if len(parts) != 2: raise Exception("Long poll URL contains host but no port!")
               host = parts[0]
               port = parts[1]
               self.miner.log("Found long polling URL for %s: %s\n" % (self.name, url), "g")
@@ -181,7 +181,8 @@ class JSONRPCPool(object):
         headers = {"User-Agent": self.useragent}
         if self.auth != None: headers["Authorization"] = self.auth
         conn.request("GET", path, None, headers)
-        response = json.loads(conn.getresponse().read().decode("utf_8"))
+        data = conn.getresponse().read().decode("utf_8")
+        response = json.loads(data)
         state = binascii.unhexlify(response["result"]["midstate"].encode("ascii"))
         data = binascii.unhexlify(response["result"]["data"].encode("ascii"))
         target = binascii.unhexlify(response["result"]["target"].encode("ascii"))

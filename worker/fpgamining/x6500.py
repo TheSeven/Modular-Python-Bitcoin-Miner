@@ -40,6 +40,7 @@ import binascii
 import threading
 import time
 import datetime
+import hashlib
 import struct
 import atexit
 from .util.ft232r import FT232R_PyUSB, FT232R_D2XX, FT232R_PortList
@@ -476,7 +477,8 @@ class X6500FPGA(object):
     nonce = self.fpga.readNonce()
     # If we found a nonce, handle it
     if nonce is not None:
-      # Snapshot the current job to avoid race conditions
+      # Snapshot the current jobs to avoid race conditions
+      nextjob = self.nextjob
       oldjob = self.job
       # If there is no job, this must be a leftover from somewhere.
       # In that case, just restart things to clean up the situation.
@@ -485,7 +487,11 @@ class X6500FPGA(object):
       oldjob.endtime = datetime.datetime.utcnow()
       # Pass the nonce that we found to the work source, if there is one.
       # Do this before calculating the hash rate as it is latency critical.
-      if oldjob != None: oldjob.sendresult(nonce, self)
+      if oldjob != None:
+        data = oldjob.data[:76] + nonce + oldjob.data[80:]
+        hash = hashlib.sha256(hashlib.sha256(struct.pack("<20I", *struct.unpack(">20I", data[:80]))).digest()).digest()
+        if hash[-4:] != b"\0\0\0\0" and nextjob != None: nextjob.sendresult(nonce, self)
+        else: oldjob.sendresult(nonce, self)
       if oldjob.check != None:
         # This is a validation job. Validate that the nonce is correct, and complain if not.
         if oldjob.check != nonce:
