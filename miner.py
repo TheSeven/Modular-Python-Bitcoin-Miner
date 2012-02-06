@@ -328,7 +328,7 @@ if __name__ == "__main__":
   if os.path.isfile("config.py"): configfile = "config"
   if len(sys.argv) == 2 and sys.argv[1] != "": configfile = sys.argv[1]
   if configfile[-3:] == ".py": configfile = configfile[:-3]
-  exec("import " + configfile)
+  exec("import " + configfile + " as config")
   miner = Miner(config)
   try:
     miner.run()
