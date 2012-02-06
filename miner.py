@@ -249,18 +249,18 @@ class Miner(object):
     return job
 
   def newblock(self, job):
-    with job.pool.statlock:
-      with self.queuelock:
-        job.pool.longpollepoch = job.pool.longpollepoch + 1
-        if job.pool.longpollepoch >= job.pool.blockchain.longpollepoch:
-          job.pool.blockeduntil = datetime.datetime.utcnow()
-        if job.pool.longpollepoch > job.pool.blockchain.longpollepoch:
-          job.pool.blockchain.lastlongpoll = datetime.datetime.utcnow()
-          job.pool.blockchain.longpollepoch = job.pool.longpollepoch
-          for w in self.workers:
-            try: w.cancel(job.pool.blockchain)
-            except: pass
-          save = []
+    with self.queuelock:
+      job.pool.longpollepoch = job.pool.longpollepoch + 1
+      if job.pool.longpollepoch >= job.pool.blockchain.longpollepoch:
+        job.pool.blockeduntil = datetime.datetime.utcnow()
+      if job.pool.longpollepoch > job.pool.blockchain.longpollepoch:
+        job.pool.blockchain.lastlongpoll = datetime.datetime.utcnow()
+        job.pool.blockchain.longpollepoch = job.pool.longpollepoch
+        for w in self.workers:
+          try: w.cancel(job.pool.blockchain)
+          except: pass
+        save = []
+        with job.pool.statlock:
           while True:
             try:
               j = self.queue.get(False)
@@ -268,11 +268,11 @@ class Miner(object):
               else: j.pool.longpollkilled = j.pool.longpollkilled + 1
             except: break
           for j in save: self.queue.put(j)
-        job.pool.requests = job.pool.requests + 1
-        if self.queue.qsize() <= self.queuelength * 1.5:
-          self.queue.put(job)
-        else: job.pool.longpollkilled = job.pool.longpollkilled + 1
-      job.pool.difficulty = 65535.0 * 2**48 / struct.unpack("<Q", job.target[-12:-4])[0]
+          job.pool.requests = job.pool.requests + 1
+          if self.queue.qsize() <= self.queuelength * 1.5:
+            self.queue.put(job)
+          else: job.pool.longpollkilled = job.pool.longpollkilled + 1
+          job.pool.difficulty = 65535.0 * 2**48 / struct.unpack("<Q", job.target[-12:-4])[0]
     self.adjustfetchers()
     self.log("Long polling: %s indicates that a new block was found\n" % job.pool.name, "B")
     

@@ -31,6 +31,7 @@
 import sys
 import curses
 import threading
+import traceback
 import atexit
 import time
 import datetime
@@ -159,112 +160,115 @@ class CursesUI(object):
 
   def mainloop(self):
     while True:
-      pooldata = self.miner.collectstatistics(self.miner.pools)
-      workerdata = self.miner.collectstatistics(self.miner.workers)
-      poolstats = []
-      self.translatepooldata(pooldata, poolstats)
-      poolcolumns = []
-      x = 0
-      width = max(4, self.calculatemaxfieldlen(poolstats, "name", 2))
-      poolcolumns.append({"title1": "Pool", "title2": "name", "field": "name", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(4, self.calculatemaxfieldlen(poolstats, "longpolling"))
-      poolcolumns.append({"title1": "Long", "title2": "poll", "field": "longpolling", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(10, self.calculatemaxfieldlen(poolstats, "difficulty"))
-      poolcolumns.append({"title1": "", "title2": "Difficulty", "field": "difficulty", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(8, self.calculatemaxfieldlen(poolstats, "requests"))
-      poolcolumns.append({"title1": "Job", "title2": "requests", "field": "requests", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(12, self.calculatemaxfieldlen(poolstats, "failedreqs"))
-      poolcolumns.append({"title1": "Failed", "title2": "job requests", "field": "failedreqs", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(8, self.calculatemaxfieldlen(poolstats, "jobsaccepted"))
-      poolcolumns.append({"title1": "Accepted", "title2": "jobs", "field": "jobsaccepted", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(8, self.calculatemaxfieldlen(poolstats, "longpollkilled"))
-      poolcolumns.append({"title1": "Rejected", "title2": "jobs", "field": "longpollkilled", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(8, self.calculatemaxfieldlen(poolstats, "accepted"))
-      poolcolumns.append({"title1": "Accepted", "title2": "shares", "field": "accepted", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(12, self.calculatemaxfieldlen(poolstats, "rejected"))
-      poolcolumns.append({"title1": "Stale shares", "title2": "(rejected)", "field": "rejected", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(12, self.calculatemaxfieldlen(poolstats, "uploadretries"))
-      poolcolumns.append({"title1": "Share upload", "title2": "retries", "field": "uploadretries", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(7, self.calculatemaxfieldlen(poolstats, "avgmhps"))
-      poolcolumns.append({"title1": "Average", "title2": "MHash/s", "field": "avgmhps", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(6, self.calculatemaxfieldlen(poolstats, "efficiency"))
-      poolcolumns.append({"title1": "Effi-", "title2": "ciency", "field": "efficiency", "x": x, "width": width})
-      workerstats = []
-      self.translateworkerdata(workerdata, workerstats)
-      workercolumns = []
-      x = 0
-      width = max(6, self.calculatemaxfieldlen(workerstats, "name", 2))
-      workercolumns.append({"title1": "Worker", "title2": "name", "field": "name", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(8, self.calculatemaxfieldlen(workerstats, "jobsaccepted"))
-      workercolumns.append({"title1": "Accepted", "title2": "jobs", "field": "jobsaccepted", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(8, self.calculatemaxfieldlen(workerstats, "accepted"))
-      workercolumns.append({"title1": "Accepted", "title2": "shares", "field": "accepted", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(12, self.calculatemaxfieldlen(workerstats, "rejected"))
-      workercolumns.append({"title1": "Stale shares", "title2": "(rejected)", "field": "rejected", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(14, self.calculatemaxfieldlen(workerstats, "invalid"))
-      workercolumns.append({"title1": "Invalid shares", "title2": "(K not zero)", "field": "invalid", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(7, self.calculatemaxfieldlen(workerstats, "mhps"))
-      workercolumns.append({"title1": "Current", "title2": "MHash/s", "field": "mhps", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(7, self.calculatemaxfieldlen(workerstats, "avgmhps"))
-      workercolumns.append({"title1": "Average", "title2": "MHash/s", "field": "avgmhps", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(11, self.calculatemaxfieldlen(workerstats, "temperature"))
-      workercolumns.append({"title1": "Temperature", "title2": "(degrees C)", "field": "temperature", "x": x, "width": width})
-      x = x + 1 + width
-      width = max(6, self.calculatemaxfieldlen(workerstats, "efficiency"))
-      workercolumns.append({"title1": "Effi-", "title2": "ciency", "field": "efficiency", "x": x, "width": width})
-      with self.miner.conlock:
-        try:
-          self.ysplit = 10 + len(poolstats) + len(workerstats)
-          (my, mx) = self.mainwin.getmaxyx()
-          self.mainwin.erase()
-          self.mainwin.hline(1, 0, curses.ACS_HLINE, mx)
-          self.mainwin.hline(self.ysplit - 1, 0, curses.ACS_HLINE, mx)
-          self.mainwin.addstr(0, (mx - len(self.miner.useragent)) // 2, self.miner.useragent, curses.A_BOLD)
-          inqueue = self.miner.queue.qsize()
-          try: queueseconds = (inqueue / self.miner.jobspersecond)
-          except: queueseconds = 0
-          color = self.red if inqueue == 0 else self.green if inqueue >= self.miner.queuelength * 9 / 10 - 1 else self.yellow
-          self.mainwin.addstr(2, 0, "Total speed: ")
-          self.mainwin.addstr(("%.1f MH/s" % self.miner.mhps).rjust(11), curses.A_BOLD)
-          self.mainwin.addstr(" - Buffer: ")
-          self.mainwin.addstr(("%d" % inqueue).ljust(2), color | curses.A_BOLD)
-          self.mainwin.addstr("/", color)
-          self.mainwin.addstr(("%d" % self.miner.queuelength).rjust(2), color | curses.A_BOLD)
-          self.mainwin.addstr(" (", color)
-          self.mainwin.addstr(("%.2f" % queueseconds), color | curses.A_BOLD)
-          self.mainwin.addstr(" seconds)", color)
-          self.drawtable(4, poolcolumns, poolstats)
-          self.drawtable(7 + len(poolstats), workercolumns, workerstats)
-          self.mainwin.noutrefresh()
-          (my, mx) = self.mainwin.getmaxyx()
-          (ly, lx) = self.logwin.getmaxyx()
-          self.logwin.refresh(ly - my + self.ysplit - 1, 0, self.ysplit, 0, min(my, ly - 1 + self.ysplit) - 1, min(mx, lx) - 1)
-        except:
-          import traceback
-          self.miner.log(traceback.format_exc())
+      try:
+        pooldata = self.miner.collectstatistics(self.miner.pools)
+        workerdata = self.miner.collectstatistics(self.miner.workers)
+        poolstats = []
+        self.translatepooldata(pooldata, poolstats)
+        poolcolumns = []
+        x = 0
+        width = max(4, self.calculatemaxfieldlen(poolstats, "name", 2))
+        poolcolumns.append({"title1": "Pool", "title2": "name", "field": "name", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(4, self.calculatemaxfieldlen(poolstats, "longpolling"))
+        poolcolumns.append({"title1": "Long", "title2": "poll", "field": "longpolling", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(10, self.calculatemaxfieldlen(poolstats, "difficulty"))
+        poolcolumns.append({"title1": "", "title2": "Difficulty", "field": "difficulty", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(8, self.calculatemaxfieldlen(poolstats, "requests"))
+        poolcolumns.append({"title1": "Job", "title2": "requests", "field": "requests", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(12, self.calculatemaxfieldlen(poolstats, "failedreqs"))
+        poolcolumns.append({"title1": "Failed", "title2": "job requests", "field": "failedreqs", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(8, self.calculatemaxfieldlen(poolstats, "jobsaccepted"))
+        poolcolumns.append({"title1": "Accepted", "title2": "jobs", "field": "jobsaccepted", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(8, self.calculatemaxfieldlen(poolstats, "longpollkilled"))
+        poolcolumns.append({"title1": "Rejected", "title2": "jobs", "field": "longpollkilled", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(8, self.calculatemaxfieldlen(poolstats, "accepted"))
+        poolcolumns.append({"title1": "Accepted", "title2": "shares", "field": "accepted", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(12, self.calculatemaxfieldlen(poolstats, "rejected"))
+        poolcolumns.append({"title1": "Stale shares", "title2": "(rejected)", "field": "rejected", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(12, self.calculatemaxfieldlen(poolstats, "uploadretries"))
+        poolcolumns.append({"title1": "Share upload", "title2": "retries", "field": "uploadretries", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(7, self.calculatemaxfieldlen(poolstats, "avgmhps"))
+        poolcolumns.append({"title1": "Average", "title2": "MHash/s", "field": "avgmhps", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(6, self.calculatemaxfieldlen(poolstats, "efficiency"))
+        poolcolumns.append({"title1": "Effi-", "title2": "ciency", "field": "efficiency", "x": x, "width": width})
+        workerstats = []
+        self.translateworkerdata(workerdata, workerstats)
+        workercolumns = []
+        x = 0
+        width = max(6, self.calculatemaxfieldlen(workerstats, "name", 2))
+        workercolumns.append({"title1": "Worker", "title2": "name", "field": "name", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(8, self.calculatemaxfieldlen(workerstats, "jobsaccepted"))
+        workercolumns.append({"title1": "Accepted", "title2": "jobs", "field": "jobsaccepted", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(8, self.calculatemaxfieldlen(workerstats, "accepted"))
+        workercolumns.append({"title1": "Accepted", "title2": "shares", "field": "accepted", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(12, self.calculatemaxfieldlen(workerstats, "rejected"))
+        workercolumns.append({"title1": "Stale shares", "title2": "(rejected)", "field": "rejected", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(14, self.calculatemaxfieldlen(workerstats, "invalid"))
+        workercolumns.append({"title1": "Invalid shares", "title2": "(K not zero)", "field": "invalid", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(7, self.calculatemaxfieldlen(workerstats, "mhps"))
+        workercolumns.append({"title1": "Current", "title2": "MHash/s", "field": "mhps", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(7, self.calculatemaxfieldlen(workerstats, "avgmhps"))
+        workercolumns.append({"title1": "Average", "title2": "MHash/s", "field": "avgmhps", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(11, self.calculatemaxfieldlen(workerstats, "temperature"))
+        workercolumns.append({"title1": "Temperature", "title2": "(degrees C)", "field": "temperature", "x": x, "width": width})
+        x = x + 1 + width
+        width = max(6, self.calculatemaxfieldlen(workerstats, "efficiency"))
+        workercolumns.append({"title1": "Effi-", "title2": "ciency", "field": "efficiency", "x": x, "width": width})
+        with self.miner.conlock:
           try:
+            self.ysplit = 10 + len(poolstats) + len(workerstats)
+            (my, mx) = self.mainwin.getmaxyx()
             self.mainwin.erase()
-            self.mainwin.addstr(0, 0, "Failed to display stats!\nWindow is probably too small.", self.red | curses.A_BOLD)
-            self.mainwin.refresh()
-          except: pass
+            self.mainwin.hline(1, 0, curses.ACS_HLINE, mx)
+            self.mainwin.hline(self.ysplit - 1, 0, curses.ACS_HLINE, mx)
+            self.mainwin.addstr(0, (mx - len(self.miner.useragent)) // 2, self.miner.useragent, curses.A_BOLD)
+            inqueue = self.miner.queue.qsize()
+            try: queueseconds = (inqueue / self.miner.jobspersecond)
+            except: queueseconds = 0
+            color = self.red if inqueue == 0 else self.green if inqueue >= self.miner.queuelength * 9 / 10 - 1 else self.yellow
+            self.mainwin.addstr(2, 0, "Total speed: ")
+            self.mainwin.addstr(("%.1f MH/s" % self.miner.mhps).rjust(11), curses.A_BOLD)
+            self.mainwin.addstr(" - Buffer: ")
+            self.mainwin.addstr(("%d" % inqueue).ljust(2), color | curses.A_BOLD)
+            self.mainwin.addstr("/", color)
+            self.mainwin.addstr(("%d" % self.miner.queuelength).rjust(2), color | curses.A_BOLD)
+            self.mainwin.addstr(" (", color)
+            self.mainwin.addstr(("%.2f" % queueseconds), color | curses.A_BOLD)
+            self.mainwin.addstr(" seconds)", color)
+            self.drawtable(4, poolcolumns, poolstats)
+            self.drawtable(7 + len(poolstats), workercolumns, workerstats)
+            self.mainwin.noutrefresh()
+            (my, mx) = self.mainwin.getmaxyx()
+            (ly, lx) = self.logwin.getmaxyx()
+            self.logwin.refresh(ly - my + self.ysplit - 1, 0, self.ysplit, 0, min(my, ly - 1 + self.ysplit) - 1, min(mx, lx) - 1)
+          except:
+            import traceback
+            self.miner.log(traceback.format_exc())
+            try:
+              self.mainwin.erase()
+              self.mainwin.addstr(0, 0, "Failed to display stats!\nWindow is probably too small.", self.red | curses.A_BOLD)
+              self.mainwin.refresh()
+            except: pass
+      except Exception as e:
+        self.miner.log("Exception while updating CursesUI stats: %s\n" % traceback.format_exc(), "rB")
       time.sleep(self.updateinterval)
 
   def message(self, date, str, format):
