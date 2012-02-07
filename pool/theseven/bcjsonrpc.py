@@ -155,7 +155,8 @@ class JSONRPCPool(object):
               if url[0] == "/": url = "http://" + self.host + ":" + str(self.port) + url
               if url[:7] != "http://": raise Exception("Long poll URL isn't HTTP!")
               parts = url[7:].split("/", 1)
-              path = "/" + parts[1]
+              if len(parts) == 2: path = "/" + parts[1]
+              else: path = "/"
               parts = parts[0].split(":")
               if len(parts) != 2: raise Exception("Long poll URL contains host but no port!")
               host = parts[0]
