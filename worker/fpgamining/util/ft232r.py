@@ -96,7 +96,7 @@ class FT232R:
     self.synchronous = None
     self.write_buffer = b""
     self.portlist = FT232R_PortList(7, 6, 5, 4, 3, 2, 1, 0)
-    self._setSyncMode()
+    self.setSyncMode()
     self.handle.purgeBuffers()
     
   def __enter__(self): 
@@ -117,20 +117,23 @@ class FT232R:
       self.handle.close()
       self._log("Device closed.")
   
-  def _setSyncMode(self):
+  def setSyncMode(self):
     """Put the FT232R into Synchronous mode."""
     self._log("Device entering Synchronous mode.")
     self.handle.setBitMode(self.portlist.output_mask(), 0)
     self.handle.setBitMode(self.portlist.output_mask(), 4)
     self.synchronous = True
 
-  def _setAsyncMode(self):
+  def setAsyncMode(self):
     """Put the FT232R into Asynchronous mode."""
     self._log("Device entering Asynchronous mode.")
     self.handle.setBitMode(self.portlist.output_mask(), 0)
     self.handle.setBitMode(self.portlist.output_mask(), 1)
     self.synchronous = False
   
+  def purgeBuffers(self):
+    self.handle.purgeBuffers()
+
   def _setCBUSBits(self, sc, cs):
     # CBUS pins:
     #  SIO_0 = CBUS0 = input
@@ -166,10 +169,10 @@ class FT232R:
   def flush(self):
     with self.mutex:
       """Write all data in the write buffer and purge the FT232R buffers"""
-      self._setAsyncMode()
+      self.setAsyncMode()
       self.handle.write(self.write_buffer)
       self.write_buffer = b""
-      self._setSyncMode()
+      self.setSyncMode()
       self.handle.purgeBuffers()
   
   def read_data(self, num):

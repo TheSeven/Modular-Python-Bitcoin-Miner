@@ -216,7 +216,7 @@ class JTAG:
     self.tap.goto(TAP.SHIFT_DR)
     self.ft232r.flush()
     
-    self.ft232r._setAsyncMode()
+    self.ft232r.setAsyncMode()
     
     start_time = time.time()
     last_update = 0
@@ -238,8 +238,8 @@ class JTAG:
         progressCallback(start_time, time.time(), written, bytetotal)
         last_update = time.time()
     
-    self.ft232r._setSyncMode()
-    self.ft232r._purgeBuffers()
+    self.ft232r.setSyncMode()
+    self.ft232r.purgeBuffers()
     
     d = struct.unpack("B", bitstream[-1:])[0]
     for i in range(7, 0, -1):

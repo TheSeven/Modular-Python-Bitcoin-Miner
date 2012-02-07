@@ -153,7 +153,7 @@ class FPGA:
 
       #self.miner.log(self.name + ": FPGA: Loading job data...\n")
 
-      #self.jtag._setAsyncMode()
+      #self.jtag.setAsyncMode()
       
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
