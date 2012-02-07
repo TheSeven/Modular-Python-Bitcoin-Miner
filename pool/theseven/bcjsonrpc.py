@@ -43,7 +43,7 @@
 import sys
 import common
 import base64
-import datetime
+import time
 import json
 import threading
 import curses
@@ -84,8 +84,8 @@ class JSONRPCPool(object):
     self.rejected = 0
     self.score = 0
     self.mhashes = 0
-    self.starttime = datetime.datetime.utcnow()
-    self.blockeduntil = datetime.datetime.utcnow()
+    self.starttime = time.time()
+    self.blockeduntil = time.time()
     self.difficulty = 0
 
   def getstatistics(self, childstats):

@@ -36,7 +36,7 @@
 
 import sys
 import time
-import datetime
+import time
 import threading
 import worker.fpgamining.x6500
 
@@ -75,7 +75,7 @@ class X6500HotplugWorker(object):
     self.accepted = 0      # Number of accepted shares produced by this worker * difficulty
     self.rejected = 0      # Number of rejected shares produced by this worker * difficulty
     self.invalid = 0       # Number of invalid shares produced by this worker
-    self.starttime = datetime.datetime.utcnow()  # Start timestamp (to get average MH/s from MHashes)
+    self.starttime = time.time() # Start timestamp (to get average MH/s from MHashes)
 
     # Statistics lock, ensures that the UI can get a consistent statistics state
     # Needs to be acquired during all operations that affect the above values

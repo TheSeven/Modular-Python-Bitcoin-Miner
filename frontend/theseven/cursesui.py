@@ -86,7 +86,7 @@ class CursesUI(object):
     for pool in pools:
       bold = "B" if len(pool["children"]) > 0 else ""
       uptime = 1
-      try: uptime = (datetime.datetime.utcnow() - pool["starttime"]).total_seconds()
+      try: uptime = (time.time() - pool["starttime"])
       except: pass
       try: failedpercent = 100. * pool["failedreqs"] / pool["requests"]
       except: failedpercent = 0
@@ -117,7 +117,7 @@ class CursesUI(object):
     for worker in workers:
       bold = "B" if len(worker["children"]) > 0 else ""
       uptime = 1
-      try: uptime = (datetime.datetime.utcnow() - worker["starttime"]).total_seconds()
+      try: uptime = (time.time() - worker["starttime"])
       except: pass
       try: stalepercent = 100. * worker["rejected"] / (worker["accepted"] + worker["rejected"])
       except: stalepercent = 0

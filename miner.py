@@ -94,7 +94,7 @@ class OutputRedirector(object):
 class Blockchain(object):
   def __init__(self, miner):
     self.miner = miner
-    self.lastlongpoll = datetime.datetime.utcnow() - datetime.timedelta(seconds = self.miner.longpollgrouptime)
+    self.lastlongpoll = time.time() - self.miner.longpollgrouptime
     self.longpollepoch = 0
 
 class Miner(object):
@@ -184,12 +184,12 @@ class Miner(object):
       self.fetchersrunning = self.fetchersrunning + 1
       queuedelay = self.queuelength / self.jobspersecond
       while True:
-        now = datetime.datetime.utcnow()
+        now = time.time()
         best = None
         pool = None
         for p in self.pools:
           p.score = p.score * self.biasdecay
-          excessmhashes = p.mhashes - ((now - p.starttime).total_seconds() + queuedelay) * p.hashrate
+          excessmhashes = p.mhashes - ((now - p.starttime) + queuedelay) * p.hashrate
           score = excessmhashes - p.score
           if excessmhashes - max(0, p.score) >= 0:
             if p.priority > 0: score = max(0, score / p.priority)
@@ -207,11 +207,11 @@ class Miner(object):
 
   def fetcher(self, pool):
     with self.queuelock:
-      if (datetime.datetime.utcnow() - pool.blockchain.lastlongpoll).total_seconds() > self.longpollgrouptime:
+      if (time.time() - pool.blockchain.lastlongpoll) > self.longpollgrouptime:
         pool.longpollepoch = pool.blockchain.longpollepoch
       epoch = pool.longpollepoch
       if epoch < pool.blockchain.longpollepoch:
-        pool.blockeduntil = pool.blockchain.lastlongpoll + datetime.timedelta(seconds = self.longpollgrouptime)
+        pool.blockeduntil = pool.blockchain.lastlongpoll + self.longpollgrouptime
         with self.fetcherlock:
           self.fetchersrunning = self.fetchersrunning - 1
           self.adjustfetchers()
@@ -227,7 +227,7 @@ class Miner(object):
         pool.failedreqs = pool.failedreqs + 1
         pool.score = pool.score + self.getworkfailbias
       with self.queuelock:
-        pool.blockeduntil = datetime.datetime.utcnow() + datetime.timedelta(seconds = 3)
+        pool.blockeduntil = time.time() + 3
     if job != None:
       self.queuelock.acquire()
       if epoch == pool.blockchain.longpollepoch:
@@ -272,9 +272,9 @@ class Miner(object):
     with self.queuelock:
       job.pool.longpollepoch = job.pool.longpollepoch + 1
       if job.pool.longpollepoch >= job.pool.blockchain.longpollepoch:
-        job.pool.blockeduntil = datetime.datetime.utcnow()
+        job.pool.blockeduntil = time.time()
       if job.pool.longpollepoch > job.pool.blockchain.longpollepoch:
-        job.pool.blockchain.lastlongpoll = datetime.datetime.utcnow()
+        job.pool.blockchain.lastlongpoll = time.time()
         job.pool.blockchain.longpollepoch = job.pool.longpollepoch
         for w in self.workers:
           try: w.cancel(job.pool.blockchain)

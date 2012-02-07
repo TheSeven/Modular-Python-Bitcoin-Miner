@@ -39,7 +39,6 @@ import common
 import binascii
 import threading
 import time
-import datetime
 import hashlib
 import struct
 import atexit
@@ -99,7 +98,7 @@ class X6500Worker(object):
     self.accepted = 0      # Number of accepted shares produced by this worker * difficulty
     self.rejected = 0      # Number of rejected shares produced by this worker * difficulty
     self.invalid = 0       # Number of invalid shares produced by this worker
-    self.starttime = datetime.datetime.utcnow()  # Start timestamp (to get average MH/s from MHashes)
+    self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
 
     # Statistics lock, ensures that the UI can get a consistent statistics state
     # Needs to be acquired during all operations that affect the above values
@@ -251,7 +250,7 @@ class X6500FPGA(object):
     self.accepted = 0      # Number of accepted shares produced by this worker * difficulty
     self.rejected = 0      # Number of rejected shares produced by this worker * difficulty
     self.invalid = 0       # Number of invalid shares produced by this worker
-    self.starttime = datetime.datetime.utcnow()  # Start timestamp (to get average MH/s from MHashes)
+    self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
     self.temperature = None
 
     # Statistics lock, ensures that the UI can get a consistent statistics state
@@ -484,7 +483,7 @@ class X6500FPGA(object):
       # In that case, just restart things to clean up the situation.
       if oldjob == None: raise Exception("Mining device sent a share before even getting a job")
       # Stop time measurement
-      oldjob.endtime = datetime.datetime.utcnow()
+      oldjob.endtime = time.time()
       # Pass the nonce that we found to the work source, if there is one.
       # Do this before calculating the hash rate as it is latency critical.
       if oldjob != None:
@@ -503,7 +502,7 @@ class X6500FPGA(object):
           if self.seconditeration == True:
             with self.wakeup:
               # This is the second iteration. We now know the actual nonce rotation time.
-              delta = (oldjob.endtime - oldjob.starttime).total_seconds()
+              delta = (oldjob.endtime - oldjob.starttime)
               # Calculate the hash rate based on the nonce rotation time.
               self.mhps = 2**32 / 1000000. / delta
               # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
@@ -521,7 +520,7 @@ class X6500FPGA(object):
               self.seconditeration = True
       else:
         # Adjust hash rate tracking
-        delta = (oldjob.endtime - self.lasttime).total_seconds()
+        delta = (oldjob.endtime - self.lasttime)
         nonce = struct.unpack("<I", nonce)[0]
         estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
         noncediff = nonce - (estimatednonce & 0xffffffff)
@@ -547,9 +546,9 @@ class X6500FPGA(object):
     self.fpga.writeJob(job)
     # Try to grab any leftover nonces from the previous job in time
     self.checknonces()
-    now = datetime.datetime.utcnow()
+    now = time.time()
     if self.job != None and self.job.starttime != None and self.job.pool != None:
-      mhashes = (now - self.job.starttime).total_seconds() * self.mhps
+      mhashes = (now - self.job.starttime) * self.mhps
       self.job.finish(mhashes, self)
       self.job.starttime = None
     # Acknowledge the job by moving it from nextjob to job

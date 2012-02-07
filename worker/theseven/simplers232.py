@@ -36,7 +36,6 @@ import serial
 import binascii
 import threading
 import time
-import datetime
 import struct
 
 
@@ -69,7 +68,7 @@ class SimpleRS232Worker(object):
     self.accepted = 0      # Number of accepted shares produced by this worker * difficulty
     self.rejected = 0      # Number of rejected shares produced by this worker * difficulty
     self.invalid = 0       # Number of invalid shares produced by this worker
-    self.starttime = datetime.datetime.utcnow()  # Start timestamp (to get average MH/s from MHashes)
+    self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
 
     # Statistics lock, ensures that the UI can get a consistent statistics state
     # Needs to be acquired during all operations that affect the above values
@@ -295,9 +294,9 @@ class SimpleRS232Worker(object):
           # The job has been uploaded. Start counting time for the new job, and if there was a
           # previous one, calculate for how long that one was running. Multiply that by the hash
           # rate to get the number of MHashes calculated for that job and update statistics.
-          now = datetime.datetime.utcnow()
+          now = time.time()
           if self.job != None and self.job.starttime != None and self.job.pool != None:
-            mhashes = (now - self.job.starttime).total_seconds() * self.mhps
+            mhashes = (now - self.job.starttime) * self.mhps
             self.job.finish(mhashes, self)
             self.job.starttime = None
 
@@ -317,12 +316,12 @@ class SimpleRS232Worker(object):
           # In that case, just restart things to clean up the situation.
           if self.job == None: raise Exception("Mining device sent a share before even getting a job")
           # Stop time measurement
-          self.job.endtime = datetime.datetime.utcnow()
+          self.job.endtime = time.time()
           # Pass the nonce that we found to the work source, if there is one.
           # Do this before calculating the hash rate as it is latency critical.
           if self.job != None: self.job.sendresult(nonce, self)
           # Calculate actual on-device processing time (not including transfer times) of the job.
-          delta = (self.job.endtime - self.job.starttime).total_seconds() - 40. / self.baudrate
+          delta = (self.job.endtime - self.job.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
           # This assumes that the device processes all nonces (starting at zero) sequentially.
           self.mhps = struct.unpack("<I", nonce)[0] / 1000000. / delta
@@ -349,7 +348,7 @@ class SimpleRS232Worker(object):
           if self.job.check != None: raise Exception("Validation job terminated without finding a share")
           # Stop measuring time because the device is doing duplicate work right now
           if self.job != None and self.job.starttime != None and self.job.pool != None:
-            mhashes = (datetime.datetime.utcnow() - self.job.starttime).total_seconds() * self.mhps
+            mhashes = (time.time() - self.job.starttime) * self.mhps
             with self.job.pool.statlock: self.job.pool.mhashes = self.job.pool.mhashes + mhashes
             self.mhashes = self.mhashes + mhashes
             self.job.starttime = None
