@@ -115,6 +115,14 @@ workers = [ \
     "type": worker.fpgamining.x6500hotplug.X6500HotplugWorker, \
   }, \
 
+#  # Icarus worker
+#  { \
+#    # Worker module
+#    "type": worker.theseven.icarus.IcarusWorker, \
+#    # Worker module parameters, in this case serial port name (default: /dev/ttyS0)
+#    "port": "/dev/ttyUSB0", \
+#  }, \
+
 ]
 
 
