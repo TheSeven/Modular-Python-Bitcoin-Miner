@@ -24,7 +24,7 @@ System Requirements
 
 The default user interface module uses the python curses module. Most Linux distributions should
 have a package for this. Unofficial Windows curses modules are available here:
-http://code.google.com/p/wcurses/ and http://www.lfd.uci.edu/~gohlke/pythonlibs/#curses
+http://www.lfd.uci.edu/~gohlke/pythonlibs/#curses
 
 Miner backend modules might use interface modules like PyUSB or PySerial as well.
 
