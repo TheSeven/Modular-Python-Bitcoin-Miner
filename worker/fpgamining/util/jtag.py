@@ -234,7 +234,7 @@ class JTAG:
       self.ft232r.write(chunk)
       written = written + len(chunk) / 16
       
-      if time.time() > (last_update + 1) and progressCallback:
+      if time.time() > (last_update + 3) and progressCallback:
         progressCallback(start_time, time.time(), written, bytetotal)
         last_update = time.time()
     
