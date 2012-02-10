@@ -9,6 +9,9 @@
 import frontend.theseven.cursesui
 import frontend.theseven.simplelogger
 import pool.theseven.bcjsonrpc
+#import worker.theseven.simplers232
+#import worker.theseven.icarus
+#import worker.fpgamining.x6500
 import worker.fpgamining.x6500hotplug
 
 
@@ -149,7 +152,7 @@ workers = [ \
 # If you want to support further development of MPBM, you can do me a favor by
 # leaving the demo pool entries active, and just adding your own one below them.
 # If you give your own pool entries a total priority of 1000, you will donate
-# 0.5% (on average) of your total hash rate to the author of this software.
+# 1% (on average) of your total hash rate to the author of this software.
 # This won't make a big difference for you, but it does for me.
 # Templates for that can be found below the demo pool entries.
 
@@ -168,7 +171,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "BTCMP (demo)", \
         # Priority (default: 1)
-        "priority": 10, \
+        "priority": 2, \
         # Host name of the pool
         "host": "rr.btcmp.com", \
         # HTTP port of the pool (default: 8332)
@@ -187,7 +190,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "BTCGuild (demo)", \
         # Priority (default: 1)
-        "priority": 30, \
+        "priority": 6, \
         # Host name of the pool
         "host": "btcguild.com", \
         # HTTP authentication user name (default: no authentication)
@@ -204,7 +207,7 @@ blockchains = [ \
         # Display name of the pool (default: host name)
         "name": "Eligius (demo)", \
         # Priority (default: 1)
-        "priority": 10, \
+        "priority": 2, \
         # Host name of the pool
         "host": "mining.eligius.st", \
         # HTTP port of the pool (default: 8332)
