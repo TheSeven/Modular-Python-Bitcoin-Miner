@@ -25,7 +25,7 @@
 
 # Module configuration options:
 #   name: Display name for this work source (default: "Icarus board on " port name)
-#   port: Name (Windows) or device node (*nix) of the RS232 interface to use (default: "/dev/ttyS0")
+#   port: Name (Windows) or device node (*nix) of the RS232 interface to use (default: "/dev/ttyUSBS0")
 #   baudrate: Baud rate that should be used (default: 115200)
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
 
@@ -55,7 +55,7 @@ class IcarusWorker(object):
     self.children = []
 
     # Validate arguments, filling them with default values if not present
-    self.port = getattr(self, "port", "/dev/ttyS0")
+    self.port = getattr(self, "port", "/dev/ttyUSBS0")
     self.baudrate = getattr(self, "baudrate", 115200)
     self.name = getattr(self, "name", "Icarus board on " + self.port)
     self.jobinterval = getattr(self, "jobinterval", 30)

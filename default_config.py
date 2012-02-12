@@ -122,7 +122,7 @@ workers = [ \
 #  { \
 #    # Worker module
 #    "type": worker.theseven.icarus.IcarusWorker, \
-#    # Worker module parameters, in this case serial port name (default: /dev/ttyS0)
+#    # Worker module parameters, in this case serial port name (default: /dev/ttyUSB0)
 #    "port": "/dev/ttyUSB0", \
 #  }, \
 
