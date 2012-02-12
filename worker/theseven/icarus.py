@@ -266,12 +266,12 @@ class IcarusWorker(object):
         # In that case, just restart things to clean up the situation.
         if self.job == None: raise Exception("Mining device sent a share before even getting a job")
         # Stop time measurement
-        self.job.endtime = time.time()
+        now = time.time()
         # Pass the nonce that we found to the work source, if there is one.
         # Do this before calculating the hash rate as it is latency critical.
-        if self.job != None: self.job.sendresult(nonce, self)
+        self.job.sendresult(nonce, self)
         # Calculate actual on-device processing time (not including transfer times) of the job.
-        delta = (self.job.endtime - self.job.starttime) - 40. / self.baudrate
+        delta = (now - self.job.starttime) - 40. / self.baudrate
         # Calculate the hash rate based on the processing time and number of neccessary MHashes.
         self.mhps = (struct.unpack("<I", nonce)[0] & 0x7fffffff) / 500000. / delta
         # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
