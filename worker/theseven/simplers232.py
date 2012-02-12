@@ -138,6 +138,9 @@ class SimpleRS232Worker(object):
         # will store it here and terminate, and the main thread will rethrow it and then restart.
         self.error = None
 
+        # Initialize megahashes per second to zero, will be measured later.
+        self.mhps = 0
+
         # Job that the device is currently working on (found nonces are coming from this one).
         self.job = None
 
@@ -252,6 +255,8 @@ class SimpleRS232Worker(object):
         self.miner.log(self.name + ": %s\n" % e, "rB")
         # Make sure that the listener thread realizes that something went wrong
         self.error = e
+        # We're not doing productive work any more, update stats
+        self.mhps = 0
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
         try: self.wakeup.release()
         except: pass
@@ -259,6 +264,8 @@ class SimpleRS232Worker(object):
         # If it doens't within 10 seconds, continue anyway. We can't do much about that.
         try: self.listenerthread.join(10)
         except: pass
+        # Set MH/s to zero again, the listener thread might have overwritten that.
+        self.mhps = 0
         # Make sure that the RS232 interface handle is closed,
         # otherwise we can't reopen it after restarting.
         try: self.handle.close()
@@ -316,12 +323,12 @@ class SimpleRS232Worker(object):
           # In that case, just restart things to clean up the situation.
           if self.job == None: raise Exception("Mining device sent a share before even getting a job")
           # Stop time measurement
-          self.job.endtime = time.time()
+          now = time.time()
           # Pass the nonce that we found to the work source, if there is one.
           # Do this before calculating the hash rate as it is latency critical.
-          if self.job != None: self.job.sendresult(nonce, self)
+          self.job.sendresult(nonce, self)
           # Calculate actual on-device processing time (not including transfer times) of the job.
-          delta = (self.job.endtime - self.job.starttime) - 40. / self.baudrate
+          delta = (now - self.job.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
           # This assumes that the device processes all nonces (starting at zero) sequentially.
           self.mhps = struct.unpack("<I", nonce)[0] / 1000000. / delta

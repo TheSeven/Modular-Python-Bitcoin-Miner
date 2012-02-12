@@ -25,7 +25,7 @@
 
 # Module configuration options:
 #   name: Display name for this work source (default: "Icarus board on " port name)
-#   port: Name (Windows) or device node (*nix) of the RS232 interface to use (default: "/dev/ttyS0")
+#   port: Name (Windows) or device node (*nix) of the RS232 interface to use (default: "/dev/ttyUSBS0")
 #   baudrate: Baud rate that should be used (default: 115200)
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
 
@@ -55,7 +55,7 @@ class IcarusWorker(object):
     self.children = []
 
     # Validate arguments, filling them with default values if not present
-    self.port = getattr(self, "port", "/dev/ttyS0")
+    self.port = getattr(self, "port", "/dev/ttyUSBS0")
     self.baudrate = getattr(self, "baudrate", 115200)
     self.name = getattr(self, "name", "Icarus board on " + self.port)
     self.jobinterval = getattr(self, "jobinterval", 30)
@@ -137,6 +137,9 @@ class IcarusWorker(object):
         # Exception container: If an exception occurs in the listener thread, the listener thread
         # will store it here and terminate, and the main thread will rethrow it and then restart.
         self.error = None
+
+        # Initialize megahashes per second to zero, will be measured later.
+        self.mhps = 0
 
         # Job that the device is currently working on (found nonces are coming from this one).
         self.job = None
@@ -229,6 +232,8 @@ class IcarusWorker(object):
         self.miner.log(self.name + ": %s\n" % e, "rB")
         # Make sure that the listener thread realizes that something went wrong
         self.error = e
+        # We're not doing productive work any more, update stats
+        self.mhps = 0
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
         try: self.wakeup.release()
         except: pass
@@ -236,6 +241,8 @@ class IcarusWorker(object):
         # If it doens't within 10 seconds, continue anyway. We can't do much about that.
         try: self.listenerthread.join(10)
         except: pass
+        # Set MH/s to zero again, the listener thread might have overwritten that.
+        self.mhps = 0
         # Make sure that the RS232 interface handle is closed,
         # otherwise we can't reopen it after restarting.
         try: self.handle.close()
@@ -266,12 +273,12 @@ class IcarusWorker(object):
         # In that case, just restart things to clean up the situation.
         if self.job == None: raise Exception("Mining device sent a share before even getting a job")
         # Stop time measurement
-        self.job.endtime = time.time()
+        now = time.time()
         # Pass the nonce that we found to the work source, if there is one.
         # Do this before calculating the hash rate as it is latency critical.
-        if self.job != None: self.job.sendresult(nonce, self)
+        self.job.sendresult(nonce, self)
         # Calculate actual on-device processing time (not including transfer times) of the job.
-        delta = (self.job.endtime - self.job.starttime) - 40. / self.baudrate
+        delta = (now - self.job.starttime) - 40. / self.baudrate
         # Calculate the hash rate based on the processing time and number of neccessary MHashes.
         self.mhps = (struct.unpack("<I", nonce)[0] & 0x7fffffff) / 500000. / delta
         # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.

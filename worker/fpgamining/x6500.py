@@ -320,10 +320,13 @@ class X6500FPGA(object):
     # Loop forever. If anything fails, restart.
     while True:
       try:
-
+      
         # Exception container: If an exception occurs in the listener thread, the listener thread
         # will store it here and terminate, and the main thread will rethrow it and then restart.
         self.error = None
+
+        # Initialize megahashes per second to zero, will be measured later.
+        self.mhps = 0
 
         # Job that the device is currently working on (found nonces are coming from this one).
         self.job = None
@@ -425,6 +428,8 @@ class X6500FPGA(object):
         self.miner.log(self.name + ": %s\n" % e, "rB")
         # Make sure that the listener thread realizes that something went wrong
         self.error = e
+        # We're not doing productive work any more, update stats
+        self.mhps = 0
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
         try: self.wakeup.release()
         except: pass
@@ -437,6 +442,9 @@ class X6500FPGA(object):
         # If it doens't within 10 seconds, continue anyway. We can't do much about that.
         try: self.listenerthread.join(10)
         except: pass
+        # Set MH/s to zero again, the listener thread might have overwritten that.
+        self.mhps = 0
+        # Notify the hotplug manager about our death, so that it can respawn as neccessary
         if self.parent.hotplug:
           self.parent.dead = True
           return
@@ -483,7 +491,7 @@ class X6500FPGA(object):
       # In that case, just restart things to clean up the situation.
       if oldjob == None: raise Exception("Mining device sent a share before even getting a job")
       # Stop time measurement
-      oldjob.endtime = time.time()
+      now = time.time()
       # Pass the nonce that we found to the work source, if there is one.
       # Do this before calculating the hash rate as it is latency critical.
       if oldjob != None:
@@ -502,13 +510,13 @@ class X6500FPGA(object):
           if self.seconditeration == True:
             with self.wakeup:
               # This is the second iteration. We now know the actual nonce rotation time.
-              delta = (oldjob.endtime - oldjob.starttime)
+              delta = (now - oldjob.starttime)
               # Calculate the hash rate based on the nonce rotation time.
               self.mhps = 2**32 / 1000000. / delta
               # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
               self.miner.updatehashrate(self)
               # Update hash rate tracking information
-              self.lasttime = oldjob.endtime
+              self.lasttime = now
               self.lastnonce = struct.unpack("<I", nonce)[0]
               # Wake up the main thread
               self.checksuccess = True
@@ -516,11 +524,11 @@ class X6500FPGA(object):
           else:
             with self.wakeup:
               # This was the first iteration. Wait for another one to figure out nonce rotation time.
-              oldjob.starttime = oldjob.endtime
+              oldjob.starttime = now
               self.seconditeration = True
       else:
         # Adjust hash rate tracking
-        delta = (oldjob.endtime - self.lasttime)
+        delta = (now - self.lasttime)
         nonce = struct.unpack("<I", nonce)[0]
         estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
         noncediff = nonce - (estimatednonce & 0xffffffff)
@@ -534,7 +542,7 @@ class X6500FPGA(object):
         # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
         self.miner.updatehashrate(self)
         # Update hash rate tracking information
-        self.lasttime = oldjob.endtime
+        self.lasttime = now
         self.lastnonce = nonce
       
 
