@@ -320,10 +320,13 @@ class X6500FPGA(object):
     # Loop forever. If anything fails, restart.
     while True:
       try:
-
+      
         # Exception container: If an exception occurs in the listener thread, the listener thread
         # will store it here and terminate, and the main thread will rethrow it and then restart.
         self.error = None
+
+        # Initialize megahashes per second to zero, will be measured later.
+        self.mhps = 0
 
         # Job that the device is currently working on (found nonces are coming from this one).
         self.job = None
@@ -425,6 +428,8 @@ class X6500FPGA(object):
         self.miner.log(self.name + ": %s\n" % e, "rB")
         # Make sure that the listener thread realizes that something went wrong
         self.error = e
+        # We're not doing productive work any more, update stats
+        self.mhps = 0
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
         try: self.wakeup.release()
         except: pass
@@ -437,6 +442,9 @@ class X6500FPGA(object):
         # If it doens't within 10 seconds, continue anyway. We can't do much about that.
         try: self.listenerthread.join(10)
         except: pass
+        # Set MH/s to zero again, the listener thread might have overwritten that.
+        self.mhps = 0
+        # Notify the hotplug manager about our death, so that it can respawn as neccessary
         if self.parent.hotplug:
           self.parent.dead = True
           return
