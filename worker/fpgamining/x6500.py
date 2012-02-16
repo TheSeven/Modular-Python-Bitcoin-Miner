@@ -24,7 +24,7 @@
 ###########################################################
 
 # Module configuration options:
-#   name: Display name for this work source (default: "X6500 board " device id)
+#   name: Display name for this work source (default: "X6500 " device id)
 #   deviceid: Serial number of the device to be used (default: take first available device)
 #   firmware: Path to the firmware file (default: "worker/fpgamining/firmware/x6500.bit")
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
@@ -70,7 +70,7 @@ class X6500Worker(object):
     nameattr = getattr(self, "name", None)
     self.name = nameattr
     self.deviceid = getattr(self, "deviceid", "")
-    if nameattr == None: self.name = "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver"
+    if nameattr == None: self.name = "X6500 " + self.deviceid if self.deviceid != "" else "X6500 driver"
     self.useftd2xx = getattr(self, "useftd2xx", False)
     self.takeover = getattr(self, "takeover", False)
     self.uploadfirmware = getattr(self, "uploadfirmware", False)
@@ -81,7 +81,7 @@ class X6500Worker(object):
       self.device = None
       self.miner.log(self.name + ": %s\n" % e, "rB")
     if self.device != None: self.deviceid = self.device.serial
-    if nameattr == None: self.name = "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver"
+    if nameattr == None: self.name = "X6500 " + self.deviceid if self.deviceid != "" else "X6500 driver"
     if self.device == None:
       self.name = self.name + " (disconnected)"
       self.dead = True
@@ -126,7 +126,7 @@ class X6500Worker(object):
         "rejected": self.rejected + self.miner.calculatefieldsum(childstats, "rejected"), \
         "invalid": self.invalid + self.miner.calculatefieldsum(childstats, "invalid"), \
         "starttime": self.starttime, \
-        "currentpool": "Not applicable", \
+        "currentpool": "", \
       }
     # Return result
     return statistics
@@ -160,7 +160,7 @@ class X6500Worker(object):
   def main(self):
 
     try:
-      fpga_list = [FPGA(self.miner, self.name + " FPGA 0", self.device, 0), FPGA(self.miner, self.name + " FPGA 1", self.device, 1)]
+      fpga_list = [FPGA(self.miner, self.name + " FPGA0", self.device, 0), FPGA(self.miner, self.name + " FPGA1", self.device, 1)]
       channelmask = 0
       fpgacount = 0
       
