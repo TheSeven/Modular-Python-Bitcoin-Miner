@@ -1,4 +1,5 @@
 # Copyright (C) 2011 by fizzisist <fizzisist@fpgamining.com>
+#                       fpgaminer <fpgaminer@bitcoin-mining.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +33,14 @@ JPROGRAM         = 0b001011
 CFG_IN           = 0b000101
 CFG_OUT          = 0b000100
 BYPASS           = 0b111111
+USERCODE         = 0b001000
+
+def hexstr2array(hexstr):
+  """Convert a hex string into an array of bytes"""
+  arr = []
+  for i in range(len(hexstr)/2):
+    arr.append((int(hexstr[i*2], 16) << 4) | int(hexstr[i*2+1], 16))
+  return arr
 
 def int2bits(i, bits):
   """Convert an integer to an array of bits, LSB first."""
@@ -48,6 +57,13 @@ def bits2int(bits):
     x |= bits[i] << i
   return x
 
+def jtagcomm_checksum(bits):
+  checksum = 1
+  for x in bits:
+    checksum ^= x
+  return [checksum]
+
+
 class FPGA:
   def __init__(self, miner, name, ft232r, chain):
     self.miner = miner
@@ -57,14 +73,127 @@ class FPGA:
     self.jtag = JTAG(miner, name, ft232r, chain)
     
     self.asleep = True
+
+    self.firmware_rev = 0
+    self.firmware_build = 0
   
-  def readByte(self):
+  def detect(self):
+    with self.ft232r.mutex:
+      self.jtag.detect()
+
+      # Always use the last part in the chain
+      if self.jtag.deviceCount > 0:
+        self.jtag.part(self.jtag.deviceCount-1)
+
+        usercode = self._readUserCode()
+
+        if usercode == 0xFFFFFFFF:
+          self.firmware_rev = 0
+          self.firmware_build = 0
+        else:
+          self.firmware_rev = (usercode >> 8) & 0xFF
+          self.firmware_build = usercode & 0xFF
+
+  # Read the FPGA's USERCODE register, which gets set by the firmware
+  # In our case this should be 0xFFFFFFFF for all old firmware revs,
+  # and 0x4224???? for newer revs. The 2nd byte determines firmware rev/version,
+  # and the 1st byte determines firmware build.
+  def _readUserCode(self):
+    with self.ft232r.mutex:
+      if self.asleep: self.wake()
+      self.jtag.tap.reset()
+      self.jtag.instruction(USERCODE)
+      self.jtag.shift_ir()
+      usercode = bits2int(self.jtag.read_dr(int2bits(0, 32)))
+
+    return usercode
+  
+  # Old JTAG Comm:
+  def _readByte(self):
     bits = int2bits(0, 13)
     byte = bits2int(self.jtag.read_dr(bits))
     return byte
-  
-  def readNonce(self):
+   
+  # New JTAG Comm
+  # Read a 32-bit register
+  def _readRegister(self, address):
+    address = address & 0xF
+
     with self.ft232r.mutex:
+      if self.asleep: self.wake()
+      self.jtag.tap.reset()
+      self.jtag.instruction(USER_INSTRUCTION)
+      self.jtag.shift_ir()
+
+      # Tell the FPGA what address we would like to read
+      data = int2bits(address, 5)
+      data = data + jtagcomm_checksum(data)
+      self.jtag.shift_dr(data)
+
+      # Now read back the register
+      data = self.jtag.read_dr(int2bits(0, 32))
+      data = bits2int(data)
+
+      self.jtag.tap.reset()
+
+    return data
+  # Write a single 32-bit register
+  # If doing multiple writes, this won't be as efficient
+  def _writeRegister(self, address, data):
+    address = address & 0xF
+    data = data & 0xFFFFFFFF
+
+    with self.ft232r.mutex:
+      if self.asleep: self.wake()
+      self.jtag.tap.reset()
+      self.jtag.instruction(USER_INSTRUCTION)
+      self.jtag.shift_ir()
+
+      # Tell the FPGA what address we would like to write
+      # and the data.
+      data = int2bits(data, 32) + int2bits(address, 4) + [1]
+      data = data + jtagcomm_checksum(data)
+      self.jtag.shift_dr(data)
+
+      self.jtag.tap.reset()
+      self.ft232r.flush()
+  
+  def _burstWriteHelper(self, address, data):
+    address = address & 0xF
+    x = int2bits(data, 32)
+    x += int2bits(address, 4)
+    x += [1]
+    x = x + jtagcomm_checksum(x)
+
+    self.jtag.shift_dr(x)
+
+  
+  # Writes multiple 32-bit registers.
+  # data should be an array of 32-bit values
+  # address is the starting address.
+  # TODO: Implement readback of some kind to ensure all our writes succeeded.
+  # TODO: This is difficult, because reading back data will slow things down.
+  # TODO: If the JTAG class let us read data back after a shift, we could probably
+  # TODO: use that at the end of the burst write.
+  def _burstWrite(self, address, data):
+    with self.ft232r.mutex:
+      self.wake()
+      self.jtag.tap.reset()
+      self.jtag.instruction(USER_INSTRUCTION)
+      self.jtag.shift_ir()
+
+      for offset in range(len(data)):
+        self._burstWriteHelper(address + offset, data[offset])
+
+      self.jtag.tap.reset()
+      self.ft232r.flush()
+
+    return True
+  
+  # TODO: Remove backwards compatibility in a future rev.
+  def _old_readNonce(self):
+    with self.ft232r.mutex:
+      if self.asleep: self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
       self.jtag.shift_ir()
@@ -76,16 +205,14 @@ class FPGA:
       # 1111 is LSB, and then 0111, 0011, 0001.
       byte = None
       while True:
-        byte = self.readByte()
-
-        #if byte != 0: self.miner.log(self.name + ": FPGA: Read: %04x\n" % byte)
+        byte = self._readByte()
 
         # check data valid bit:
         if byte < 0x1000:
           self.jtag.tap.reset()
           return None
         
-        #self.miner.log(self.name + ": FPGA: Read: %04x\n" % byte)
+        #self.logger.reportDebug("%d: Read: %04x" % (self.id, byte))
         
         # check byte counter:
         if (byte & 0xF00) == 0xF00:
@@ -94,11 +221,11 @@ class FPGA:
       # We now have the first byte
       nonce = byte & 0xFF
       count = 1
-      #self.miner.log(self.name + ": FPGA: Potential nonce, reading the rest...\n")
+      #self.logger.reportDebug("%d: Potential nonce, reading the rest..." % self.id)
       while True:
-        byte = self.readByte()
+        byte = self._readByte()
         
-        #if byte != 0: self.miner.log(self.name + ": FPGA: Read: %04x\n" % byte)
+        #self.logger.reportDebug("%d: Read: %04x" % (self.id, byte))
         
         # check data valid bit:
         if byte < 0x1000:
@@ -118,43 +245,39 @@ class FPGA:
 
       self.jtag.tap.reset()
 
-      #self.miner.log(self.name + ": FPGA: Nonce completely read: %08x\n" % nonce)
+    #self.logger.reportDebug("%d: Nonce completely read: %08x" % (self.id, nonce))
 
-      return struct.pack("<I", nonce)
+    return nonce
   
   # TODO: This may not actually clear the queue, but should be correct most of the time.
-  def clearQueue(self):
+  def _old_clearQueue(self):
     with self.ft232r.mutex:
+      #self.miner.log(self.name + ": FPGA: Clearing queue...\n")
       self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
       self.jtag.shift_ir()
-      self.asleep = False
       
-      #self.miner.log(self.name + ": FPGA: Clearing queue...\n")
       while True:
-        if self.readByte() < 0x1000:
+        if self._readByte() < 0x1000:
           break
       self.jtag.tap.reset()
-      
-      #self.miner.log(self.name + ": FPGA: Queue cleared...\n")
+    
+    #self.miner.log(self.name + ": FPGA: Queue cleared...\n")
   
-  def writeJob(self, job):
+  def _old_writeJob(self, job):
+    # We need the 256-bit midstate, and 12 bytes from data.
+    # The first 64 bytes of data are already hashed (hence midstate),
+    # so we skip that. Of the last 64 bytes, 52 bytes are constant and
+    # not needed by the FPGA.
+    
+    midstate = job.state[::-1]
+    data = job.data[75:63:-1]
+
     with self.ft232r.mutex:
-      # We need the 256-bit midstate, and 12 bytes from data.
-      # The first 64 bytes of data are already hashed (hence midstate),
-      # so we skip that. Of the last 64 bytes, 52 bytes are constant and
-      # not needed by the FPGA.
-      
-      #start_time = time.time()
-      
-      midstate = job.state[::-1]
-      data = job.data[75:63:-1]
-
       #self.miner.log(self.name + ": FPGA: Loading job data...\n")
-
-      #self.jtag.setAsyncMode()
       
+      self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
       self.jtag.shift_ir()
@@ -172,9 +295,85 @@ class FPGA:
       self.jtag.tap.reset()
 
       self.ft232r.flush()
-      
-      #self.miner.log(self.name + ": FPGA: Job data loaded in %.3f seconds\n" % (time.time() - start_time))
+    
       #self.miner.log(self.name + ": FPGA: Job data loaded\n")
+  
+  def _readNonce(self):
+    nonce = self._readRegister(0xE)
+
+    if nonce == 0xFFFFFFFF:
+      return None
+    return nonce
+  
+  def _clearQueue(self):
+      #self.miner.log(self.name + ": FPGA: Clearing queue...\n")
+    while True:
+      if self._readNonce() is None:
+        break
+    
+      #self.miner.log(self.name + ": FPGA: Queue cleared\n")
+  
+  def _writeJob(self, job):
+    # We need the 256-bit midstate, and 12 bytes from data.
+    # The first 64 bytes of data are already hashed (hence midstate),
+    # so we skip that. Of the last 64 bytes, 52 bytes are constant and
+    # not needed by the FPGA.
+    
+    start_time = time.time()
+    
+    midstate = hexstr2array(job.midstate)
+    data = hexstr2array(job.data)[64:64+12]
+    data = midstate + data
+
+    words = []
+
+    for i in range(11):
+      word = data[i*4] | (data[i*4+1] << 8) | (data[i*4+2] << 16) | (data[i*4+3] << 24)
+      words.append(word)
+
+    if not self._burstWrite(1, words):
+      #self.miner.log(self.name + ": FPGA: ERROR: Loading job data failed; readback failure", "rB")
+      return
+    
+    self.logger.reportDebug("%d: Job data loaded in %.3f seconds" % (self.id, time.time() - start_time))
+    #self.miner.log(self.name + ": FPGA: Job data loaded")
+  
+  # Read the FPGA's current clock speed, in MHz
+  # NOTE: This is currently just what we've written into the clock speed
+  # register, so it does NOT take into account hard limits in the firmware.
+  def readClockSpeed(self):
+    if self.firmware_rev == 0:
+      return None
+    
+    frequency = self._readRegister(0xD)
+
+    return frequency
+
+  # Set the FPGA's clock speed, in MHz
+  # NOTE: Be VERY careful not to set the clock speed too high!!!
+  def setClockSpeed(self, speed):
+    if self.firmware_rev == 0:
+      return False
+
+    return self._writeRegister(0xD, speed)
+  
+  def readNonce(self):
+    if self.firmware_rev == 0:
+      return self._old_readNonce()
+    else:
+      return self._readNonce()
+  
+  def clearQueue(self):
+    if self.firmware_rev == 0:
+      return self._old_clearQueue()
+    else:
+      return self._clearQueue()
+  
+  def writeJob(self, job):
+    if self.firmware_rev == 0:
+      return self._old_writeJob(job)
+    else:
+      return self._writeJob(job)
   
   def sleep(self):
     with self.ft232r.mutex:
