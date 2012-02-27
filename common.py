@@ -29,6 +29,8 @@ import struct
 import hashlib
 
 class Job(object):
+  MAX_UPLOAD_RETRIES = 10
+  
   def __init__(self, miner, pool, longpollepoch, state, data, target, check = None):
     self.miner = miner
     self.pool = pool
@@ -38,6 +40,7 @@ class Job(object):
     self.target = target
     self.check = check
     self.starttime = None
+    self.uploadretries = 0
 
   def sendresult(self, nonce, worker):
     if self.pool == None: return

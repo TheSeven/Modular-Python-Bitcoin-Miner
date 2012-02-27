@@ -114,7 +114,7 @@ class JSONRPCPool(object):
     uploader.start()
 
   def uploadresult(self, job, data, nonce, difficulty, worker):
-    while True:
+    while job.uploadretries < job.MAX_UPLOAD_RETRIES:
       try:
         conn = http_client.HTTPConnection(self.host, self.port, True, self.sendsharetimeout)
         req = json.dumps({"method": "getwork", "params": [binascii.hexlify(data).decode("ascii")], "id": 0}).encode("utf_8")
@@ -136,6 +136,7 @@ class JSONRPCPool(object):
           self.uploadretries = self.uploadretries + 1
           self.score = self.score + self.miner.uploadfailbias
         time.sleep(1)
+    return job.uploadcallback(nonce, worker, "Share upload failed %d times!" % job.uploadretries)
 
   def getwork(self):
     conn = http_client.HTTPConnection(self.host, self.port, True, self.getworktimeout)
