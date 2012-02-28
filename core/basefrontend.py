@@ -37,6 +37,7 @@ class BaseFrontend(Inflatable):
   can_log = False
   can_show_stats = False
   can_configure = False
+  can_autodetect = False
 
 
   def __init__(self, core, state = None):

@@ -29,6 +29,7 @@
 import sys
 import os
 import pickle
+import traceback
 from datetime import datetime
 from threading import RLock, Thread
 from .inflatable import Inflatable
@@ -43,12 +44,13 @@ class Core(object):
   version = "Modular Python Bitcoin Miner v0.1.0alpha"
 
   
-  def __init__(self, instance = "default"):
+  def __init__(self, instance = "default", default_loglevel = 500):
     self.instance = instance
     self.started = False
     self.start_stop_lock = RLock()
 
     # Initialize log queue and hijack stdout/stderr
+    self.default_loglevel = default_loglevel
     self.logger_thread = None
     self.logqueue = Queue()
     self.loglf = True
@@ -77,17 +79,25 @@ class Core(object):
     self.worksourceclasses = []
 
     # Load modules
-    for maintainer in os.listdir("modules"):
-      if os.path.isdir("modules/%s" % maintainer):
-        for module in os.listdir("modules/%s" % maintainer):
-          if os.path.isdir("modules/%s/%s" % (maintainer, module)):
+    self.log("Core: Loading modules...\n", 500, "B")
+    # Grrr. Python is just broken...
+    import __main__
+    basepath = os.path.dirname(__main__.__file__)
+    basepath = (basepath if basepath else ".") + "/modules"
+    for maintainer in os.listdir(basepath):
+      maintainerpath = basepath + "/" + maintainer
+      if os.path.isdir(maintainerpath) and os.path.isfile(maintainerpath + "/__init__.py"):
+        for module in os.listdir(maintainerpath):
+          modulepath = maintainerpath + "/" + module
+          if os.path.isdir(modulepath) and os.path.isfile(modulepath + "/__init__.py"):
             try:
-              module = __import__("modules.%s" % maintainer, globals(), locals(), [module], 0)
+              self.log("Core: Loading modules.%s.%s...\n" % (maintainer, module), 800)
+              module = getattr(__import__("modules.%s" % maintainer, globals(), locals(), [module], 0), module)
               self.frontendclasses.extend(getattr(module, "frontendclasses", []))
               self.workerclasses.extend(getattr(module, "workerclasses", []))
               self.worksourceclasses.extend(getattr(module, "worksourceclasses", []))
             except Exception as e:
-              self.log("Core: Could not load module %s.%s: %s\n" % (maintainer, module, e), 300, "yB")
+              self.log("Core: Could not load module %s.%s: %s\n" % (maintainer, module, traceback.format_exc()), 300, "yB")
 
     # Initialize blockchain list
     self.blockchainlock = RLock()
@@ -111,7 +121,7 @@ class Core(object):
           self.add_blockchain(Inflatable.inflate(self, blockchain))
       self.root_work_source = Inflatable.inflate(self, state.root_work_source)
     except Exception as e:
-      self.log("Core: Could not load instance configuration: %s\nLoading default configuration...\n" % e, 300, "yB")
+      self.log("Core: Could not load instance configuration: %s\nLoading default configuration...\n" % traceback.format_exc(), 300, "yB")
       self.is_new_instance = True
       self.frontends = []
       self.blockchains = []
@@ -126,7 +136,7 @@ class Core(object):
     
     
   def save(self):
-    self.log("Core: Saving instance configuration...\n", 500)
+    self.log("Core: Saving instance configuration...\n", 500, "B")
     try:
       state = Bunch()
       state.blockchains = []
@@ -142,7 +152,7 @@ class Core(object):
       with open("config/%s.cfg" % self.instance, "wb") as f:
         f.write(data)
     except Exception as e:
-      self.log("Core: Could not save instance configuration: %s\n" % e, 100, "rB")
+      self.log("Core: Could not save instance configuration: %s\n" % traceback.format_exc(), 100, "rB")
     
     
   def start(self):
@@ -200,12 +210,13 @@ class Core(object):
   
   
   def detect_frontends(self):
-    # TODO: Stub
-    if not self.frontends:
-      from modules.theseven.basicloggers.stderrlogger import StderrLogger
-      logger = StderrLogger(self)
-      self.add_frontend(logger)
-    pass
+    self.log("Core: Autodetecting frontends...\n", 500, "B")
+    for frontendclass in self.frontendclasses:
+      if frontendclass.can_autodetect:
+        try: frontendclass.autodetect(self)
+        except Exception as e:
+          name = "%s.%s" % (frontendclass.__module__, frontendclass.__name__)
+          self.log("Core: %s autodetection failed: %s\n" % (name, traceback.format_exc()), 300, "yB")
   
   
   def detect_workers(self):
@@ -275,7 +286,7 @@ class Core(object):
     
     # If the core hasn't fully started up yet, the logging subsystem might not
     # work yet. Print the message to stderr as well just in case.
-    if not self.started and loglevel <= 500:
+    if not self.started and loglevel <= self.default_loglevel:
       prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
       first = True
       for line in message.splitlines(True):

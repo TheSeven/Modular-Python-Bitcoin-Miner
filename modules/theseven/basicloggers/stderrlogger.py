@@ -35,8 +35,14 @@ from core.basefrontend import BaseFrontend
 class StderrLogger(BaseFrontend):
 
   can_log = True
+  can_autodetect = True
 
 
+  @classmethod
+  def autodetect(self, core):
+    core.add_frontend(self(core))
+    
+    
   def __init__(self, core, state = None):
     super(StderrLogger, self).__init__(core, state)
     self.start_stop_lock = RLock()

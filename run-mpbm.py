@@ -38,6 +38,8 @@ if __name__ == "__main__":
 
   # Set up command line argument parset
   parser = OptionParser("Usage: %prog [instancename] [options]", version = Core.version)
+  parser.add_option("--default-loglevel", "-l", action = "store", type = "int", default = 500,
+                    help = "Set the default loglevel for new loggers and the fallback logger")
   parser.add_option("--detect-frontends", action = "store_true", default = False,
                     help = "Autodetect available frontends and add them to the instance")
   parser.add_option("--detect-workers", action = "store_true", default = False,
@@ -52,7 +54,7 @@ if __name__ == "__main__":
   else: parser.error("Incorrect number of arguments")
 
   # Create core instance, will load saved instance state if present
-  core = Core(instance = instancename)
+  core = Core(instance = instancename, default_loglevel = options.default_loglevel)
   
   # Autodetect appropriate frontends if requested or if a new instance is being set up
   if options.detect_frontends or core.is_new_instance:
