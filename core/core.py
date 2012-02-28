@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # Modular Python Bitcoin Miner
 # Copyright (C) 2012 Michael Sparmann (TheSeven)
 #
@@ -30,9 +27,10 @@
 
 
 import sys
+import os
 import pickle
 from datetime import datetime
-from threading import RLock
+from threading import RLock, Thread
 from .inflatable import Inflatable
 from .util import Bunch
 try: from queue import Queue
@@ -48,8 +46,10 @@ class Core(object):
   def __init__(self, instance = "default"):
     self.instance = instance
     self.started = False
+    self.start_stop_lock = RLock()
 
     # Initialize log queue and hijack stdout/stderr
+    self.logger_thread = None
     self.logqueue = Queue()
     self.loglf = True
     self.stdout = sys.stdout
@@ -70,10 +70,32 @@ class Core(object):
     # Set up object registry
     from .objectregistry import ObjectRegistry
     self.registry = ObjectRegistry(self)
+    
+    # Initialize class lists
+    self.frontendclasses = []
+    self.workerclasses = []
+    self.worksourceclasses = []
+
+    # Load modules
+    for maintainer in os.listdir("modules"):
+      if os.path.isdir("modules/%s" % maintainer):
+        for module in os.listdir("modules/%s" % maintainer):
+          if os.path.isdir("modules/%s/%s" % (maintainer, module)):
+            try:
+              module = __import__("modules.%s" % maintainer, globals(), locals(), [module], 0)
+              self.frontendclasses.extend(getattr(module, "frontendclasses", []))
+              self.workerclasses.extend(getattr(module, "workerclasses", []))
+              self.worksourceclasses.extend(getattr(module, "worksourceclasses", []))
+            except Exception as e:
+              self.log("Core: Could not load module %s.%s: %s\n" % (maintainer, module, e), 300, "yB")
 
     # Initialize blockchain list
     self.blockchainlock = RLock()
     self.blockchains = []
+
+    # Initialize frontend list
+    self.frontendlock = RLock()
+    self.frontends = []
 
     # Read saved instance state
     try:
@@ -81,13 +103,17 @@ class Core(object):
         data = f.read()
       state = pickle.loads(data)
       self.is_new_instance = False
+      with self.frontendlock:
+        for frontend in state.frontends:
+          self.add_frontend(Inflatable.inflate(self, frontend))
       with self.blockchainlock:
         for blockchain in state.blockchains:
-          self.blockchains.append(Inflatable.inflate(self, blockchain))
+          self.add_blockchain(Inflatable.inflate(self, blockchain))
       self.root_work_source = Inflatable.inflate(self, state.root_work_source)
     except Exception as e:
       self.log("Core: Could not load instance configuration: %s\nLoading default configuration...\n" % e, 300, "yB")
       self.is_new_instance = True
+      self.frontends = []
       self.blockchains = []
       self.root_work_source = None
     
@@ -106,9 +132,13 @@ class Core(object):
       state.blockchains = []
       for blockchain in self.blockchains:
         state.blockchains.append(blockchain.deflate())
+      state.frontends = []
+      for frontend in self.frontends:
+        state.frontends.append(frontend.deflate())
       if not self.root_work_source: state.root_work_source = None
       else: state.root_work_source = self.root_work_source.deflate()
       data = pickle.dumps(state, pickle.HIGHEST_PROTOCOL)
+      if not os.path.exists("config"): os.mkdir("config")
       with open("config/%s.cfg" % self.instance, "wb") as f:
         f.write(data)
     except Exception as e:
@@ -116,16 +146,65 @@ class Core(object):
     
     
   def start(self):
-    self.log("Core: Starting up...\n", 100, "B")
+    with self.start_stop_lock:
+      if self.started: return
+      self.log("Core: Starting up...\n", 100, "B")
+      
+      # Start up frontends
+      have_logger = False
+      have_configurator = False
+      for frontend in self.frontends:
+        frontend.start()
+        if frontend.can_log: have_logger = True
+        if frontend.can_configure: have_configurator = True
+        
+      # Warn if there is no logger frontend (needs to be fone before enabling logger thread)
+      if not have_logger:
+        self.log("Core: No working logger frontend module present!\n"
+                 "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 10, "rB")
+
+      # Start logger thread
+      self.logger_thread = Thread(None, self.log_worker_thread, "Log worker thread")
+      self.logger_thread.start()
+      self.started = True
+
+      # Warn if there is no configuration frontend
+      if not have_configurator:
+        self.log("Core: No working configuration frontend module present!\n"
+                 "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 100, "yB")
+
+      # Start up work source tree
+      if self.root_work_source: self.root_work_source.start()
   
   
   def stop(self):
-    self.log("Core: Shutting down...\n", 100, "B")
-    self.save()
+    with self.start_stop_lock:
+      if not self.started: return
+      self.log("Core: Shutting down...\n", 100, "B")
+      
+      # Shut down work source tree
+      if self.root_work_source: self.root_work_source.stop()
+      
+      # Save instance configuration
+      self.save()
+      
+      # We are about to shut down the logging infrastructure, so switch back to builtin logging
+      self.started = False
+      
+      # Shut down the log worker thread
+      self.logqueue.put(None)
+      self.logger_thread.join(10)
+      
+      # Shut down the frontends
+      for frontend in self.frontends: frontend.stop()
   
   
   def detect_frontends(self):
     # TODO: Stub
+    if not self.frontends:
+      from modules.theseven.basicloggers.stderrlogger import StderrLogger
+      logger = StderrLogger(self)
+      self.add_frontend(logger)
     pass
   
   
@@ -157,26 +236,65 @@ class Core(object):
         self.blockchains.remove(blockchain)
 
 
+  def add_frontend(self, frontend):
+    with self.frontendlock:
+      if not frontend in self.frontends:
+        if self.started: frontend.start()
+        self.frontends.append(frontend)
+
+
+  def remove_frontend(self, frontend):
+    with self.frontendlock:
+      while frontend in self.frontends:
+        if self.started: frontend.stop()
+        self.frontends.remove(frontend)
+
+
   def get_root_work_source(self):
     return self.root_work_source
 
 
   def set_root_work_source(self, worksource):
+    if self.root_work_source: self.root_work_source.stop()
     self.root_work_source = worksource
     worksource.set_parent(None)
+    worksource.start()
     
     
   def log(self, message, loglevel, format = ""):
     timestamp = datetime.now()
+    
+    # If the last message didn't end with a line feed, don't print a time stamp
     continuation = not self.loglf
+    
     # Put message into the queue, will be pushed to listeners by a worker thread
     self.logqueue.put((timestamp, continuation, message, loglevel, format))
+    
+    # Update line feed state
     self.loglf = message[-1:] == "\n"
+    
     # If the core hasn't fully started up yet, the logging subsystem might not
     # work yet. Print the message to stderr as well just in case.
-    if not self.started:
+    if not self.started and loglevel <= 500:
       prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
       first = True
       for line in message.splitlines(True):
         self.stderr.write(line if first and continuation else prefix + line)
         first = False
+
+
+  def log_worker_thread(self):
+    while True:
+      data = self.logqueue.get()
+      
+      # We'll get a None value in the queue if the core wants us to shut down
+      if not data:
+        self.logqueue.task_done()
+        return
+      
+      (timestamp, continuation, message, loglevel, format) = data
+      for frontend in self.frontends:
+        if frontend.can_log:
+          frontend.write_log_message(timestamp, continuation, message, loglevel, format)
+          
+      self.logqueue.task_done()
