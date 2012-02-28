@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # Modular Python Bitcoin Miner
 # Copyright (C) 2012 Michael Sparmann (TheSeven)
 #

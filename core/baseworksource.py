@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # Modular Python Bitcoin Miner
 # Copyright (C) 2012 Michael Sparmann (TheSeven)
 #
@@ -29,6 +26,7 @@
 
 
 
+import time
 from threading import RLock
 from .util import Bunch
 from .inflatable import Inflatable
@@ -39,12 +37,26 @@ class BaseWorkSource(Inflatable):
 
 
   def __init__(self, core, state = None):
-    super().__init__(core, state)
+    super(BaseWorkSource, self).__init__(core, state)
     
     # Initialize work source state
+    self.start_stop_lock = RLock()
     self.parent = None
     self.stats = Bunch()
     self.stats.lock = RLock()
+    self._zero_stats()
+    
+    
+  def apply_settings(self):
+    super(BaseWorkSource, self).apply_settings()
+    if not "name" in self.settings or not self.settings.name:
+      self.settings.name = "Untitled work source"
+    if not "enabled" in self.settings: self.settings.enabled = True
+    if not "hashrate" in self.settings: self.settings.hashrate = 0
+    if not "priority" in self.settings: self.settings.priority = 1
+    
+    
+  def _zero_stats(self):
     self.stats.starttime = None
     self.stats.ghashes = 0
     self.stats.lockout = 0
@@ -59,13 +71,18 @@ class BaseWorkSource(Inflatable):
     self.stats.difficulty = 0
     
     
-  def apply_settings(self):
-    super().apply_settings()
-    if not "name" in self.settings or not self.settings.name:
-      self.settings.name = "Untitled work source"
-    if not "enabled" in self.settings: self.settings.enabled = True
-    if not "hashrate" in self.settings: self.settings.hashrate = 0
-    if not "priority" in self.settings: self.settings.priority = 1
+  def start(self):
+    with self.start_stop_lock:
+      if self.started: return
+      self.zero_stats()
+      self.starttime = time.time()
+      self.started = True
+  
+  
+  def stop(self):
+    with self.start_stop_lock:
+      if not self.started: return
+      self.started = False
 
         
   def accepts_child_type(self, type):

@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # Modular Python Bitcoin Miner
 # Copyright (C) 2012 Michael Sparmann (TheSeven)
 #
@@ -39,7 +36,7 @@ class Blockchain(Inflatable):
 
 
   def __init__(self, core, state = None):
-    super().__init__(core, state)
+    super(Blockchain, self).__init__(core, state)
     
     # Initialize work source state
     self.stats = Bunch()
@@ -50,7 +47,7 @@ class Blockchain(Inflatable):
     
     
   def apply_settings(self):
-    super().apply_settings()
+    super(Blockchain, self).apply_settings()
     if not "name" in self.settings or not self.settings.name:
       self.settings.name = "Untitled blockchain"
     if not "grouptime" in self.settings: self.settings.grouptime = 0

@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # Modular Python Bitcoin Miner
 # Copyright (C) 2012 Michael Sparmann (TheSeven)
 #
@@ -38,7 +35,7 @@ class WorkSourceGroup(BaseWorkSource):
 
 
   def __init__(self, core, state = None):
-    super().__init__(core, state)
+    super(WorkSourceGroup, self).__init__(core, state)
     
     # Populate state dict if this is a new instance
     if self.is_new_instance:
@@ -57,7 +54,7 @@ class WorkSourceGroup(BaseWorkSource):
     for child in self.children:
       self.state.children.append(child.deflate())
     # Let BaseWorkSource handle own deflation
-    return super().deflate()
+    return super(WorkSourceGroup, self).deflate()
 
 
   def accepts_child_type(self, type):
@@ -70,6 +67,7 @@ class WorkSourceGroup(BaseWorkSource):
     worksource.set_parent(self)
     with self.childlock:
       if not worksource in self.children:
+        if self.started: worksource.start()
         self.children.append(worksource)
 
     
@@ -77,4 +75,23 @@ class WorkSourceGroup(BaseWorkSource):
     with self.childlock:
       while worksource in self.children:
         worksource.set_parent()
+        if self.started: worksource.stop()
         self.children.remove(worksource)
+        
+        
+  def start(self):
+    with self.start_stop_lock:
+      if self.started: return
+      with self.childlock:
+        for worksource in self.children:
+          worksource.start()
+      self.started = True
+  
+  
+  def stop(self):
+    with self.start_stop_lock:
+      if not self.started: return
+      with self.childlock:
+        for worksource in self.children:
+          worksource.stop()
+      self.started = False

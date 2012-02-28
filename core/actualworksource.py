@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # Modular Python Bitcoin Miner
 # Copyright (C) 2012 Michael Sparmann (TheSeven)
 #
@@ -39,7 +36,7 @@ class ActualWorkSource(BaseWorkSource):
 
 
   def __init__(self, core, state = None):
-    super().__init__(core, state)
+    super(ActualWorkSource, self).__init__(core, state)
     
     # Find block chain
     if not "blockchain" in self.state: self.state.blockchain = None
@@ -56,11 +53,11 @@ class ActualWorkSource(BaseWorkSource):
     if self.blockchain: self.state.blockchain = self.blockchain.settings.name
     else: self.state.blockchain = None
     # Let BaseWorkSource handle own deflation
-    return super().deflate()
+    return super(ActualWorkSource, self).deflate()
 
 
   def apply_settings(self):
-    super().apply_settings()
+    super(ActualWorkSource, self).apply_settings()
     if not "errorlimit" in self.settings or not self.settings.errorlimit:
       self.settings.errorlimit = 3
     if not "errorlockout_factor" in self.settings or not self.settings.errorlockout_factor:
