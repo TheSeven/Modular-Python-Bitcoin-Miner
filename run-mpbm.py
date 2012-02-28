@@ -66,7 +66,7 @@ if __name__ == "__main__":
   if options.add_example_work_sources or core.is_new_instance:
     from core.blockchain import Blockchain
     from core.worksourcegroup import WorkSourceGroup
-    from worksource.theseven.bcjsonrpc import BCJSONRPCWorkSource
+    from modules.theseven.bcjsonrpc.bcjsonrpcworksource import BCJSONRPCWorkSource
     # Find the Bitcoin block chain, or create it if neccessary
     blockchain = core.get_blockchain_by_name("Bitcoin")
     if not blockchain:
