@@ -20,33 +20,19 @@
 
 
 
-#######################
-# Frontend base class #
-#######################
+from ..decorators import jsonapi
 
 
 
-from threading import RLock
-from .util import Bunch
-from .inflatable import Inflatable
-
-
-
-class BaseFrontend(Inflatable):
-
-  can_log = False
-  can_show_stats = False
-  can_configure = False
-  can_autodetect = False
-
-
-  def __init__(self, core, state = None):
-    super(BaseFrontend, self).__init__(core, state)
-    self.start_stop_lock = RLock()
-    self.does_log = self.__class__.can_log
-    self.does_show_stats = self.__class__.can_show_stats
-
-  def apply_settings(self):
-    super(BaseFrontend, self).apply_settings()
-    if not "name" in self.settings or not self.settings.name:
-      self.settings.name = getattr(self.__class__, "default_name", "Untitled frontend")
+@jsonapi
+def getgadgets(core, webui, httprequest, path, request, privileges):
+  if request["collection"] == "dashboard":
+    return [
+      {"width": 200, "entries": [
+        {"module": "menugadget", "moduleparam": None},
+      ]},
+      {"entries": [
+        {"module": "statsgadget", "moduleparam": None},
+      ]},
+    ]
+  return [{"width": 0, "entries": []}]

@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # Modular Python Bitcoin Miner
 # Copyright (C) 2012 Michael Sparmann (TheSeven)
 #
@@ -36,17 +33,17 @@ from core.actualworksource import ActualWorkSource
 
 class BCJSONRPCWorkSource(ActualWorkSource):
   
-  version = "worksource.theseven.bcjsonrpc.BCJSONRPCWorkSource v0.1.0alpha"
+  version = "theseven.bcjsonrpc work source v0.1.0alpha"
+  default_name = "Untitled BCJSONRPC work source"
   
 
   def __init__(self, core, state = None):
-    super().__init__(core, state)
-
+    super(BCJSONRPCWorkSource, self).__init__(core, state)
     self.default_useragent = "%s (%s)" % (core.__class__.version, self.__class__.version)
     
     
     def apply_settings(self):
-      super().apply_settings()
+      super(BCJSONRPCWorkSource, self).apply_settings()
       if not "getworktimeout" in self.settings or not self.settings.getworktimeout:
         self.settings.getworktimeout = 3
       if not "sendsharetimeout" in self.settings or not self.settings.sendsharetimeout:
@@ -64,9 +61,14 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       if not "useragent" in self.settings: self.settings.useragent = None
       
 
-    def start(self):
+  def start(self):
+    with self.start_stop_lock:
+      if self.started: return
       if not "host" in self.settings: raise Exception("Missing attribute: host")
-    
-    
-    def stop(self):
-      pass
+      self.started = True
+  
+  
+  def stop(self):
+    with self.start_stop_lock:
+      if not self.started: return
+      self.started = False

@@ -34,6 +34,8 @@ from core.basefrontend import BaseFrontend
 
 class StderrLogger(BaseFrontend):
 
+  version = "theseven.basicloggers stderr logger v0.1.0alpha"
+  default_name = "stderr logger"
   can_log = True
   can_autodetect = True
 
@@ -45,12 +47,11 @@ class StderrLogger(BaseFrontend):
     
   def __init__(self, core, state = None):
     super(StderrLogger, self).__init__(core, state)
-    self.start_stop_lock = RLock()
     
     
   def apply_settings(self):
     super(StderrLogger, self).apply_settings()
-    if not "loglevel" in self.settings: self.settings.loglevel = 500
+    if not "loglevel" in self.settings: self.settings.loglevel = self.core.default_loglevel
     if not "useansi" in self.settings: self.settings.useansi = "TERM" in os.environ
     
   

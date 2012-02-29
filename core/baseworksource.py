@@ -50,7 +50,7 @@ class BaseWorkSource(Inflatable):
   def apply_settings(self):
     super(BaseWorkSource, self).apply_settings()
     if not "name" in self.settings or not self.settings.name:
-      self.settings.name = "Untitled work source"
+      self.settings.name = getattr(self.__class__, "default_name", "Untitled work source")
     if not "enabled" in self.settings: self.settings.enabled = True
     if not "hashrate" in self.settings: self.settings.hashrate = 0
     if not "priority" in self.settings: self.settings.priority = 1

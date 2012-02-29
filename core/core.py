@@ -164,9 +164,12 @@ class Core(object):
       have_logger = False
       have_configurator = False
       for frontend in self.frontends:
-        frontend.start()
-        if frontend.can_log: have_logger = True
-        if frontend.can_configure: have_configurator = True
+        try:
+          frontend.start()
+          if frontend.can_log: have_logger = True
+          if frontend.can_configure: have_configurator = True
+        except Exception as e:
+          self.log("Core: Could not start frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "rB")
         
       # Warn if there is no logger frontend (needs to be fone before enabling logger thread)
       if not have_logger:
@@ -184,7 +187,12 @@ class Core(object):
                  "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 100, "yB")
 
       # Start up work source tree
-      if self.root_work_source: self.root_work_source.start()
+      if self.root_work_source:
+        try: self.root_work_source.start()
+        except Exception as e:
+          self.log("Core: Could not start root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
+
+      self.log("Core: Startup completed\n", 200, "")
   
   
   def stop(self):
@@ -193,7 +201,10 @@ class Core(object):
       self.log("Core: Shutting down...\n", 100, "B")
       
       # Shut down work source tree
-      if self.root_work_source: self.root_work_source.stop()
+      if self.root_work_source:
+        try: self.root_work_source.stop()
+        except Exception as e:
+          self.log("Core: Could not stop root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
       
       # Save instance configuration
       self.save()
@@ -206,8 +217,13 @@ class Core(object):
       self.logger_thread.join(10)
       
       # Shut down the frontends
-      for frontend in self.frontends: frontend.stop()
-  
+      for frontend in self.frontends:
+        try: frontend.stop()
+        except Exception as e:
+          self.log("Core: Could not stop frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "rB")
+
+      self.log("Core: Shutdown completed\n", 200, "")
+          
   
   def detect_frontends(self):
     self.log("Core: Autodetecting frontends...\n", 500, "B")
@@ -248,17 +264,25 @@ class Core(object):
 
 
   def add_frontend(self, frontend):
-    with self.frontendlock:
-      if not frontend in self.frontends:
-        if self.started: frontend.start()
-        self.frontends.append(frontend)
+    with self.start_stop_lock:
+      with self.frontendlock:
+        if not frontend in self.frontends:
+          if self.started:
+            try: frontend.start()
+            except Exception as e:
+              self.log("Core: Could not start frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "yB")
+          self.frontends.append(frontend)
 
 
   def remove_frontend(self, frontend):
-    with self.frontendlock:
-      while frontend in self.frontends:
-        if self.started: frontend.stop()
-        self.frontends.remove(frontend)
+    with self.start_stop_lock:
+      with self.frontendlock:
+        while frontend in self.frontends:
+          if self.started:
+            try: frontend.stop()
+            except Exception as e:
+              self.log("Core: Could not stop frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "yB")
+          self.frontends.remove(frontend)
 
 
   def get_root_work_source(self):
@@ -266,10 +290,17 @@ class Core(object):
 
 
   def set_root_work_source(self, worksource):
-    if self.root_work_source: self.root_work_source.stop()
-    self.root_work_source = worksource
-    worksource.set_parent(None)
-    worksource.start()
+    with self.start_stop_lock:
+      if self.started and self.root_work_source:
+        try: self.root_work_source.stop()
+        except Exception as e:
+          self.log("Core: Could not stop root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "yB")
+      self.root_work_source = worksource
+      worksource.set_parent(None)
+      if self.started:
+        try: worksource.start()
+        except Exception as e:
+          self.log("Core: Could not start root work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
     
     
   def log(self, message, loglevel, format = ""):
