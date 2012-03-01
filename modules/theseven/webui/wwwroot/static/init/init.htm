@@ -288,16 +288,27 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
                 && httpCache[request.uri][request.method][request.data])
                 return void request.callback(httpCache[request.uri][request.method][request.data]);
             var requestObj = new XMLHttpRequest();
+            var lastpos = 0;
             requestObj.onreadystatechange = function()
             {
+                if (request.stream && requestObj.responseText.length != lastpos)
+                {
+                    var data = requestObj.responseText;
+                    var newdata = data.substring(lastpos, data.length);
+                    lastpos = data.length;
+                    if (request.streamcallback) request.streamcallback(newdata, requestObj);
+                }
                 if (requestObj.readyState == 4)
                 {
-                    httpRunning--;
-                    if (httpRunning == 0)
+                    if (!request.noindicator)
                     {
-                        fadeLoadingDirection = -1;
-                        if (fadeLoadingInterval) clearInterval(fadeLoadingInterval);
-                        fadeLoadingInterval = setInterval("fadeLoading();", 50);
+                        httpRunning--;
+                        if (httpRunning == 0)
+                        {
+                            fadeLoadingDirection = -1;
+                            if (fadeLoadingInterval) clearInterval(fadeLoadingInterval);
+                            fadeLoadingInterval = setInterval("fadeLoading();", 50);
+                        }
                     }
                     if (requestObj.status == 200)
                     {
@@ -338,12 +349,15 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
             }
             if (!usebrowsercache)
                 requestObj.setRequestHeader("If-Modified-Since", "Sat, 1 Jan 2000 00:00:00 GMT");
-            httpRunning++;
-            if (httpRunning == 1)
+            if (!request.nodindicator)
             {
-                fadeLoadingDirection = 1;
-                if (fadeLoadingInterval) clearInterval(fadeLoadingInterval);
-                fadeLoadingInterval = setInterval("fadeLoading();", 50);
+                httpRunning++;
+                if (httpRunning == 1)
+                {
+                    fadeLoadingDirection = 1;
+                    if (fadeLoadingInterval) clearInterval(fadeLoadingInterval);
+                    fadeLoadingInterval = setInterval("fadeLoading();", 50);
+                }
             }
             requestObj.send(request.data);
             return requestObj;

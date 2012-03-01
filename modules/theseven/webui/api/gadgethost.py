@@ -33,6 +33,7 @@ def getgadgets(core, webui, httprequest, path, request, privileges):
       ]},
       {"entries": [
         {"module": "statsgadget", "moduleparam": None},
+        {"module": "loggadget", "moduleparam": None},
       ]},
     ]
   return [{"width": 0, "entries": []}]

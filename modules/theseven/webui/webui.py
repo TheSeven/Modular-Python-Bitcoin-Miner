@@ -27,6 +27,7 @@
 
 
 import os
+import time
 import urllib
 import shutil
 import base64
@@ -56,13 +57,19 @@ class WebUI(BaseFrontend):
 
   def __init__(self, core, state = None):
     super(WebUI, self).__init__(core, state)
+    
+    # Initialize log buffer, list of log listener queues, and a lock for both of them
+    self.log_buffer = []
+    self.log_listeners = []
+    self.log_lock = RLock()
 
 
   def apply_settings(self):
     super(WebUI, self).apply_settings()
-    if not "loglevel" in self.settings: self.settings.loglevel = 500
     if not "port" in self.settings: self.settings.port = 8832
     if not "users" in self.settings: self.settings.users = { "admin:mpbm": "admin" }
+    if not "log_buffer_max_length" in self.settings: self.settings.log_buffer_max_length = 1000
+    if not "log_buffer_purge_size" in self.settings: self.settings.log_buffer_purge_size = 100
 
 
   def start(self):
@@ -93,25 +100,34 @@ class WebUI(BaseFrontend):
       self.started = False
 
 
-  def write_log_message(self, timestamp, continuation, message, loglevel, format):
+  def write_log_message(self, timestamp, loglevel, messages):
     if not self.started: return
-    if loglevel > self.settings.loglevel: return
-    '''
-    prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
-    first = True
-    for line in message.splitlines(True):
-      if self.settings.useansi:
-        modes = ""
-        if "r" in format: modes += ";31"
-        elif "y" in format: modes += ";33"
-        elif "g" in format: modes += ";32"
-        if "B" in format: modes += ";1"
-        if modes: line = "\x1b[0%sm%s\x1b[0m" % (modes, line)
-      self.core.stderr.write(line if first and continuation else prefix + line)
-      first = False
-    '''
-
-    
+    data = {
+      "timestamp": time.mktime(timestamp.timetuple()) * 1000 + timestamp.microsecond / 1000,
+      "loglevel": loglevel,
+      "message": [{"data": data, "format": format} for data, format in messages],
+    }
+    with self.log_lock:
+      for queue in self.log_listeners:
+        queue.put(data)
+      self.log_buffer.append(data)
+      if len(self.log_buffer) > self.settings.log_buffer_max_length:
+        self.log_buffer = self.log_buffer[self.settings.log_buffer_purge_size:]
+        
+        
+  def register_log_listener(self, listener):
+    with self.log_lock:
+      if not listener in self.log_listeners:
+        self.log_listeners.append(listener)
+      for data in self.log_buffer: listener.put(data)
+        
+        
+  def unregister_log_listener(self, listener):
+    with self.log_lock:
+      while listener in self.log_listeners:
+        self.log_listeners.remove(listener)
+        
+        
 
 class RequestHandler(BaseHTTPRequestHandler):
 

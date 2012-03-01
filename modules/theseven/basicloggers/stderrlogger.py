@@ -72,19 +72,20 @@ class StderrLogger(BaseFrontend):
       self.started = False
 
       
-  def write_log_message(self, timestamp, continuation, message, loglevel, format):
+  def write_log_message(self, timestamp, loglevel, messages):
     if not self.started: return
     if loglevel > self.settings.loglevel: return
     prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
-    first = True
-    for line in message.splitlines(True):
-      if self.settings.useansi:
-        modes = ""
-        if "r" in format: modes += ";31"
-        elif "y" in format: modes += ";33"
-        elif "g" in format: modes += ";32"
-        if "B" in format: modes += ";1"
-        if modes: line = "\x1b[0%sm%s\x1b[0m" % (modes, line)
-      self.core.stderr.write(line if first and continuation else prefix + line)
-      first = False
+    newline = True
+    for message, format in messages:
+      for line in message.splitlines(True):
+        if self.settings.useansi:
+          modes = ""
+          if "r" in format: modes += ";31"
+          elif "y" in format: modes += ";33"
+          elif "g" in format: modes += ";32"
+          if "B" in format: modes += ";1"
+          if modes: line = "\x1b[0%sm%s\x1b[0m" % (modes, line)
+        self.core.stderr.write(prefix + line if newline else line)
+        newline = line[-1:] == "\n"
     

@@ -68,9 +68,11 @@ mod.gadgethost = {
                         {
                             var tr2 = document.createElement("tr");
                             var td2 = document.createElement("td");
+                            if (data[i].entries[j].height) td2.style.height = data[i].entries[j].height + "px";
                             td2.style.padding = "1px";
                             var box = new mod.box.Box();
                             box.setOuterWidth("100%");
+                            box.setOuterHeight("100%");
                             loadgadget(box, data[i].entries[j].module, data[i].entries[j].moduleparam);
                             td2.appendChild(box.rootNode);
                             tr2.appendChild(td2);

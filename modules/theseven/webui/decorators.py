@@ -54,4 +54,6 @@ class jsonapi(object):
       httprequest.end_headers()
       httprequest.wfile.write(data)
     # Something went wrong, no matter what => 500 Internal Server Error
-    except: raise#httprequest.send_response(500)
+    except:
+      try: httprequest.send_response(500)
+      except: pass

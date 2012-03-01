@@ -28,6 +28,7 @@
 
 import sys
 import os
+import time
 import pickle
 import traceback
 from datetime import datetime
@@ -53,7 +54,8 @@ class Core(object):
     self.default_loglevel = default_loglevel
     self.logger_thread = None
     self.logqueue = Queue()
-    self.loglf = True
+    self.logtime = 0
+    self.logbuf = []
     self.stdout = sys.stdout
     self.stderr = sys.stderr
     from .util import OutputRedirector
@@ -304,25 +306,24 @@ class Core(object):
     
     
   def log(self, message, loglevel, format = ""):
-    timestamp = datetime.now()
-    
-    # If the last message didn't end with a line feed, don't print a time stamp
-    continuation = not self.loglf
-    
+    # Concatenate messages until there is a linefeed
+    if not self.logbuf: self.logtime = datetime.now()
+    self.logbuf.append((message, format))
+    if message[-1:] != "\n": return
+    self.log_multi(loglevel, self.logbuf, self.logtime)
+    self.logbuf = []
+
+  def log_multi(self, loglevel, messages, timestamp = datetime.now()):
     # Put message into the queue, will be pushed to listeners by a worker thread
-    self.logqueue.put((timestamp, continuation, message, loglevel, format))
-    
-    # Update line feed state
-    self.loglf = message[-1:] == "\n"
+    self.logqueue.put((timestamp, loglevel, messages))
     
     # If the core hasn't fully started up yet, the logging subsystem might not
     # work yet. Print the message to stderr as well just in case.
     if not self.started and loglevel <= self.default_loglevel:
+      message = ""
+      for string, format in messages: message += string
       prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
-      first = True
-      for line in message.splitlines(True):
-        self.stderr.write(line if first and continuation else prefix + line)
-        first = False
+      for line in string.splitlines(True): self.stderr.write(prefix + line)
 
 
   def log_worker_thread(self):
@@ -334,9 +335,8 @@ class Core(object):
         self.logqueue.task_done()
         return
       
-      (timestamp, continuation, message, loglevel, format) = data
       for frontend in self.frontends:
         if frontend.can_log:
-          frontend.write_log_message(timestamp, continuation, message, loglevel, format)
+          frontend.write_log_message(*data)
           
       self.logqueue.task_done()
