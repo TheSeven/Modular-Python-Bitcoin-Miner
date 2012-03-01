@@ -38,6 +38,9 @@ class BaseFrontend(Inflatable):
   can_show_stats = False
   can_configure = False
   can_autodetect = False
+  settings = dict(Inflatable.settings, **{
+    "name": {"title": "Name", "type": "string", "position": 100},
+  })
 
 
   def __init__(self, core, state = None):

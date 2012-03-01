@@ -49,9 +49,10 @@ mod.menugadget = {
                 button.data = buttons[i];
                 button.onclick = function(e)
                 {
-                    depend([this.data.module], function()
+                    var obj = this;
+                    depend([obj.data.module], function()
                     {
-                        mod[this.data.module].LayerUI(this.data.moduleparam);
+                        mod[obj.data.module].LayerUI(obj.data.moduleparam);
                     });
                 }
                 box.contentNode.appendChild(button);

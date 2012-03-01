@@ -38,6 +38,10 @@ class StderrLogger(BaseFrontend):
   default_name = "stderr logger"
   can_log = True
   can_autodetect = True
+  settings = dict(BaseFrontend.settings, **{
+    "loglevel": {"title": "Log level", "type": "int", "position": 1000},
+    "useansi": {"title": "Use ANSI codes", "type": "boolean", "position": 2000},
+  })
 
 
   @classmethod

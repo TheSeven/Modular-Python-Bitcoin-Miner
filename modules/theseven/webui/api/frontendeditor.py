@@ -21,17 +21,40 @@
 
 
 from ..decorators import jsonapi
+import traceback
 
 
 
 @jsonapi
-def read(core, webui, httprequest, path, request, privileges):
-  return webui.settings.uiconfig
+def getfrontendclasses(core, webui, httprequest, path, request, privileges):
+  return [{"id": c.id, "version": c.version} for c in core.frontendclasses]
 
   
 
 @jsonapi
-def write(core, webui, httprequest, path, request, privileges):
+def getfrontends(core, webui, httprequest, path, request, privileges):
+  return [{"id": f.id, "name": f.settings.name, "class": f.__class__.id} for f in core.frontends]
+
+  
+
+@jsonapi
+def createfrontend(core, webui, httprequest, path, request, privileges):
   if privileges != "admin": return httprequest.send_response(403)
-  webui.settings.uiconfig = request
-  return {}
+  try:
+    frontendclass = core.registry.get(request["class"])
+    frontend = frontendclass(core)
+    core.add_frontend(frontend)
+    return {}
+  except: return {"error": traceback.format_exc()}
+
+  
+
+@jsonapi
+def deletefrontend(core, webui, httprequest, path, request, privileges):
+  if privileges != "admin": return httprequest.send_response(403)
+  try:
+    frontend = core.registry.get(request["id"])
+    core.remove_frontend(frontend);
+    frontend.destroy();
+    return {}
+  except: return {"error": traceback.format_exc()}

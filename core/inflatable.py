@@ -32,6 +32,7 @@ from .util import Bunch
 
 class Inflatable(object):
 
+  settings = {}
 
   def __init__(self, core, state = None):
     self.core = core

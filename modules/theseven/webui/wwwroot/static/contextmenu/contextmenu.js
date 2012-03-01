@@ -35,6 +35,7 @@ mod.contextmenu = {
         this.rootNode = document.createElement("div");
         this.rootNode.className = "contextmenu contextmenu_" + style;
         this.rootNode.style.position = "absolute";
+        this.rootNode.style.zIndex = 50000;
 
         this.rootNode.onmouseout = function()
         {

@@ -148,18 +148,24 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
                 });
             else if (callback) callback();
         }
-
-        // Delegate control over a range to another module
-        function delegate(range, module, param)
+        
+        // Shows a loading indicator in the specified range
+        function showLoadingIndicator(range)
         {
-            if (module == "null") return;
-            if (range.owner && range.owner.releaseRange) range.owner.releaseRange();
             var image = document.createElement("img");
             image.src = "static/init/loading.gif";
             image.alt = "Loading...";
             image.style.position = "absolute";
             image.style.zIndex = "100000";
             range.insertBefore(image, range.firstChild);
+        }
+
+        // Delegate control over a range to another module
+        function delegate(range, module, param)
+        {
+            if (module == "null") return;
+            if (range.owner && range.owner.releaseRange) range.owner.releaseRange();
+            showLoadingIndicator(range);
             depend([module], function()
             {
                 var modhandle = getmodule(module);
@@ -424,6 +430,7 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
         function selectGovernor(e)
         {
             if (!e) e = window.event;  // IE
+            if (window.onmousedown) window.onmousedown(e);
             var obj = e.target;
             if (!obj) obj = e.srcElement;
             while (obj)
@@ -569,7 +576,7 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
         <img src='static/init/loading.gif' alt='Loading...' />
     </div>
     <noscript>
-        Sorry, this interface heavily relies on Javascript, which is either
+        Sorry, this web application heavily relies on Javascript, which is either
         disabled or not supported by your browser. Please enable the execution
         of Javascript in your browser's security settings.
     </noscript>

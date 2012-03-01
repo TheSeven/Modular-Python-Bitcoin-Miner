@@ -35,6 +35,16 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   
   version = "theseven.bcjsonrpc work source v0.1.0alpha"
   default_name = "Untitled BCJSONRPC work source"
+  settings = dict(ActualWorkSource.settings, **{
+    "getworktimeout": {"title": "Getwork timeout", "type": "float", "position": 19000},
+    "sendsharetimeout": {"title": "Sendshare timeout", "type": "float", "position": 19100},
+    "host": {"title": "Host", "type": "string", "position": 1000},
+    "port": {"title": "Port", "type": "int", "position": 1010},
+    "path": {"title": "Path", "type": "string", "position": 1020},
+    "username": {"title": "User name", "type": "string", "position": 1100},
+    "password": {"title": "Password", "type": "password", "position": 1120},
+    "useragent": {"title": "User agent string", "type": "string", "position": 1200},
+  })
   
 
   def __init__(self, core, state = None):

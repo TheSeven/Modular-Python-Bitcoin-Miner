@@ -48,6 +48,12 @@ class WebUI(BaseFrontend):
   can_log = True
   can_configure = True
   can_autodetect = True
+  settings = dict(BaseFrontend.settings, **{
+    "port": {"title": "HTTP port", "type": "int", "position": 1000},
+    "users": {"title": "Users", "type": "json", "position": 2000},
+    "log_buffer_max_length": {"title": "Maximum log buffer length", "type": "int", "position": 3000},
+    "log_buffer_purge_size": {"title": "Log buffer purge size", "type": "int", "position": 3010},
+  })
 
 
   @classmethod
@@ -71,7 +77,16 @@ class WebUI(BaseFrontend):
     if not "uiconfig" in self.settings: self.settings.uiconfig = {"loggadget": {"loglevel": self.core.default_loglevel}}
     if not "log_buffer_max_length" in self.settings: self.settings.log_buffer_max_length = 1000
     if not "log_buffer_purge_size" in self.settings: self.settings.log_buffer_purge_size = 100
+    if self.started and self.settings.port != self.port:
+      Thread(None, self.restart, self.settings.name + "_restart").start()
 
+      
+  def restart(self):
+    time.sleep(3)
+    with self.start_stop_lock:
+      self.stop()
+      self.start()
+      
 
   def start(self):
     with self.start_stop_lock:
@@ -88,6 +103,7 @@ class WebUI(BaseFrontend):
       self.serverthread.start()
 
       self.started = True
+      self.port = self.settings.port
 
 
   def stop(self):

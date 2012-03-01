@@ -34,6 +34,12 @@ from .baseworksource import BaseWorkSource
 
 class ActualWorkSource(BaseWorkSource):
 
+  settings = dict(BaseWorkSource.settings, **{
+    "errorlimit": {"title": "Error limit", "type": "int", "position": 20000},
+    "errorlockout_factor": {"title": "Error lockout factor", "type": "int", "position": 20100},
+    "errorlockout_max": {"title": "Error lockout maximum", "type": "int", "position": 20200},
+    "stalelockout": {"title": "Stale lockout", "type": "int", "position": 20500},
+  })
 
   def __init__(self, core, state = None):
     super(ActualWorkSource, self).__init__(core, state)

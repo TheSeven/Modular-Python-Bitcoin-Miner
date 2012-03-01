@@ -21,17 +21,31 @@
 
 
 from ..decorators import jsonapi
+import traceback
 
 
 
 @jsonapi
-def read(core, webui, httprequest, path, request, privileges):
-  return webui.settings.uiconfig
+def readsettings(core, webui, httprequest, path, request, privileges):
+  if privileges != "admin": return httprequest.send_response(403)
+  try:
+    frontend = core.registry.get(request["id"])
+    settings = {}
+    for setting, data in frontend.__class__.settings.items():
+      settings[data["position"]] = {"name": setting, "spec": data, "value": frontend.settings[setting]}
+    return {"settings": settings}
+  except: return {"error": traceback.format_exc()}
 
   
 
 @jsonapi
-def write(core, webui, httprequest, path, request, privileges):
+def writesettings(core, webui, httprequest, path, request, privileges):
   if privileges != "admin": return httprequest.send_response(403)
-  webui.settings.uiconfig = request
-  return {}
+  try:
+    frontend = core.registry.get(request["id"])
+    for setting in frontend.__class__.settings.keys():
+      if setting in request["settings"]:
+          frontend.settings[setting] = request["settings"][setting]
+    frontend.apply_settings()
+    return {}
+  except: return {"error": traceback.format_exc()}

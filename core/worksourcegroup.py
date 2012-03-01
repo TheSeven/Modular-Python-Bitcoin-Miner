@@ -36,6 +36,8 @@ class WorkSourceGroup(BaseWorkSource):
 
   version = "core.worksourcegroup v0.1.0alpha"
   default_name = "Untitled work source group"
+  settings = dict(BaseWorkSource.settings, **{
+  })
 
 
   def __init__(self, core, state = None):

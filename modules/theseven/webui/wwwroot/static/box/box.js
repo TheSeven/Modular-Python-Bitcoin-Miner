@@ -373,7 +373,7 @@ mod.box = {
             }
             else
             {
-                td23.style.cursor = "auto";
+                td23.style.cursor = "inherit";
                 td23.onmousedown = truefunc;
             }
             if (vertically)
@@ -386,7 +386,7 @@ mod.box = {
             }
             else
             {
-                td32.style.cursor = "auto";
+                td32.style.cursor = "inherit";
                 td32.onmousedown = truefunc;
             }
             if (horizontally && vertically)
@@ -399,7 +399,7 @@ mod.box = {
             }
             else
             {
-                td33.style.cursor = "auto";
+                td33.style.cursor = "inherit";
                 td33.onmousedown = truefunc;
             }
         };

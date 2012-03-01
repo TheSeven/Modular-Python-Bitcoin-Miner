@@ -100,6 +100,11 @@ class Core(object):
               self.worksourceclasses.extend(getattr(module, "worksourceclasses", []))
             except Exception as e:
               self.log("Core: Could not load module %s.%s: %s\n" % (maintainer, module, traceback.format_exc()), 300, "yB")
+              
+    # Register the detected classes in the global object registry
+    for frontendclass in self.frontendclasses: frontendclass.id = self.registry.register(frontendclass)
+    for workerclass in self.workerclasses: workerclass.id = self.registry.register(workerclass)
+    for worksourceclass in self.worksourceclasses: worksourceclass.id = self.registry.register(worksourceclass)
 
     # Initialize blockchain list
     self.blockchainlock = RLock()

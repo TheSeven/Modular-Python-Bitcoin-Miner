@@ -35,6 +35,13 @@ from .inflatable import Inflatable
 
 class BaseWorkSource(Inflatable):
 
+  settings = dict(Inflatable.settings, **{
+    "name": {"title": "Name", "type": "string", "position": 100},
+    "enabled": {"title": "Enabled", "type": "boolean", "position": 200},
+    "hashrate": {"title": "Hashrate", "type": "float", "position": 10000},
+    "priority": {"title": "Priority", "type": "float", "position": 10100},
+  })
+
 
   def __init__(self, core, state = None):
     super(BaseWorkSource, self).__init__(core, state)

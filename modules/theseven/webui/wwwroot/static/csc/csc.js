@@ -40,9 +40,17 @@ mod.csc = {
         buffer += data;
         data = buffer.split("\0");
         buffer = data[data.length - 1];
+        data[data.length - 1] = "";
         for (var i in data)
           if (data.hasOwnProperty(i) && data[i].length > 0)
-            callback(JSON.parse(data[i]));
+            try
+            {
+              callback(JSON.parse(data[i]));
+            }
+            catch (e)
+            {
+              log("Error while parsing stream message: " + e + "\nMessage: " + data[i]);
+            }
       };
     else
       params.callback = function(data)
