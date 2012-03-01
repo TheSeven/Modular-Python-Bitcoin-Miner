@@ -30,7 +30,7 @@ except: from Queue import Queue
 @jsonapi
 def stream(core, webui, httprequest, path, request, privileges):
   # Figure out the loglevel, by default send all messages
-  loglevel = request["loglevel"] if "loglevel" in request else 1000
+  loglevel = int(request["loglevel"]) if "loglevel" in request else 1000
 
   # Stream this by means of a chunked transfer
   httprequest.protocol_version = "HTTP/1.1"
@@ -64,5 +64,4 @@ def stream(core, webui, httprequest, path, request, privileges):
       write_chunk(json.dumps(messages, ensure_ascii = False) + "\0")
       
   except: pass
-    
   finally: webui.unregister_log_listener(queue)

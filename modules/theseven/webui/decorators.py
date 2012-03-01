@@ -44,6 +44,7 @@ class jsonapi(object):
       data = json.loads(data.decode("utf_8"))
       # Run the API function
       data = self.f(core, webui, httprequest, path, data, privileges)
+      if data == None: return
       # Encode the response
       data = json.dumps(data, ensure_ascii = False).encode("utf_8")
       # Send response headers

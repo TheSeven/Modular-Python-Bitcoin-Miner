@@ -77,7 +77,6 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
             depend(["csc"], function()
             {
                 mod.csc.request("init", "init", {
-                    "action": "init",
                     "params": params,
                     "longlang": longlang,
                     "lang": lang,
@@ -332,7 +331,7 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
                     else
                     {
                         var error = request.error;
-                        if (requestObj.status > 999) error = request.commerror;
+                        if (requestObj.status == 0 || requestObj.status > 999) error = request.commerror;
                         error("httprequest: Error " + requestObj.status + " occurred during HTTP transaction "
                               + "(\"" + request.uri + "\":\"" + request.method + "\":\"" + request.data + "\")!");
                     }
@@ -349,7 +348,7 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
             }
             if (!usebrowsercache)
                 requestObj.setRequestHeader("If-Modified-Since", "Sat, 1 Jan 2000 00:00:00 GMT");
-            if (!request.nodindicator)
+            if (!request.noindicator)
             {
                 httpRunning++;
                 if (httpRunning == 1)

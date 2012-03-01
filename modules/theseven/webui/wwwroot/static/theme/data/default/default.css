@@ -23,7 +23,7 @@
 /* XHR loading indicator */
 #loading
 {
-	right: 0px;
+	bottom: 0px;
 }
 
 /* Global font */
@@ -37,7 +37,7 @@ body, table
 {
     cursor: default;
 }
-input[type=text], input[type=password], textarea, .textcursor
+input[type=text], input[type=password], textarea, .textcursor, .textcursor *
 {
     cursor: text;
 }
@@ -58,6 +58,13 @@ input[type=text], input[type=password], textarea, .textcursor
     text-align: right;
     vertical-align: middle;
     padding-right: 5px;
+}
+
+/* Button in the title bar of a box */
+input.box_titlebutton
+{
+    padding: 0px 2px;
+    margin: -2px 0px;
 }
 
 /* Minimum widths */

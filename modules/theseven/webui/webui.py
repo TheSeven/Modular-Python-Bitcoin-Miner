@@ -67,7 +67,8 @@ class WebUI(BaseFrontend):
   def apply_settings(self):
     super(WebUI, self).apply_settings()
     if not "port" in self.settings: self.settings.port = 8832
-    if not "users" in self.settings: self.settings.users = { "admin:mpbm": "admin" }
+    if not "users" in self.settings: self.settings.users = {"admin:mpbm": "admin"}
+    if not "uiconfig" in self.settings: self.settings.uiconfig = {"loggadget": {"loglevel": self.core.default_loglevel}}
     if not "log_buffer_max_length" in self.settings: self.settings.log_buffer_max_length = 1000
     if not "log_buffer_purge_size" in self.settings: self.settings.log_buffer_purge_size = 100
 

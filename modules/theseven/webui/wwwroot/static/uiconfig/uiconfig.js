@@ -18,40 +18,34 @@
 // Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh if you
 // want to support further development of the Modular Python Bitcoin Miner.
 
-mod.csc = {
+mod.uiconfig = {
+
+  "data": {},
+
+  "timeout": false,
 
   // Module initialisation: Check that all dependencies are satisfied
   "init": function(callback)
   {
-    depend(["json"], callback);
+    depend(["csc"], function()
+    {
+      mod.csc.request("uiconfig", "read", {}, function(data)
+      {
+        mod.uiconfig.data = data;
+        callback();
+      });
+    });
   },
 
-  // Send a request to the server and call a callback as soon as the response arrives
-  "request": function(module, filename, request, callback, params)
+  // Accumulate config update requests for up to 10 seconds, and then send the config to the server
+  "update": function()
   {
-    var buffer = "";
-    if (!params) params = new Array();
-    params.method = "POST";
-    params.uri = "api/" + module + "/" + filename;
-    params.data = JSON.stringify(request);
-    if (params.stream)
-      params.streamcallback = function(data)
-      {
-        buffer += data;
-        data = buffer.split("\0");
-        buffer = data[data.length - 1];
-        for (var i in data)
-          if (data.hasOwnProperty(i) && data[i].length > 0)
-            callback(JSON.parse(data[i]));
-      };
-    else
-      params.callback = function(data)
-      {
-        callback(JSON.parse(data));
-      };
-    if (!params.header) params.header = new Array();
-    if (!params.header["Content-Type"]) params.header["Content-Type"] = "application/json";
-    return httprequest(params);
+    if (mod.uiconfig.timeout) return;
+    mod.uiconfig.timeout = setTimeout(function()
+    {
+      mod.uiconfig.timeout = false;
+      mod.csc.request("uiconfig", "write", mod.uiconfig.data);
+    }, 10000);
   }
 
 };

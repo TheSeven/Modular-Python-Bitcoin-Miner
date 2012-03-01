@@ -34,9 +34,9 @@ mod.menugadget = {
         
         var buttons =
         [
-            {"name": "Frontends", "module": "frontendlist", "moduleparam": null},
-            {"name": "Workers", "module": "workerlist", "moduleparam": null},
-            {"name": "Work sources", "module": "worksourcelist", "moduleparam": null},
+            {"name": "Frontends", "module": "frontendeditor", "moduleparam": null},
+            {"name": "Workers", "module": "workereditor", "moduleparam": null},
+            {"name": "Work sources", "module": "worksourceeditor", "moduleparam": null},
         ]
         
         for (var i in buttons)

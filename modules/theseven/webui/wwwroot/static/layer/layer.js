@@ -51,8 +51,7 @@ mod.layer = {
         anchor.onmousedown = function(e)
         {
             anchor.style.zIndex = mod.layer.zindex++;
-//            return killEvent(e);
-        }
+        };
 
         // We need to hook these events natively,
         // firing up event_trigger for every mouse move would kill most browsers
@@ -86,7 +85,7 @@ mod.layer = {
                 win.document.documentElement.onmouseup = oldMouseUp;
             };
             return killEvent(e);
-        }
+        };
     }
 
 };

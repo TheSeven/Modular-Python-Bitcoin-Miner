@@ -327,6 +327,82 @@ mod.box = {
             return options;
         };
 
+        this.setResizable = function(horizontally, vertically, changecallback, finalcallback)
+        {
+            function mousedown(e, h, v)
+            {
+                // Backup the old event handlers
+                var oldMouseUp = win.document.documentElement.onmouseup;
+                var oldMouseMove = win.document.documentElement.onmousemove;
+                function getMousePos(e)
+                {
+                    if (!e) e = win.event;
+                    return {"x": e.clientX, "y": e.clientY};
+                }
+                var pos = getMousePos(e);
+                var size = {"x": obj.rootNode.offsetWidth, "y": obj.rootNode.offsetHeight};
+                function updateSize(e)
+                {
+                    var newpos = getMousePos(e);
+                    if (h) obj.rootNode.style.width = (newpos.x - pos.x + size.x) + "px";
+                    if (v) obj.rootNode.style.height = (newpos.y - pos.y + size.y) + "px";
+                    if (changecallback) changecallback();
+                }
+                win.document.documentElement.onmousemove = updateSize;
+                win.document.documentElement.onmouseup = function(e)
+                {
+                    // Update the size a final time
+                    updateSize(e);
+                    if (finalcallback) finalcallback();
+                    // Restore the old event handlers
+                    win.document.documentElement.onmousemove = oldMouseMove;
+                    win.document.documentElement.onmouseup = oldMouseUp;
+                };
+                return killEvent(e);
+            }
+            
+            // We need to hook these events natively,
+            // firing up event_trigger for every mouse move would kill most browsers
+            if (horizontally)
+            {
+                td23.style.cursor = "e-resize";
+                td23.onmousedown = function(e)
+                {
+                    mousedown(e, true, false);
+                };
+            }
+            else
+            {
+                td23.style.cursor = "auto";
+                td23.onmousedown = truefunc;
+            }
+            if (vertically)
+            {
+                td32.style.cursor = "s-resize";
+                td32.onmousedown = function(e)
+                {
+                    mousedown(e, false, true);
+                };
+            }
+            else
+            {
+                td32.style.cursor = "auto";
+                td32.onmousedown = truefunc;
+            }
+            if (horizontally && vertically)
+            {
+                td33.style.cursor = "se-resize";
+                td33.onmousedown = function(e)
+                {
+                    mousedown(e, true, true);
+                };
+            }
+            else
+            {
+                td33.style.cursor = "auto";
+                td33.onmousedown = truefunc;
+            }
+        };
     }
 
 };
