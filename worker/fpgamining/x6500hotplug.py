@@ -147,7 +147,7 @@ class X6500HotplugWorker(object):
               handle = d2xx.open(devicenum)
               handle.close()
               available = True
-            except: availabale = False
+            except: available = False
             boards.append((serial, available))
         else:
           for bus in usb.busses():
