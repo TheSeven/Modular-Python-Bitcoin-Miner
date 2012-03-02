@@ -320,9 +320,7 @@ class FPGA:
     #start_time = time.time()
     
     data = job.state + job.data[64:76]
-
     words = struct.unpack("<11I", data)
-
     if not self._burstWrite(1, words):
       #self.miner.log(self.name + ": FPGA: ERROR: Loading job data failed; readback failure", "rB")
       return
