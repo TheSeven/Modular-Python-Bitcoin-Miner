@@ -229,6 +229,9 @@ class X6500Worker(object):
         for fpga in fpga_list:
           fpga.detect()
       
+      # Update the start time:
+      self.starttime = time.time()
+      
       self.children.append(X6500FPGA(self.miner, self, fpga_list[0]))
       self.children.append(X6500FPGA(self.miner, self, fpga_list[1]))
     except Exception as e:
