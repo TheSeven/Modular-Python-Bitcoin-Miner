@@ -32,6 +32,12 @@
 #   takeover: Forcibly grab control over the USB device (default: true, requires PyUSB)
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
 #   scaninterval: Bus scan interval in seconds (default: 10)
+#   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
+#   ### The following settings aren't implemented yet. They are here just as placeholders:
+#   errorwarning: if the FPGA error rate gets this high (in %), reduce the clock (default: 1)
+#   errorcritical: if the FPGA error rate gets this high (in %), drastically reduce the clock (default: 4)
+#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 35)
+#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 45)
 
 
 import sys
@@ -65,6 +71,11 @@ class X6500HotplugWorker(object):
     self.jobinterval = getattr(self, "jobinterval", 30)
     self.pollinterval = getattr(self, "pollinterval", 0.1)
     self.scaninterval = getattr(self, "scaninterval", 10)
+    self.clockspeed = getattr(self, "clockspeed", 150)
+    self.errorwarning = getattr(self, "errorwarning", 1)
+    self.errorcritical = getattr(self, "errorcritical", 4)
+    self.tempwarning = getattr(self, "tempwarning", 35)
+    self.tempcritical = getattr(self, "tempcritical", 45)
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
 
     # Initialize object properties (for statistics)
@@ -209,6 +220,11 @@ class X6500HotplugWorker(object):
               "useftd2xx": self.useftd2xx, \
               "takeover": False, \
               "uploadfirmware": self.uploadfirmware, \
+              "clockspeed": self.clockspeed, \
+              "errorwarning": self.errorwarning, \
+              "errorcritical": self.errorcritical, \
+              "tempwarning": self.tempwarning, \
+              "tempcritical": self.tempcritical, \
             }
             self.children.append(worker.fpgamining.x6500.X6500Worker(self.miner, config, True))
               
