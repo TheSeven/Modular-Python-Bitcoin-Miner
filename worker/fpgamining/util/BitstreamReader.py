@@ -40,7 +40,7 @@ import time
 import struct
 
 # Dictionary for looking up idcodes from device names:
-idcode_lut = {'6slx150fgg484': 0x401d093, '6slx45csg324': 0x4008093}
+idcode_lut = {'6slx150fgg484': 0x401d093, '6slx45csg324': 0x4008093, '6slx150tfgg676': 0x403D093}
 
 class BitFileReadError(Exception):
   _corruptFileMessage = "Unable to parse .bit file; header is malformed. Is it really a Xilinx .bit file?"
@@ -55,6 +55,13 @@ class BitFileMismatch(Exception):
 
   def __init__(self, value=None):
     self.parameter = BitFileReadError._mismatchMessage if value is None else value
+  def __str__(self):
+    return repr(self.parameter)
+    
+class BitFileUnknown(Exception):
+  _unknownMessage = "Bitfile has an unknown UserID! Was this bitstream built for the X6500?"
+  def __init__(self, value=None):
+    self.parameter = BitFileReadError._unknownMessage if value is None else value
   def __str__(self):
     return repr(self.parameter)
   
@@ -75,10 +82,20 @@ class BitFile:
       BitFile._readOrDie(f, 11)
       
       bitfile.designname = BitFile._readField(f, b"a").decode("latin1").rstrip('\0')
+      bitfile.userid = int(bitfile.designname.split(';')[-1].split('=')[-1], base=16)
       bitfile.part = BitFile._readField(f, b"b").decode("latin1").rstrip('\0')
       bitfile.date = BitFile._readField(f, b"c").decode("latin1").rstrip('\0')
       bitfile.time = BitFile._readField(f, b"d").decode("latin1").rstrip('\0')
       bitfile.idcode = idcode_lut[bitfile.part]
+      
+      if bitfile.userid == 0xFFFFFFFF:
+        bitfile.rev = 0
+        bitfile.build = 0
+      elif (bitfile.userid >> 16) & 0xFFFF == 0x4224:
+        bitfile.rev = (bitfile.userid >> 8) & 0xFF
+        bitfile.build = bitfile.userid & 0xFF
+      else:
+        raise BitFileUnknown()
       
       if BitFile._readOrDie(f, 1) != b"e":
         raise BitFileReadError()
@@ -120,6 +137,8 @@ class BitFile:
 
   def __init__(self):
     self.designname = None
+    self.rev = None
+    self.build = None
     self.part = None
     self.date = None
     self.time = None

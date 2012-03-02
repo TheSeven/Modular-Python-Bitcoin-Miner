@@ -32,6 +32,12 @@
 #   useftd2xx: Use FTDI D2XX driver instead direct access via PyUSB (default: false)
 #   takeover: Forcibly grab control over the USB device (default: false, not supported by D2XX)
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
+#   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
+#   ### The following settings aren't implemented yet. They are here just as placeholders:
+#   errorwarning: if the FPGA error rate gets this high (in %), reduce the clock (default: 1)
+#   errorcritical: if the FPGA error rate gets this high (in %), drastically reduce the clock (default: 4)
+#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 35)
+#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 45)
 
 
 import sys
@@ -89,6 +95,20 @@ class X6500Worker(object):
     self.jobinterval = getattr(self, "jobinterval", 30)
     self.pollinterval = getattr(self, "pollinterval", 0.1)
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
+    self.clockspeed = getattr(self, "clockspeed", 150)
+    if self.clockspeed > 300:
+      self.miner.log(self.name + ": ERROR: Clock speed set too high!!! Please be careful with this setting, it could DAMAGE your miner!!!", "rB")
+      self.name = self.name + " (disconnected)"
+      self.device = None
+      self.dead = True
+    if self.clockspeed < 4:
+      self.miner.log(self.name + ": ERROR: Clock speed set too low. Setting clock speed to the minimum (4 MHz).", "rB")
+      self.clockspeed = 4
+    
+    self.errorwarning = getattr(self, "errorwarning", 1)
+    self.errorcritical = getattr(self, "errorcritical", 4)
+    self.tempwarning = getattr(self, "tempwarning", 35)
+    self.tempcritical = getattr(self, "tempcritical", 45)
 
     # Initialize object properties (for statistics)
     # Only children that have died are counted here, the others will report statistics themselves
@@ -167,10 +187,10 @@ class X6500Worker(object):
       for id, fpga in enumerate(fpga_list):
         fpga.id = id
         self.miner.log(self.name + ": Discovering FPGA %d...\n" % id)
-        fpga.jtag.detect()
+        fpga.detect()
         #self.miner.log(self.name + ": Found %i device%s\n" % (fpga.jtag.deviceCount, 's' if fpga.jtag.deviceCount != 1 else ''))
         for idcode in fpga.jtag.idcodes:
-          self.miner.log(self.name + ": FPGA %d: %s\n" % (id, JTAG.decodeIdcode(idcode)))
+          self.miner.log(self.name + ": FPGA %d: %s - Firmware: rev %d, build %d\n" % (id, JTAG.decodeIdcode(idcode), fpga.firmware_rev, fpga.firmware_build))
         if fpga.jtag.deviceCount != 1:
           self.miner.log(self.name + ": Warning: This module needs two JTAG buses with one FPGA each!\n", "rB")
           self.dead = True
@@ -187,6 +207,7 @@ class X6500Worker(object):
           return
         self.miner.log(self.name + ": Firmware file details:\n", "B")
         self.miner.log(self.name + ":   Design Name: %s\n" % bitfile.designname)
+        self.miner.log(self.name + ":   Firmware: rev %d, build: %d\n" % (bitfile.rev, bitfile.build))
         self.miner.log(self.name + ":   Part Name: %s\n" % bitfile.part)
         self.miner.log(self.name + ":   Date: %s\n" % bitfile.date)
         self.miner.log(self.name + ":   Time: %s\n" % bitfile.time)
@@ -204,6 +225,9 @@ class X6500Worker(object):
         FPGA.programBitstream(self.miner, self.device, jtag, bitfile.bitstream, self.progresshandler)
         self.miner.log(self.name + ": Programmed FPGAs in %f seconds\n" % (time.time() - start_time))
         bitfile = None  # Free memory
+        # Update the FPGA firmware details:
+        for fpga in fpga_list:
+          fpga.detect()
       
       self.children.append(X6500FPGA(self.miner, self, fpga_list[0]))
       self.children.append(X6500FPGA(self.miner, self, fpga_list[1]))
@@ -236,6 +260,7 @@ class X6500FPGA(object):
     
     # Fetch config information
     self.name = fpga.name
+    self.firmware_rev = fpga.firmware_rev
     self.jobinterval = parent.jobinterval
     self.pollinterval = parent.pollinterval
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
@@ -252,7 +277,8 @@ class X6500FPGA(object):
     self.invalid = 0       # Number of invalid shares produced by this worker
     self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
     self.temperature = None
-
+    self.clockspeed = parent.clockspeed
+    
     # Statistics lock, ensures that the UI can get a consistent statistics state
     # Needs to be acquired during all operations that affect the above values
     self.statlock = threading.RLock()
@@ -285,6 +311,7 @@ class X6500FPGA(object):
         "invalid": self.invalid, \
         "starttime": self.starttime, \
         "temperature": self.temperature, \
+        "clockspeed": self.clockspeed, \
         "currentpool": self.job.pool.name if self.job != None and self.job.pool != None else None, \
       }
     # Return result
@@ -346,6 +373,14 @@ class X6500FPGA(object):
         # Initialize hash rate tracking data
         self.lasttime = None
         self.lastnonce = None
+
+        if self.firmware_rev > 0:
+          self.miner.log(self.name + ": Setting clock speed to %d MHz...\n" % self.clockspeed, "B")
+          self.fpga.setClockSpeed(self.clockspeed)
+          if self.fpga.readClockSpeed() != self.clockspeed:
+            self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
+            # TODO: Raise an exception and shutdown the FPGA
+          self.mhps = self.clockspeed * 1 # this coefficient is the hashes per clock, change this when that increases :)
         
         # Clear FPGA's nonce queue
         self.fpga.clearQueue()
@@ -357,7 +392,15 @@ class X6500FPGA(object):
 
         # Send validation job to device
         self.miner.log(self.name + ": Verifying correct operation...\n", "B")
-        job = common.Job(self.miner, None, None, binascii.unhexlify(b"5517a3f06a2469f73025b60444e018e61ff2c557ea403ccf3b9c5445dd353710"), b"\0" * 64 + binascii.unhexlify(b"42490d634f2c87761a0cd43f"), None, binascii.unhexlify(b"8fa95303"))
+        job = common.Job( \
+          miner = self.miner, \
+          pool = None, \
+          longpollepoch = None, \
+          state = binascii.unhexlify(b"5517a3f06a2469f73025b60444e018e61ff2c557ea403ccf3b9c5445dd353710"), \
+          data = b"\0" * 64 + binascii.unhexlify(b"42490d634f2c87761a0cd43f"), \
+          target = None, \
+          check = binascii.unhexlify(b"8fa95303") \
+        )
         self.sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it
@@ -366,7 +409,11 @@ class X6500FPGA(object):
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 180 seconds should be sufficient for devices
         # down to about 50MH/s, for slower devices this timeout will need to be increased.
-        self.wakeup.wait(180)
+        if self.firmware_rev > 0:
+          interval = (2**32 / 1000000. / self.mhps) * 1.1
+          self.wakeup.wait(interval)
+        else:
+          self.wakeup.wait(180)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
         # We woke up, but the validation job hasn't succeeded in the mean time.
@@ -507,43 +554,53 @@ class X6500FPGA(object):
           raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (binascii.hexlify(nonce).decode("ascii"), binascii.hexlify(self.job.check).decode("ascii")))
         else:
           # The nonce was correct
-          if self.seconditeration == True:
+          if self.firmware_rev > 0:
+            # The FPGA is running overclocker firmware, so we don't need to use this method to calculate the hashrate
+            # In fact, it will not work because the FPGA will go to sleep after working through all possible nonces
             with self.wakeup:
-              # This is the second iteration. We now know the actual nonce rotation time.
-              delta = (now - oldjob.starttime)
-              # Calculate the hash rate based on the nonce rotation time.
-              self.mhps = 2**32 / 1000000. / delta
-              # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+              self.mhps = self.clockspeed
               self.miner.updatehashrate(self)
-              # Update hash rate tracking information
-              self.lasttime = now
-              self.lastnonce = struct.unpack("<I", nonce)[0]
-              # Wake up the main thread
               self.checksuccess = True
               self.wakeup.notify()
           else:
-            with self.wakeup:
-              # This was the first iteration. Wait for another one to figure out nonce rotation time.
-              oldjob.starttime = now
-              self.seconditeration = True
+            if self.seconditeration == True:
+              with self.wakeup:
+                # This is the second iteration. We now know the actual nonce rotation time.
+                delta = (now - oldjob.starttime)
+                # Calculate the hash rate based on the nonce rotation time.
+                self.mhps = 2**32 / 1000000. / delta
+                # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+                self.miner.updatehashrate(self)
+                # Update hash rate tracking information
+                self.lasttime = now
+                self.lastnonce = struct.unpack("<I", nonce)[0]
+                # Wake up the main thread
+                self.checksuccess = True
+                self.wakeup.notify()
+            else:
+              with self.wakeup:
+                # This was the first iteration. Wait for another one to figure out nonce rotation time.
+                oldjob.starttime = now
+                self.seconditeration = True
       else:
-        # Adjust hash rate tracking
-        delta = (now - self.lasttime)
-        nonce = struct.unpack("<I", nonce)[0]
-        estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
-        noncediff = nonce - (estimatednonce & 0xffffffff)
-        if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
-        elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
-        estimatednonce = estimatednonce + noncediff
-        # Calculate the hash rate based on adjusted tracking information
-        currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
-        weight = min(0.5, delta / 100.)
-        self.mhps = (1 - weight) * self.mhps + weight * currentmhps
-        # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-        self.miner.updatehashrate(self)
-        # Update hash rate tracking information
-        self.lasttime = now
-        self.lastnonce = nonce
+        if self.firmware_rev == 0:
+          # Adjust hash rate tracking
+          delta = (now - self.lasttime)
+          nonce = struct.unpack("<I", nonce)[0]
+          estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
+          noncediff = nonce - (estimatednonce & 0xffffffff)
+          if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
+          elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
+          estimatednonce = estimatednonce + noncediff
+          # Calculate the hash rate based on adjusted tracking information
+          currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
+          weight = min(0.5, delta / 100.)
+          self.mhps = (1 - weight) * self.mhps + weight * currentmhps
+          # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+          self.miner.updatehashrate(self)
+          # Update hash rate tracking information
+          self.lasttime = now
+          self.lastnonce = nonce
       
 
   # This function uploads a job to the device
