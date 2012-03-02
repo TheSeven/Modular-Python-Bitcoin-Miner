@@ -336,8 +336,8 @@ if __name__ == "__main__":
     miner.log("Terminated by Ctrl+C\n", "rB")
     miner.logqueue.join()
     exit(0)
-  except:
-    miner.log(traceback.format_exc(), "rB")
-    miner.logqueue.join()
-    exit(1)
+  #except:
+  #  miner.log(traceback.format_exc(), "rB")
+  #  miner.logqueue.join()
+  #  exit(1)
 

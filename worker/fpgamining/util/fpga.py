@@ -247,12 +247,12 @@ class FPGA:
 
     #self.logger.reportDebug("%d: Nonce completely read: %08x" % (self.id, nonce))
 
-    return nonce
+    return struct.pack("<I", nonce)
   
   # TODO: This may not actually clear the queue, but should be correct most of the time.
   def _old_clearQueue(self):
     with self.ft232r.mutex:
-      #self.miner.log(self.name + ": FPGA: Clearing queue...\n")
+      self.miner.log(self.name + ": FPGA: Clearing queue...\n")
       self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
@@ -273,16 +273,15 @@ class FPGA:
     
     midstate = job.state[::-1]
     data = job.data[75:63:-1]
+    data = midstate + data + b"\0"
 
     with self.ft232r.mutex:
       #self.miner.log(self.name + ": FPGA: Loading job data...\n")
       
-      self.wake()
+      if self.asleep: self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
       self.jtag.shift_ir()
-
-      data = midstate + data + b"\0"
 
       for i in range(len(data)):
         x = struct.unpack("B", data[i : i + 1])[0]
@@ -303,7 +302,7 @@ class FPGA:
 
     if nonce == 0xFFFFFFFF:
       return None
-    return nonce
+    return struct.pack("<I", nonce)
   
   def _clearQueue(self):
       #self.miner.log(self.name + ": FPGA: Clearing queue...\n")
@@ -319,23 +318,22 @@ class FPGA:
     # so we skip that. Of the last 64 bytes, 52 bytes are constant and
     # not needed by the FPGA.
     
-    start_time = time.time()
+    #start_time = time.time()
     
-    midstate = hexstr2array(job.midstate)
-    data = hexstr2array(job.data)[64:64+12]
-    data = midstate + data
+    data = job.state + job.data[64:76]
 
     words = []
 
     for i in range(11):
-      word = data[i*4] | (data[i*4+1] << 8) | (data[i*4+2] << 16) | (data[i*4+3] << 24)
+      word = struct.unpack(">I", data[i*4 : i*4+4])[0]
+      #word = worddata[0] | (worddata[1] << 8) | (worddata[2] << 16) | (worddata[3] << 24)
       words.append(word)
 
     if not self._burstWrite(1, words):
       #self.miner.log(self.name + ": FPGA: ERROR: Loading job data failed; readback failure", "rB")
       return
     
-    self.logger.reportDebug("%d: Job data loaded in %.3f seconds" % (self.id, time.time() - start_time))
+    #self.logger.reportDebug("%d: Job data loaded in %.3f seconds" % (self.id, time.time() - start_time))
     #self.miner.log(self.name + ": FPGA: Job data loaded")
   
   # Read the FPGA's current clock speed, in MHz
