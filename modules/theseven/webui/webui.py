@@ -50,7 +50,20 @@ class WebUI(BaseFrontend):
   can_autodetect = True
   settings = dict(BaseFrontend.settings, **{
     "port": {"title": "HTTP port", "type": "int", "position": 1000},
-    "users": {"title": "Users", "type": "json", "position": 2000},
+    "users":  {
+      "title": "Users",
+      "type": "dict",
+      "key": {"title": "User:Password", "type": "string"},
+      "value": {
+        "title": "Privilege level",
+        "type": "enum",
+        "values": [
+          {"value": "readonly", "title": "Read only access"},
+          {"value": "admin", "title": "Full access"},
+        ],
+      },
+      "position": 2000
+    },
     "log_buffer_max_length": {"title": "Maximum log buffer length", "type": "int", "position": 3000},
     "log_buffer_purge_size": {"title": "Log buffer purge size", "type": "int", "position": 3010},
   })
@@ -254,7 +267,7 @@ class RequestHandler(BaseHTTPRequestHandler):
   def check_auth(self):
     # Check authentication and figure out privilege level
     authdata = self.headers.get("authorization", None)
-    credentials = None
+    credentials = ""
     if authdata != None: 
       authdata = authdata.split(" ", 1)
       if authdata[0].lower() == "basic":

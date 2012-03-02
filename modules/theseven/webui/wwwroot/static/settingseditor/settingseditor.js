@@ -38,6 +38,192 @@ mod.settingseditor = {
         mod.csc.request("settingseditor", "readsettings", {"id": config.id}, function(data)
         {
             if (data.error) return error(data.error);
+            
+            function makeTag(tag, type, id, value, fill)
+            {
+                var input = document.createElement(tag);
+                if (id) input.id = id;
+                if (type) input.type = type;
+                if (value !== null) input.value = value;
+                if (fill)
+                {
+                    input.style.boxSizing = "border-box";
+                    input.style.MozBoxSizing = "border-box";
+                    input.style.MsBoxSizing = "border-box";
+                    input.style.width = "100%";
+                }
+                return input;
+            }
+
+            var editors =
+            {
+                "string": function(range, setting, id)
+                {
+                    var input = makeTag("input", "text", id, setting.value, true);
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        return input.value;
+                    };
+                },
+                
+                "password": function(range, setting, id)
+                {
+                    var input = makeTag("input", "password", id, setting.value, true);
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        return input.value;
+                    };
+                },
+                
+                "multiline": function(range, setting, id)
+                {
+                    var input = makeTag("textarea", null, id, setting.value, true);
+                    input.style.height = "100px";
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        return input.value;
+                    };
+                },
+                
+                "json": function(range, setting, id)
+                {
+                    var input = makeTag("textarea", null, id, JSON.stringify(setting.value), true);
+                    input.style.height = "100px";
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        return JSON.parse(input.value);
+                    };
+                },
+                
+                "int": function(range, setting, id)
+                {
+                    var input = makeTag("input", "text", id, setting.value, true);
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        var value = parseInt(input.value);
+                        if (isNaN(value)) throw nls("Could not parse integer");
+                        return value;
+                    };
+                },
+                
+                "float": function(range, setting, id)
+                {
+                    var input = makeTag("input", "text", id, setting.value, true);
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        var value = parseFloat(input.value);
+                        if (isNaN(value)) throw nls("Could not parse float");
+                        return value;
+                    };
+                },
+                
+                "boolean": function(range, setting, id)
+                {
+                    var input = makeTag("input", "checkbox", id, null, false);
+                    input.checked = setting.value;
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        return input.checked;
+                    };
+                },
+                
+                "enum": function(range, setting, id)
+                {
+                    var input = makeTag("select", null, id, null, true);
+                    for (var i in setting.spec.values)
+                        if (setting.spec.values.hasOwnProperty(i))
+                        {
+                            var option = document.createElement("option");
+                            option.value = setting.spec.values[i].value;
+                            if (setting.spec.values[i].value == setting.value)
+                                option.selected = "selected";
+                            option.appendChild(document.createTextNode(setting.spec.values[i].title));
+                            input.appendChild(option);
+                        }
+                    range.appendChild(input);
+                    this.getValue = function()
+                    {
+                        return input.options[input.selectedIndex].value;
+                    };
+                },
+                
+                "dict": function(range, setting, id)
+                {
+                    var table = document.createElement("table");
+                    var tbody = document.createElement("tbody");
+                    var tr = document.createElement("tr");
+                    var th = document.createElement("th");
+                    th.appendChild(document.createTextNode(setting.spec.key.title));
+                    tr.appendChild(th);
+                    th = document.createElement("th");
+                    th.appendChild(document.createTextNode(setting.spec.value.title));
+                    tr.appendChild(th);
+                    th = document.createElement("th");
+                    var addButton = makeTag("input", "button", null, "+", true);
+                    th.appendChild(addButton);
+                    tr.appendChild(th);
+                    tbody.appendChild(tr);
+                    table.style.width = "100%";
+                    var rows = [];
+                    for (var i in setting.value)
+                        if (setting.value.hasOwnProperty(i))
+                            rows.push(makeRow(i, setting.value[i]));
+                    table.appendChild(tbody);
+                    range.appendChild(table);
+                    addButton.onclick = function(e)
+                    {
+                        rows.push(makeRow("", ""));
+                    };
+                    function makeRow(key, value)
+                    {
+                        var keysetting = {"spec": setting.spec.key, "value": key};
+                        var valuesetting = {"spec": setting.spec.value, "value": value};
+                        var row = {"key": keysetting, "value": valuesetting};
+                        var tr = document.createElement("tr");
+                        var td = document.createElement("td");
+                        var editor = editors[row.key.spec.type];
+                        if (editor) row.key.editor = new editor(td, row.key, null);
+                        tr.appendChild(td);
+                        td = document.createElement("td");
+                        editor = editors[row.value.spec.type];
+                        if (editor) row.value.editor = new editor(td, row.value, null);
+                        tr.appendChild(td);
+                        td = document.createElement("td");
+                        var removeButton = makeTag("input", "button", null, "-", true);
+                        td.appendChild(removeButton);
+                        tr.appendChild(td);
+                        tbody.appendChild(tr);
+                        removeButton.onclick = function(e)
+                        {
+                            var idx = rows.indexOf(row);
+                            if (idx != -1) rows.splice(idx, 1);
+                            if (tr.parentNode) tr.parentNode.removeChild(tr);
+                        }
+                        return row;
+                    }
+                    this.getValue = function()
+                    {
+                        var dict = {};
+                        for (var i in rows)
+                            if (rows.hasOwnProperty(i))
+                            {
+                                var key = rows[i].key.editor ? rows[i].key.editor.getValue() : rows[i].key.value;
+                                var value = rows[i].value.editor ? rows[i].value.editor.getValue() : rows[i].value.value;
+                                if (dict.hasOwnProperty(key)) throw nls("Key collision in dict") + ": \"" + key + "\"";
+                                dict[key] = value;
+                            }
+                        return dict;
+                    };
+                },
+            };
+            
             mod.dom.clean(range);
             var form = document.createElement("form");
             var table = document.createElement("table");
@@ -46,61 +232,25 @@ mod.settingseditor = {
                 if (data.settings.hasOwnProperty(i))
                 {
                     var setting = data.settings[i];
-                    var input;
-                    switch (setting.spec.type)
-                    {
-                        case "string":
-                        case "int":
-                        case "float":
-                        case "password":
-                            input = document.createElement("input");
-                            input.type = setting.spec.type == "password" ? "password" : "text";
-                            input.value = setting.value;
-                            break;
-                        case "multiline":
-                        case "json":
-                            input = document.createElement("textarea");
-                            input.style.height = "100px";
-                            input.value = setting.spec.type == "json" ? JSON.stringify(setting.value) : setting.value;
-                            break;
-                        case "boolean":
-                            input = document.createElement("input");
-                            input.type = "checkbox";
-                            input.checked = setting.value;
-                            break;
-                        default: continue;
-                    }
-                    setting.input = input;
+                    var id = id = "box_" + uid + "_settinginput" + (inputindex++);
+                    var editor = editors[setting.spec.type];
+                    if (!editor) continue;
                     var tr = document.createElement("tr");
                     var th = document.createElement("th");
                     var td = document.createElement("td");
                     var label = document.createElement("label");
-                    if (setting.spec.type != "boolean")
-                    {
-                        input.style.boxSizing = "border-box";
-                        input.style.MozBoxSizing = "border-box";
-                        input.style.MsBoxSizing = "border-box";
-                        input.style.width = "100%";
-                    }
-                    input.id = "box_" + uid + "_settinginput" + (inputindex++);
-                    label.htmlFor = input.id;
+                    setting.editor = new editor(td, setting, id);
+                    label.htmlFor = id;
+                    th.className = "box_form_label";
                     var title = setting.spec.title + (setting.spec.type == "boolean" ? "" : ":");
                     label.appendChild(document.createTextNode(title));
-                    th.className = "box_form_label";
-                    td.appendChild(input);
                     if (setting.spec.type == "boolean") td.appendChild(label);
                     else th.appendChild(label);
                     tr.appendChild(th);
                     tr.appendChild(td);
                     tbody.appendChild(tr);
                 }
-            var submit = document.createElement("input");
-            submit.type = "submit";
-            submit.value = nls("Save");
-            submit.style.boxSizing = "border-box";
-            submit.style.MozBoxSizing = "border-box";
-            submit.style.MsBoxSizing = "border-box";
-            submit.style.width = "100%";
+            var submit = makeTag("input", "submit", null, nls("Save"), true);
             table.style.width = "100%";
             table.appendChild(tbody);
             form.appendChild(table);
@@ -117,46 +267,17 @@ mod.settingseditor = {
                     if (data.settings.hasOwnProperty(i))
                     {
                         var setting = data.settings[i];
-                        var invalid = false;
-                        switch (setting.spec.type)
-                        {
-                            case "string":
-                            case "password":
-                                settings[setting.name] = setting.input.value;
+                        if (setting.editor)
+                            try
+                            {
+                                settings[setting.name] = setting.editor.getValue();
+                            }
+                            catch (e)
+                            {
+                                errorMsg = nls("Invalid value in field") + " \"" + setting.spec.title + "\": " + e;
                                 break;
-                            case "int":
-                                settings[setting.name] = parseInt(setting.input.value);
-                                if (isNaN(settings[setting.name])) invalid = true;
-                                break;
-                            case "float":
-                                settings[setting.name] = parseFloat(setting.input.value);
-                                if (isNaN(settings[setting.name])) invalid = true;
-                                break;
-                            case "multiline":
-                            case "json":
-                                settings[setting.name] = setting.input.value;
-                                if (setting.spec.type == "json")
-                                    try
-                                    {
-                                        log(settings[setting.name]);
-                                        settings[setting.name] = JSON.parse(settings[setting.name]);
-                                        log(settings[setting.name]);
-                                    }
-                                    catch (e)
-                                    {
-                                        invalid = true;
-                                    }
-                                break;
-                            case "boolean":
-                                settings[setting.name] = setting.input.checked;
-                                break;
-                            default: settings[setting.name] = setting.value;
-                        }
-                        if (invalid)
-                        {
-                            errorMsg = nls("Invalid value in field") + " \"" + setting.spec.label + "\"!";
-                            break;
-                        }
+                            }
+                        else settings[setting.name] = setting.value;
                     }
                 if (!errorMsg && config.validationcallback) errorMsg = config.validationcallback(settings);
                 if (errorMsg)
@@ -185,6 +306,7 @@ mod.settingseditor = {
                 }
                 return killEvent(e);
             };
+            
         }, {"cache": "none"});
     }
 
