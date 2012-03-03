@@ -34,8 +34,8 @@
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
 #   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
 #   ### The following settings aren't implemented yet. They are here just as placeholders:
-#   errorwarning: if the FPGA error rate gets this high (in %), reduce the clock (default: 1)
-#   errorcritical: if the FPGA error rate gets this high (in %), drastically reduce the clock (default: 4)
+#   invalidwarning: if the FPGA invalid rate gets this high (in %), reduce the clock (default: 1)
+#   invalidcritical: if the FPGA invalid rate gets this high (in %), drastically reduce the clock (default: 4)
 #   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 35)
 #   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 45)
 
@@ -105,8 +105,8 @@ class X6500Worker(object):
       self.miner.log(self.name + ": ERROR: Clock speed set too low. Setting clock speed to the minimum (4 MHz).", "rB")
       self.clockspeed = 4
     
-    self.errorwarning = getattr(self, "errorwarning", 1)
-    self.errorcritical = getattr(self, "errorcritical", 4)
+    self.invalidwarning = getattr(self, "invalidwarning", 1)
+    self.invalidcritical = getattr(self, "invalidcritical", 4)
     self.tempwarning = getattr(self, "tempwarning", 35)
     self.tempcritical = getattr(self, "tempcritical", 45)
 
@@ -239,15 +239,21 @@ class X6500Worker(object):
       self.miner.log(self.name + ": Error while booting board: %s\n" % traceback.format_exc(), "rB")
       self.dead = True
     
-    # Read FPGA temperatures every second   
     try:    
       while True:
         time.sleep(3)
+        
+        # Read FPGA temperatures
         (temp0, temp1) = self.device.read_temps()
         self.children[0].temperature = temp0
         self.children[1].temperature = temp1
+        
+        # Check for unsafe operation, and downclock as necessary:
+        
     except Exception as e:
       self.miner.log(self.name + ": Reading FPGA temperatures failed: %s\n" % e, "y")
+      
+    
         
         
 # FPGA handler main class, child worker of X6500Worker
@@ -281,6 +287,11 @@ class X6500FPGA(object):
     self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
     self.temperature = None
     self.clockspeed = parent.clockspeed
+    
+    self.invalidwarning = parent.invalidwarning
+    self.invalidcritical = parent.invalidcritical
+    self.tempwarning = parent.tempwarning
+    self.tempcritical = parent.tempcritical
     
     # Statistics lock, ensures that the UI can get a consistent statistics state
     # Needs to be acquired during all operations that affect the above values
@@ -459,6 +470,10 @@ class X6500FPGA(object):
 
           # Upload the piece of work to the device
           self.sendjob(job)
+          
+          # Go through the safety checks and reduce the clock if necessary
+          self.safetycheck()
+          
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
           # If the job was already caught by a long poll while we were uploading it,
@@ -623,4 +638,44 @@ class X6500FPGA(object):
     self.job = self.nextjob
     self.job.starttime = now
     self.nextjob = None
-        
+  
+  # Check the invalid rate and temperature, and downclock the FPGA if these exceed safe values
+  def safetycheck(self):
+    total = self.accepted + self.rejected + self.invalid
+    if total == 0:
+      return
+      
+    invalid_pct = 100. * self.invalid / total
+    
+    downclock = 0
+    if self.invalid > 5:
+      if invalid_pct > self.invalidwarning: downclock = -2
+      if invalid_pct > self.invalidcritical: downclock = -20
+    if self.temperature is not None and time.time() > self.starttime + 20:
+      if self.temperature > self.tempwarning: downclock = min(downclock, -2)
+      if self.temperature > self.tempcritical: downclock = min(downclock, -20)
+    
+    if downclock < 0:
+      self.miner.log(self.name + ": WARNING: Detected unsafe condition for the FPGA!\n", "rB")
+      if self.firmware_rev > 0:
+        newclock = max(self.clockspeed + downclock, 4)
+        self.miner.log(self.name + ": Reducing clock speed to %d MHz...\n" % newclock, "rB")
+        self.fpga.setClockSpeed(newclock)
+        if self.fpga.readClockSpeed() != newclock:
+          self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
+          # TODO: Raise an exception and shutdown the FPGA
+        self.clockspeed = newclock
+        # reset stats:
+        with self.statlock:
+          self.mhps = self.clockspeed * 1 # this coefficient is the hashes per clock, change this when that increases :)
+          self.mhashes = 0       # Total megahashes calculated since startup
+          self.jobsaccepted = 0  # Total jobs accepted
+          self.accepted = 0
+          self.rejected = 0
+          self.invalid = 0
+          self.starttime = time.time()
+        self.miner.updatehashrate(self)
+      else:
+        self.miner.log(self.name + " is running old firmware, can not automatically reduce clock!\n", "rB")
+        self.miner.log(self.name + ": Please update firmware to a recent revision.\n", "rB")
+    

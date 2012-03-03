@@ -265,7 +265,7 @@ class Miner(object):
     with job.pool.statlock:
       job.pool.jobsaccepted = job.pool.jobsaccepted + 1
       job.pool.score = job.pool.score + self.jobstartbias
-    self.log("Mining %s:%s:%s on %s\n" % (job.pool.name, binascii.hexlify(job.state).decode("ascii"), binascii.hexlify(job.data[64:76]).decode("ascii"), worker.name))
+    self.log(worker.name + ": Mining %s:%s:%s\n" % (job.pool.name, binascii.hexlify(job.state).decode("ascii"), binascii.hexlify(job.data[64:76]).decode("ascii")))
     return job
 
   def newblock(self, job):
