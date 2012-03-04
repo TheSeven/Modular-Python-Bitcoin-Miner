@@ -134,9 +134,9 @@ class CursesUI(object):
       try: tempcritical = worker['tempcritical']
       except: tempcritical = 50
       if invalidpercent > invalidcritical or ("temperature" in worker and worker['temperature'] != None and worker['temperature'] > tempcritical):
-        namecolor = "r" if len(worker["children"]) > 0 else ""
+        namecolor = "r" if len(worker["children"]) == 0 else ""
       elif invalidpercent > invalidwarning or ("temperature" in worker and worker['temperature'] != None and worker['temperature'] > tempwarning):
-        namecolor = "y" if len(worker["children"]) > 0 else ""
+        namecolor = "y" if len(worker["children"]) == 0 else ""
       else:
         namecolor = ""
       workerstats.append({ \
