@@ -33,11 +33,10 @@
 #   takeover: Forcibly grab control over the USB device (default: false, not supported by D2XX)
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
 #   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
-#   ### The following settings aren't implemented yet. They are here just as placeholders:
 #   invalidwarning: if the FPGA invalid rate gets this high (in %), reduce the clock (default: 1)
-#   invalidcritical: if the FPGA invalid rate gets this high (in %), drastically reduce the clock (default: 4)
-#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 35)
-#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 45)
+#   invalidcritical: if the FPGA invalid rate gets this high (in %), drastically reduce the clock (default: 10)
+#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 40)
+#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 50)
 
 
 import sys
@@ -104,11 +103,12 @@ class X6500Worker(object):
     if self.clockspeed < 4:
       self.miner.log(self.name + ": ERROR: Clock speed set too low. Setting clock speed to the minimum (4 MHz).", "rB")
       self.clockspeed = 4
+    self.startingclock = self.clockspeed # the software 
     
     self.invalidwarning = getattr(self, "invalidwarning", 1)
-    self.invalidcritical = getattr(self, "invalidcritical", 4)
-    self.tempwarning = getattr(self, "tempwarning", 35)
-    self.tempcritical = getattr(self, "tempcritical", 45)
+    self.invalidcritical = getattr(self, "invalidcritical", 10)
+    self.tempwarning = getattr(self, "tempwarning", 40)
+    self.tempcritical = getattr(self, "tempcritical", 50)
 
     # Initialize object properties (for statistics)
     # Only children that have died are counted here, the others will report statistics themselves
@@ -287,6 +287,7 @@ class X6500FPGA(object):
     self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
     self.temperature = None
     self.clockspeed = parent.clockspeed
+    self.startingclock = self.clockspeed
     
     self.invalidwarning = parent.invalidwarning
     self.invalidcritical = parent.invalidcritical
@@ -327,6 +328,10 @@ class X6500FPGA(object):
         "temperature": self.temperature, \
         "clockspeed": self.clockspeed, \
         "currentpool": self.job.pool.name if self.job != None and self.job.pool != None else None, \
+        "invalidwarning": self.invalidwarning, \
+        "invalidcritical": self.invalidcritical, \
+        "tempwarning": self.tempwarning, \
+        "tempcritical": self.tempcritical, \
       }
     # Return result
     return statistics
@@ -356,7 +361,7 @@ class X6500FPGA(object):
   def main(self):
 
     # Make sure the FPGA is put to sleep when MPBM exits
-    atexit.register(self.fpga.sleep)
+    #atexit.register(self.fpga.sleep)
     
     # Loop forever. If anything fails, restart.
     while True:
@@ -639,37 +644,44 @@ class X6500FPGA(object):
     self.job.starttime = now
     self.nextjob = None
   
-  # Check the invalid rate and temperature, and downclock the FPGA if these exceed safe values
   def safetycheck(self):
+    """Check the invalid rate and temperature, and reduce the FPGA clock if these exceed safe values"""
+    
+    warning = False
+    critical = False
+    
     total = self.accepted + self.rejected + self.invalid
-    if total == 0:
-      return
-      
-    invalid_pct = 100. * self.invalid / total
+    if total != 0:
+      invalid_pct = 100. * self.invalid / total
+      if self.invalid > 3 and invalid_pct > self.invalidwarning:
+        warning = True
+      if self.invalid > 10 and invalid_pct > self.invalidcritical:
+        critical = True
     
-    downclock = 0
-    if self.invalid > 5:
-      if invalid_pct > self.invalidwarning: downclock = -2
-      if invalid_pct > self.invalidcritical: downclock = -20
     if self.temperature is not None and time.time() > self.starttime + 20:
-      if self.temperature > self.tempwarning: downclock = min(downclock, -2)
-      if self.temperature > self.tempcritical: downclock = min(downclock, -20)
+      if self.temperature > self.tempwarning: 
+        warning = True
+      if self.temperature > self.tempcritical: 
+        critical = True
     
-    if downclock < 0:
-      self.miner.log(self.name + ": WARNING: Detected unsafe condition for the FPGA!\n", "rB")
+    if warning: downclock = 2
+    if critical: downclock = 20
+    
+    if warning or critical:
+      self.miner.log(self.name + ": %s: Detected unsafe condition for the FPGA!\n" % ("CRITICAL" if critical else "WARNING"), "rB")
       if self.firmware_rev > 0:
-        newclock = max(self.clockspeed + downclock, 4)
+        newclock = max(self.clockspeed - downclock, 4)
         self.miner.log(self.name + ": Reducing clock speed to %d MHz...\n" % newclock, "rB")
         self.fpga.setClockSpeed(newclock)
         if self.fpga.readClockSpeed() != newclock:
           self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
-          # TODO: Raise an exception and shutdown the FPGA
+          raise Exception("Setting FPGA clock speed failed")
         self.clockspeed = newclock
-        # reset stats:
+        # Reset stats:
         with self.statlock:
-          self.mhps = self.clockspeed * 1 # this coefficient is the hashes per clock, change this when that increases :)
-          self.mhashes = 0       # Total megahashes calculated since startup
-          self.jobsaccepted = 0  # Total jobs accepted
+          self.mhps = self.clockspeed * 1
+          self.mhashes = 0
+          self.jobsaccepted = 0
           self.accepted = 0
           self.rejected = 0
           self.invalid = 0
@@ -678,4 +690,29 @@ class X6500FPGA(object):
       else:
         self.miner.log(self.name + " is running old firmware, can not automatically reduce clock!\n", "rB")
         self.miner.log(self.name + ": Please update firmware to a recent revision.\n", "rB")
+        if critical:
+          self.miner.log(self.name + ": Putting FPGA to sleep to protect it!!!\n", "rB")
+          self.fpga.sleep()
+          raise Exception("FPGA critical state")
     
+    elif total > 100 and time.time() > self.starttime + 600 and invalid_pct < self.invalidwarning and self.temperature < self.tempwarning:
+      # The FPGA is safe, and has been for some time, maybe we should increase the clock?
+      # To be safe, don't increase the clock higher than the speed the user set in the config file
+      newclock = min(self.clockspeed + 2, self.startingclock)
+      if newclock > self.clockspeed:
+        self.miner.log(self.name + ": Increasing clock speed to %d MHz.\n", "B")
+        self.fpga.setClockSpeed(newclock)
+        if self.fpga.readClockSpeed() != newclock:
+          self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
+          raise Exception("Setting FPGA clock speed failed")
+        self.clockspeed = newclock
+        # Reset stats:
+        with self.statlock:
+          self.mhps = self.clockspeed * 1
+          self.mhashes = 0
+          self.jobsaccepted = 0
+          self.accepted = 0
+          self.rejected = 0
+          self.invalid = 0
+          self.starttime = time.time()
+        self.miner.updatehashrate(self)

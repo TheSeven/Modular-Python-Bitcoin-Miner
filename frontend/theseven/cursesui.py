@@ -125,16 +125,30 @@ class CursesUI(object):
       except: invalidpercent = 0
       try: efficiency = worker["accepted"] / worker["mhashes"] * 429503.2833
       except: efficiency = 0
+      try: invalidwarning = worker['invalidwarning']
+      except: invalidwarning = 1
+      try: invalidcritical = worker['invalidcritical']
+      except: invalidcritical = 10
+      try: tempwarning = worker['tempwarning']
+      except: tempwarning = 40
+      try: tempcritical = worker['tempcritical']
+      except: tempcritical = 50
+      if invalidpercent > invalidcritical or ("temperature" in worker and worker['temperature'] != None and worker['temperature'] > tempcritical):
+        namecolor = "r" if len(worker["children"]) > 0 else ""
+      elif invalidpercent > invalidwarning or ("temperature" in worker and worker['temperature'] != None and worker['temperature'] > tempwarning):
+        namecolor = "y" if len(worker["children"]) > 0 else ""
+      else:
+        namecolor = ""
       workerstats.append({ \
-        "name": (" " * indent + worker["name"], bold, "l"), \
+        "name": (" " * indent + worker["name"], namecolor + bold, "l"), \
         "jobsaccepted": ("%d" % worker["jobsaccepted"], bold, "r"), \
         "accepted": ("%.0f" % worker["accepted"], bold, "r"), \
         "rejected": ("%.0f (%.1f%%)" % (worker["rejected"], stalepercent), "r" + bold if stalepercent > 5 else "g" + bold if stalepercent < 1 else "y" + bold, "r"), \
-        "invalid": ("%.0f (%.1f%%)" % (worker["invalid"], invalidpercent), "r" + bold if invalidpercent > 5 else "g" + bold if invalidpercent < 1 else "y" + bold, "r"), \
+        "invalid": ("%.0f (%.1f%%)" % (worker["invalid"], invalidpercent), "r" + bold if invalidpercent > invalidcritical else "g" + bold if invalidpercent < invalidwarning else "y" + bold, "r"), \
         "mhps": ("%.2f" % worker["mhps"], bold, "r"), \
         "avgmhps": ("%.2f" % (worker["mhashes"] / uptime), bold, "r"), \
         "efficiency": ("%.1f%%" % efficiency, "r" + bold if efficiency < 80 else "g" + bold if efficiency > 95 else "y" + bold, "r"), \
-        "temperature": ("%.1f" % worker["temperature"], "r" + bold if worker["temperature"] > 60 else "y" + bold if worker["temperature"] > 50 else "g" + bold, "c") if "temperature" in worker and worker["temperature"] != None else ("", bold, "c"), \
+        "temperature": ("%.1f" % worker["temperature"], "r" + bold if worker["temperature"] > tempcritical else "y" + bold if worker["temperature"] > tempwarning else "g" + bold, "c") if "temperature" in worker and worker["temperature"] != None else ("", bold, "c"), \
         "currentpool": (worker["currentpool"] if "currentpool" in worker and worker["currentpool"] != None else "Unknown", bold, "c"), \
       })
       self.translateworkerdata(worker["children"], workerstats, indent + 2)

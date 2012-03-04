@@ -78,6 +78,7 @@ class FPGA:
     self.firmware_build = 0
   
   def detect(self):
+    """Detect all devices on the JTAG chain"""
     with self.ft232r.mutex:
       self.jtag.detect()
 
@@ -369,7 +370,6 @@ class FPGA:
     if self.firmware_rev == 0:
       with self.ft232r.mutex:
         self.miner.log(self.name + ": Going to sleep...\n")
-        '''
         self.jtag.tap.reset()
         self.jtag.instruction(JSHUTDOWN)
         self.jtag.shift_ir()
@@ -377,7 +377,6 @@ class FPGA:
         self.jtag.tap.reset()
         
         self.ft232r.flush()
-        '''
     self.asleep = True
   
   def wake(self):
