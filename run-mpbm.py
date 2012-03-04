@@ -89,14 +89,14 @@ if __name__ == "__main__":
     examplesources = WorkSourceGroup(core)
     examplesources.settings.name = "Example/donation work sources"
     examplesources.settings.priority = 10
-    newroot.add_work_source(usersources)
+    newroot.add_work_source(examplesources)
     # Register the new root work source
     core.set_root_work_source(newroot)
     # Add example work sources to their group
     worksource = BCJSONRPCWorkSource(core)
     worksource.set_blockchain(blockchain)
     worksource.settings.name = "BTCMP (donation)"
-    worksource.settings.priority = 2
+    worksource.settings.priority = 1
     worksource.settings.host = "rr.btcmp.com"
     worksource.settings.port = 7332
     worksource.settings.username = "TheSeven.worker"
@@ -106,19 +106,21 @@ if __name__ == "__main__":
     worksource = BCJSONRPCWorkSource(core)
     worksource.set_blockchain(blockchain)
     worksource.settings.name = "BTCGuild (donation)"
-    worksource.settings.priority = 6
+    worksource.settings.priority = 1
     worksource.settings.host = "btcguild.com"
     worksource.settings.username = "TheSeven_guest"
     worksource.settings.password = "x"
+    worksource.settings.longpollconnections = 0
     worksource.apply_settings()
     examplesources.add_work_source(worksource)
     worksource = BCJSONRPCWorkSource(core)
     worksource.set_blockchain(blockchain)
     worksource.settings.name = "Eligius (donation)"
-    worksource.settings.priority = 2
+    worksource.settings.priority = 1
     worksource.settings.host = "mining.eligius.st"
     worksource.settings.port = 8337
     worksource.settings.username = "1FZMW7BCzExsLmErT2o8oCMLcMYKwd7sHQ"
+    worksource.settings.longpollconnections = 0
     worksource.apply_settings()
     examplesources.add_work_source(worksource)
     

@@ -36,6 +36,7 @@ class WorkSourceGroup(BaseWorkSource):
 
   version = "core.worksourcegroup v0.1.0alpha"
   default_name = "Untitled work source group"
+  is_group = True,
   settings = dict(BaseWorkSource.settings, **{
   })
 
@@ -63,12 +64,12 @@ class WorkSourceGroup(BaseWorkSource):
     return super(WorkSourceGroup, self).deflate()
 
 
-  def accepts_child_type(self, type):
-    return type.isinstance(BaseWorkSource)
-  
-  
   def add_work_source(self, worksource):
     with self.start_stop_lock:
+      w = self
+      while w:
+        if w == worksource: raise Exception("Trying to move work source %s into itself or one of its descendants!" % worksource.settings.name)
+        w = w.get_parent()
       old_parent = worksource.get_parent()
       if old_parent: old_parent.remove_work_source(worksource)
       worksource.set_parent(self)
@@ -77,7 +78,7 @@ class WorkSourceGroup(BaseWorkSource):
           if self.started:
             try: worksource.start()
             except Exception as e:
-              self.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+              self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
           self.children.append(worksource)
 
     
@@ -89,7 +90,7 @@ class WorkSourceGroup(BaseWorkSource):
           if self.started:
             try: worksource.stop()
             except Exception as e:
-              self.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+              self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
           self.children.remove(worksource)
         
         
@@ -100,7 +101,7 @@ class WorkSourceGroup(BaseWorkSource):
         for worksource in self.children:
           try: worksource.start()
           except Exception as e:
-            self.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+            self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
       self.started = True
   
   
@@ -111,5 +112,5 @@ class WorkSourceGroup(BaseWorkSource):
         for worksource in self.children:
           try: worksource.stop()
           except Exception as e:
-            self.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+            self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
       self.started = False

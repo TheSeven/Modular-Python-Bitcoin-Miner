@@ -54,7 +54,7 @@ def deletefrontend(core, webui, httprequest, path, request, privileges):
   if privileges != "admin": return httprequest.send_response(403)
   try:
     frontend = core.registry.get(request["id"])
-    core.remove_frontend(frontend);
-    frontend.destroy();
+    core.remove_frontend(frontend)
+    frontend.destroy()
     return {}
   except: return {"error": traceback.format_exc()}

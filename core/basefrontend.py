@@ -49,6 +49,7 @@ class BaseFrontend(Inflatable):
     self.does_log = self.__class__.can_log
     self.does_show_stats = self.__class__.can_show_stats
 
+
   def apply_settings(self):
     super(BaseFrontend, self).apply_settings()
     if not "name" in self.settings or not self.settings.name:

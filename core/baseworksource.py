@@ -35,6 +35,7 @@ from .inflatable import Inflatable
 
 class BaseWorkSource(Inflatable):
 
+  is_group = False
   settings = dict(Inflatable.settings, **{
     "name": {"title": "Name", "type": "string", "position": 100},
     "enabled": {"title": "Enabled", "type": "boolean", "position": 200},
@@ -45,7 +46,8 @@ class BaseWorkSource(Inflatable):
 
   def __init__(self, core, state = None):
     super(BaseWorkSource, self).__init__(core, state)
-    
+    self.is_group = self.__class__.is_group
+
     # Initialize work source state
     self.start_stop_lock = RLock()
     self.parent = None
@@ -92,10 +94,6 @@ class BaseWorkSource(Inflatable):
       self.started = False
 
         
-  def accepts_child_type(self, type):
-    return False
-    
-    
   def set_parent(self, parent = None):
     self.parent = parent
     

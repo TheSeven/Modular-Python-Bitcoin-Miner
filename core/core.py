@@ -76,9 +76,10 @@ class Core(object):
     self.registry = ObjectRegistry(self)
     
     # Initialize class lists
+    from .worksourcegroup import WorkSourceGroup
     self.frontendclasses = []
     self.workerclasses = []
-    self.worksourceclasses = []
+    self.worksourceclasses = [WorkSourceGroup]
 
     # Load modules
     self.log("Core: Loading modules...\n", 500, "B")

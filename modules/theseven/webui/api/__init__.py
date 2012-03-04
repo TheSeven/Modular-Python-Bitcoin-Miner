@@ -3,6 +3,7 @@ from . import gadgethost
 from . import log
 from . import uiconfig
 from . import frontendeditor
+from . import worksourceeditor
 from . import settingseditor
 
 handlermap = {
@@ -15,6 +16,11 @@ handlermap = {
   "/api/frontendeditor/getfrontends": frontendeditor.getfrontends,
   "/api/frontendeditor/createfrontend": frontendeditor.createfrontend,
   "/api/frontendeditor/deletefrontend": frontendeditor.deletefrontend,
+  "/api/worksourceeditor/getworksourceclasses": worksourceeditor.getworksourceclasses,
+  "/api/worksourceeditor/getworksources": worksourceeditor.getworksources,
+  "/api/worksourceeditor/createworksource": worksourceeditor.createworksource,
+  "/api/worksourceeditor/deleteworksource": worksourceeditor.deleteworksource,
+  "/api/worksourceeditor/moveworksource": worksourceeditor.moveworksource,
   "/api/settingseditor/readsettings": settingseditor.readsettings,
   "/api/settingseditor/writesettings": settingseditor.writesettings,
 }

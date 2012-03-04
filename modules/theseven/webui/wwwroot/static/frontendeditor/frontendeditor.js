@@ -80,12 +80,8 @@ mod.frontendeditor = {
                 for (var i in data)
                     if (data.hasOwnProperty(i))
                         classes[data[i].id] = data[i];
-                mod.csc.request("frontendeditor", "getfrontends", {}, function(data)
+                mod.csc.request("frontendeditor", "getfrontends", {}, function(frontends)
                 {
-                    frontends = {};
-                    for (var i in data)
-                        if (data.hasOwnProperty(i))
-                            frontends[data[i].id] = data[i];
                     var selectedFrontend = false;
                     mod.dom.clean(frontendListPanel);
                     var table = document.createElement("table");
@@ -95,63 +91,10 @@ mod.frontendeditor = {
                     frontendListPanel.appendChild(table);
                     for (var i in frontends)
                         if (frontends.hasOwnProperty(i))
-                            tbody.appendChild(createFrontendEntry(frontends[i]));
-                    var tr = document.createElement("tr");
-                    td = document.createElement("td");
-                    td.style.padding = "2px";
-                    td.onmouseover = function(e)
-                    {
-                        this.style.background = "#ddf";
-                    };
-                    td.onmouseout = function(e)
-                    {
-                        this.style.background = "inherit";
-                    };
-                    td.onclick = function(e)
-                    {
-                        var newBox = mod.layerbox.LayerBox();
-                        newBox.setTitle(nls("Create new frontend"));
-                        var classField = newBox.addInput("Class:", document.createElement("select"));
-                        for (var i in classes)
-                            if (classes.hasOwnProperty(i))
-                            {
-                                var option = document.createElement("option");
-                                option.value = classes[i].id;
-                                option.appendChild(document.createTextNode(classes[i].version));
-                                classField.appendChild(option);
-                            }
-                        var submitButton = newBox.addInput(null, "submit");
-                        submitButton.value = nls("Create");
-                        classField.focus();
-                        newBox.events.push(mod.event.catchKey(27, newBox.destroy));
-                        newBox.form.onsubmit = function(e)
-                        {
-                            if (submitButton.disabled) return killEvent(e);
-                            submitButton.disabled = true;
-                            submitButton.value = nls("Please wait...");
-                            var classid = parseInt(classField.options[classField.selectedIndex].value);
-                            mod.csc.request("frontendeditor", "createfrontend", {"class": classid}, function(data)
-                            {
-                                if (data.error)
-                                {
-                                    error(data.error);
-                                    submitButton.value = nls("Create");
-                                    submitButton.disabled = false;
-                                }
-                                else
-                                {
-                                    newBox.destroy();
-                                    refresh();
-                                }
-                            }, {"cache": "none"});
-                            return killEvent(e);
-                        };
-                    };
-                    td.appendChild(document.createTextNode(nls("Create new frontend")));
-                    tr.appendChild(td);
-                    tbody.appendChild(tr);
+                            createFrontendEntry(tbody, frontends[i]);
+                    createNewFrontendButton(tbody);
                     
-                    function createFrontendEntry(frontend)
+                    function createFrontendEntry(tbody, frontend)
                     {
                         var tr = document.createElement("tr");
                         frontend.td = document.createElement("td");
@@ -203,7 +146,7 @@ mod.frontendeditor = {
                             });
                             menu.show();
                             return killEvent(e);
-                        }
+                        };
                         frontend.classdiv.style.color = "#777";
                         frontend.classdiv.style.fontSize = "80%";
                         frontend.namenode = document.createTextNode(frontend.name);
@@ -212,7 +155,65 @@ mod.frontendeditor = {
                         frontend.td.appendChild(frontend.namediv);
                         frontend.td.appendChild(frontend.classdiv);
                         tr.appendChild(frontend.td);
-                        return tr;
+                        tbody.appendChild(tr);
+                    }
+                    
+                    function createNewFrontendButton(tbody)
+                    {
+                        var tr = document.createElement("tr");
+                        td = document.createElement("td");
+                        td.style.padding = "2px";
+                        td.onmouseover = function(e)
+                        {
+                            this.style.background = "#ddf";
+                        };
+                        td.onmouseout = function(e)
+                        {
+                            this.style.background = "inherit";
+                        };
+                        td.onclick = function(e)
+                        {
+                            var newBox = mod.layerbox.LayerBox();
+                            newBox.setTitle(nls("Create new frontend"));
+                            var classField = newBox.addInput("Class:", document.createElement("select"));
+                            for (var i in classes)
+                                if (classes.hasOwnProperty(i))
+                                {
+                                    var option = document.createElement("option");
+                                    option.value = classes[i].id;
+                                    option.appendChild(document.createTextNode(classes[i].version));
+                                    classField.appendChild(option);
+                                }
+                            var submitButton = newBox.addInput(null, "submit");
+                            submitButton.value = nls("Create");
+                            classField.focus();
+                            newBox.events.push(mod.event.catchKey(27, newBox.destroy));
+                            newBox.form.onsubmit = function(e)
+                            {
+                                if (submitButton.disabled) return killEvent(e);
+                                submitButton.disabled = true;
+                                submitButton.value = nls("Please wait...");
+                                var classid = parseInt(classField.options[classField.selectedIndex].value);
+                                mod.csc.request("frontendeditor", "createfrontend", {"class": classid}, function(data)
+                                {
+                                    if (data.error)
+                                    {
+                                        error(data.error);
+                                        submitButton.value = nls("Create");
+                                        submitButton.disabled = false;
+                                    }
+                                    else
+                                    {
+                                        newBox.destroy();
+                                        refresh();
+                                    }
+                                }, {"cache": "none"});
+                                return killEvent(e);
+                            };
+                        };
+                        td.appendChild(document.createTextNode(nls("Create new frontend")));
+                        tr.appendChild(td);
+                        tbody.appendChild(tr);
                     }
                         
                     function select(frontend)
