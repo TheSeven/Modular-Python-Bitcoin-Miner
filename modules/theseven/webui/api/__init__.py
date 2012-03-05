@@ -6,6 +6,7 @@ from . import frontendeditor
 from . import workereditor
 from . import worksourceeditor
 from . import settingseditor
+from . import menugadget
 
 handlermap = {
   "/api/init/init": init.init,
@@ -28,4 +29,5 @@ handlermap = {
   "/api/worksourceeditor/moveworksource": worksourceeditor.moveworksource,
   "/api/settingseditor/readsettings": settingseditor.readsettings,
   "/api/settingseditor/writesettings": settingseditor.writesettings,
+  "/api/menugadget/saveconfiguration": menugadget.saveconfiguration,
 }

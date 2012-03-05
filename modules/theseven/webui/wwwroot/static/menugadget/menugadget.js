@@ -37,6 +37,7 @@ mod.menugadget = {
             {"name": "Frontends", "module": "frontendeditor", "moduleparam": null},
             {"name": "Workers", "module": "workereditor", "moduleparam": null},
             {"name": "Work sources", "module": "worksourceeditor", "moduleparam": null},
+            {"name": "Save configuration", "handler": saveconfiguration},
         ]
         
         for (var i in buttons)
@@ -47,7 +48,7 @@ mod.menugadget = {
                 button.style.width = "100%";
                 button.value = nls(buttons[i].name);
                 button.data = buttons[i];
-                button.onclick = function(e)
+                button.onclick = buttons[i].handler ? buttons[i].handler : function(e)
                 {
                     var obj = this;
                     depend([obj.data.module], function()
@@ -57,6 +58,19 @@ mod.menugadget = {
                 }
                 box.contentNode.appendChild(button);
             }
+        
+        function saveconfiguration(e)
+        {
+            var obj = this;
+            obj.disabled = true;
+            obj.value = nls("Please wait...");
+            mod.csc.request("menugadget", "saveconfiguration", {}, function(data)
+            {
+                if (data.error) return error(data.error);
+                obj.value = nls("Save configuration");
+                obj.disabled = false;
+            }, {"cache": "none"});
+        }
     }
 
 };
