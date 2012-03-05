@@ -115,6 +115,10 @@ class Core(object):
     self.frontendlock = RLock()
     self.frontends = []
 
+    # Initialize worker list
+    self.workerlock = RLock()
+    self.workers = []
+
     # Read saved instance state
     try:
       with open("config/%s.cfg" % instance, "rb") as f:
@@ -124,6 +128,9 @@ class Core(object):
       with self.frontendlock:
         for frontend in state.frontends:
           self.add_frontend(Inflatable.inflate(self, frontend))
+      with self.workerlock:
+        for worker in state.workers:
+          self.add_worker(Inflatable.inflate(self, worker))
       with self.blockchainlock:
         for blockchain in state.blockchains:
           self.add_blockchain(Inflatable.inflate(self, blockchain))
@@ -132,6 +139,7 @@ class Core(object):
       self.log("Core: Could not load instance configuration: %s\nLoading default configuration...\n" % traceback.format_exc(), 300, "yB")
       self.is_new_instance = True
       self.frontends = []
+      self.workers = []
       self.blockchains = []
       self.root_work_source = None
     
@@ -153,6 +161,9 @@ class Core(object):
       state.frontends = []
       for frontend in self.frontends:
         state.frontends.append(frontend.deflate())
+      state.workers = []
+      for worker in self.workers:
+        state.workers.append(worker.deflate())
       if not self.root_work_source: state.root_work_source = None
       else: state.root_work_source = self.root_work_source.deflate()
       data = pickle.dumps(state, pickle.HIGHEST_PROTOCOL)
@@ -200,6 +211,12 @@ class Core(object):
         except Exception as e:
           self.log("Core: Could not start root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
 
+      # Start up workers
+      for worker in self.workers:
+        try: worker.start()
+        except Exception as e:
+          self.log("Core: Could not start worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+
       self.log("Core: Startup completed\n", 200, "")
   
   
@@ -208,6 +225,12 @@ class Core(object):
       if not self.started: return
       self.log("Core: Shutting down...\n", 100, "B")
       
+      # Shut down the workers
+      for worker in self.workers:
+        try: worker.stop()
+        except Exception as e:
+          self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+
       # Shut down work source tree
       if self.root_work_source:
         try: self.root_work_source.stop()
@@ -244,8 +267,13 @@ class Core(object):
   
   
   def detect_workers(self):
-    # TODO: Stub
-    pass
+    self.log("Core: Autodetecting workers...\n", 500, "B")
+    for workerclass in self.workerclasses:
+      if workerclass.can_autodetect:
+        try: workerclass.autodetect(self)
+        except Exception as e:
+          name = "%s.%s" % (workerclass.__module__, workerclass.__name__)
+          self.log("Core: %s autodetection failed: %s\n" % (name, traceback.format_exc()), 300, "yB")
 
     
   def get_blockchains(self):
@@ -291,6 +319,28 @@ class Core(object):
             except Exception as e:
               self.log("Core: Could not stop frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "yB")
           self.frontends.remove(frontend)
+
+
+  def add_worker(self, worker):
+    with self.start_stop_lock:
+      with self.workerlock:
+        if not worker in self.workers:
+          if self.started:
+            try: worker.start()
+            except Exception as e:
+              self.log("Core: Could not start worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "yB")
+          self.workers.append(worker)
+
+
+  def remove_worker(self, worker):
+    with self.start_stop_lock:
+      with self.workerlock:
+        while worker in self.workers:
+          if self.started:
+            try: worker.stop()
+            except Exception as e:
+              self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "yB")
+          self.workers.remove(worker)
 
 
   def get_root_work_source(self):
