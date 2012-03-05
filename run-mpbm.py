@@ -84,11 +84,13 @@ if __name__ == "__main__":
     # Reconfigure the old root work source
     usersources.settings.name = "User work sources"
     usersources.settings.priority = 1000
+    usersources.apply_settings()
     newroot.add_work_source(usersources)
     # Create example work source group
     examplesources = WorkSourceGroup(core)
     examplesources.settings.name = "Example/donation work sources"
     examplesources.settings.priority = 10
+    examplesources.apply_settings()
     newroot.add_work_source(examplesources)
     # Register the new root work source
     core.set_root_work_source(newroot)

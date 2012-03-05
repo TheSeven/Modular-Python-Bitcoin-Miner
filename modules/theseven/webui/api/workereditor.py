@@ -33,7 +33,7 @@ def getworkerclasses(core, webui, httprequest, path, request, privileges):
 
 @jsonapi
 def getworkers(core, webui, httprequest, path, request, privileges):
-  return [{"id": f.id, "name": f.settings.name, "class": f.__class__.id} for f in core.workers]
+  return [{"id": w.id, "name": w.settings.name, "class": w.__class__.id} for w in core.workers]
 
   
 

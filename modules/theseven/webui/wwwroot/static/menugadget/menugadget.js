@@ -37,6 +37,7 @@ mod.menugadget = {
             {"name": "Frontends", "module": "frontendeditor", "moduleparam": null},
             {"name": "Workers", "module": "workereditor", "moduleparam": null},
             {"name": "Work sources", "module": "worksourceeditor", "moduleparam": null},
+            {"name": "Blockchains", "module": "blockchaineditor", "moduleparam": null},
             {"name": "Save configuration", "handler": saveconfiguration},
         ]
         

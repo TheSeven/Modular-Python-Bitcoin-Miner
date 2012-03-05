@@ -20,32 +20,37 @@
 
 
 
-from ..decorators import jsonapi
-import traceback
+##################################################
+# Dummy (single work source) block chain manager #
+##################################################
 
 
 
-@jsonapi
-def readsettings(core, webui, httprequest, path, request, privileges):
-  if privileges != "admin": return httprequest.send_response(403)
-  try:
-    item = core.registry.get(request["id"])
-    settings = {}
-    for setting, data in item.__class__.settings.items():
-      settings[data["position"]] = {"name": setting, "spec": data, "value": item.settings[setting]}
-    return {"settings": settings}
-  except: return {"error": traceback.format_exc()}
+class DummyBlockchain(object):
 
+
+  def __init__(self, core):
+    # Initialize job list (protected by global job queue lock)
+    self.jobs = []
+    
+    
+  def add_job(self, job):
+    if not job in self.jobs: self.jobs.append(job)
   
 
-@jsonapi
-def writesettings(core, webui, httprequest, path, request, privileges):
-  if privileges != "admin": return httprequest.send_response(403)
-  try:
-    item = core.registry.get(request["id"])
-    for setting in item.__class__.settings.keys():
-      if setting in request["settings"]:
-          item.settings[setting] = request["settings"][setting]
-    item.apply_settings()
-    return {}
-  except: return {"error": traceback.format_exc()}
+  def remove_job(self, job):
+    while job in self.jobs: self.jobs.remove(job)
+    
+    
+  def add_work_source(self, worksource):
+    pass
+
+
+  def remove_work_source(self, worksource):
+    pass
+
+
+  def handle_block(self):
+    for job in self.jobs: job.cancel()
+    self.jobs = []
+    self.core.notify_job_canceled()

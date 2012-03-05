@@ -189,6 +189,58 @@ mod.worksourceeditor = {
                             {
                                 var obj = this.obj;
                                 var menu = new mod.contextmenu.ContextMenu();
+                                if (!obj.is_group)
+                                {
+                                    menu.addEntry(nls("Assign to blockchain"), function()
+                                    {
+                                        var box = mod.layerbox.LayerBox();
+                                        box.setTitle(nls("Assign to blockchain"));
+                                        showLoadingIndicator(box.contentNode).style.position = "static";
+                                        mod.csc.request("worksourceeditor", "getblockchains", {}, function(data)
+                                        {
+                                            mod.dom.clean(box.contentNode);
+                                            var blockchainField = box.addInput("Blockchain:", document.createElement("select"));
+                                            data.unshift({"id": 0, "name": nls("None")});
+                                            for (var i in data)
+                                                if (data.hasOwnProperty(i))
+                                                {
+                                                    var option = document.createElement("option");
+                                                    option.value = data[i].id;
+                                                    if (data[i].id == obj.blockchain) option.selected = "selected";
+                                                    option.appendChild(document.createTextNode(data[i].name));
+                                                    blockchainField.appendChild(option);
+                                                }
+                                            var submitButton = box.addInput(null, "submit");
+                                            submitButton.value = nls("Save");
+                                            blockchainField.focus();
+                                            box.events.push(mod.event.catchKey(27, box.destroy));
+                                            box.form.onsubmit = function(e)
+                                            {
+                                                if (submitButton.disabled) return killEvent(e);
+                                                submitButton.disabled = true;
+                                                submitButton.value = nls("Please wait...");
+                                                var blockchainid = parseInt(blockchainField.options[blockchainField.selectedIndex].value);
+                                                mod.csc.request("worksourceeditor", "setblockchain", {"id": obj.id, "blockchain": blockchainid}, function(data)
+                                                {
+                                                    if (data.error)
+                                                    {
+                                                        error(data.error);
+                                                        submitButton.value = nls("Save");
+                                                        submitButton.disabled = false;
+                                                    }
+                                                    else
+                                                    {
+                                                        box.destroy();
+                                                        refresh();
+                                                    }
+                                                }, {"cache": "none"});
+                                                return killEvent(e);
+                                            };
+                                        }, {"cache": "none"});
+                                        menu.hide();
+                                    });
+                                    menu.addBarrier();
+                                }
                                 menu.addEntry(nls("Delete work source"), function()
                                 {
                                     var box = mod.layerbox.LayerBox();

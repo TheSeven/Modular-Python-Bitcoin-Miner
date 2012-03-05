@@ -5,6 +5,7 @@ from . import uiconfig
 from . import frontendeditor
 from . import workereditor
 from . import worksourceeditor
+from . import blockchaineditor
 from . import settingseditor
 from . import menugadget
 
@@ -27,6 +28,11 @@ handlermap = {
   "/api/worksourceeditor/createworksource": worksourceeditor.createworksource,
   "/api/worksourceeditor/deleteworksource": worksourceeditor.deleteworksource,
   "/api/worksourceeditor/moveworksource": worksourceeditor.moveworksource,
+  "/api/worksourceeditor/getblockchains": worksourceeditor.getblockchains,
+  "/api/worksourceeditor/setblockchain": worksourceeditor.setblockchain,
+  "/api/blockchaineditor/getblockchains": blockchaineditor.getblockchains,
+  "/api/blockchaineditor/createblockchain": blockchaineditor.createblockchain,
+  "/api/blockchaineditor/deleteblockchain": blockchaineditor.deleteblockchain,
   "/api/settingseditor/readsettings": settingseditor.readsettings,
   "/api/settingseditor/writesettings": settingseditor.writesettings,
   "/api/menugadget/saveconfiguration": menugadget.saveconfiguration,

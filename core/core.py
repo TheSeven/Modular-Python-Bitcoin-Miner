@@ -205,6 +205,12 @@ class Core(object):
         self.log("Core: No working configuration frontend module present!\n"
                  "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 100, "yB")
 
+      # Start up blockchains
+      for blockchain in self.blockchains:
+        try: blockchain.start()
+        except Exception as e:
+          self.log("Core: Could not start blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
+
       # Start up work source tree
       if self.root_work_source:
         try: self.root_work_source.start()
@@ -225,11 +231,11 @@ class Core(object):
       if not self.started: return
       self.log("Core: Shutting down...\n", 100, "B")
       
-      # Shut down the workers
-      for worker in self.workers:
-        try: worker.stop()
+      # Shut down blockchains
+      for blockchain in self.blockchains:
+        try: blockchain.stop()
         except Exception as e:
-          self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+          self.log("Core: Could not stop blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
 
       # Shut down work source tree
       if self.root_work_source:
@@ -237,6 +243,12 @@ class Core(object):
         except Exception as e:
           self.log("Core: Could not stop root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
       
+      # Shut down workers
+      for worker in self.workers:
+        try: worker.stop()
+        except Exception as e:
+          self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+
       # Save instance configuration
       self.save()
       
@@ -369,6 +381,7 @@ class Core(object):
     self.log_multi(loglevel, self.logbuf, self.logtime)
     self.logbuf = []
 
+    
   def log_multi(self, loglevel, messages, timestamp = datetime.now()):
     # Put message into the queue, will be pushed to listeners by a worker thread
     self.logqueue.put((timestamp, loglevel, messages))

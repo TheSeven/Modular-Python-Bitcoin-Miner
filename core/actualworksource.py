@@ -29,6 +29,7 @@
 import time
 from threading import RLock
 from .baseworksource import BaseWorkSource
+from .dummyblockchain import DummyBlockchain
 
 
 
@@ -45,8 +46,9 @@ class ActualWorkSource(BaseWorkSource):
     super(ActualWorkSource, self).__init__(core, state)
     
     # Find block chain
+    self.blockchain = None
     if not "blockchain" in self.state: self.state.blockchain = None
-    self.blockchain = core.get_blockchain_by_name(self.state.blockchain)
+    self.set_blockchain(core.get_blockchain_by_name(self.state.blockchain))
 
     # Initialize work source state
     self.signals_new_block = None
@@ -54,9 +56,15 @@ class ActualWorkSource(BaseWorkSource):
     self.canceluntil = time.time()
     
       
+  def destroy(self):
+    super(ActualWorkSource, self).destroy()
+    if self.blockchain: self.blockchain.remove_work_source(self)
+    
+    
   def deflate(self):
     # Save block chain name to state
-    if self.blockchain: self.state.blockchain = self.blockchain.settings.name
+    blockchain = self.get_blockchain()
+    if blockchain: self.state.blockchain = blockchain.settings.name
     else: self.state.blockchain = None
     # Let BaseWorkSource handle own deflation
     return super(ActualWorkSource, self).deflate()
@@ -73,5 +81,13 @@ class ActualWorkSource(BaseWorkSource):
     if not "stalelockout" in self.settings: self.settings.stalelockout = 25
     
   
+  def get_blockchain(self):
+    if isinstance(self.blockchain, DummyBlockchain): return None
+    return self.blockchain
+    
+  
   def set_blockchain(self, blockchain = None):
+    if self.blockchain: self.blockchain.remove_work_source(self)
     self.blockchain = blockchain
+    if not self.blockchain: self.blockchain = DummyBlockchain(self.core)
+    if self.blockchain: self.blockchain.add_work_source(self)

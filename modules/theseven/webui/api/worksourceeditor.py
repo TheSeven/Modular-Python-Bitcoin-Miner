@@ -37,6 +37,9 @@ def getworksources(core, webui, httprequest, path, request, privileges):
     data = {"id": worksource.id, "name": worksource.settings.name,
             "class": worksource.__class__.id, "is_group": worksource.is_group}
     if worksource.is_group: data["children"] = [format_work_source(c) for c in worksource.children]
+    else:
+      blockchain = worksource.get_blockchain()
+      data["blockchain"] = blockchain.id if blockchain else 0
     return data
   return format_work_source(core.get_root_work_source())
 
@@ -81,3 +84,23 @@ def moveworksource(core, webui, httprequest, path, request, privileges):
     parent.add_work_source(worksource)
     return {}
   except: return {"error": traceback.format_exc()}
+
+  
+  
+@jsonapi
+def getblockchains(core, webui, httprequest, path, request, privileges):
+  return [{"id": b.id, "name": b.settings.name} for b in core.blockchains]
+
+  
+  
+@jsonapi
+def setblockchain(core, webui, httprequest, path, request, privileges):
+  if privileges != "admin": return httprequest.send_response(403)
+  try:
+    worksource = core.registry.get(request["id"])
+    try: blockchain = core.registry.get(request["blockchain"])
+    except: blockchain = None
+    worksource.set_blockchain(blockchain)
+    return {}
+  except: return {"error": traceback.format_exc()}
+  

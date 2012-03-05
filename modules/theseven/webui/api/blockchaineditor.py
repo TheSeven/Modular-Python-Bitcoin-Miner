@@ -26,26 +26,32 @@ import traceback
 
 
 @jsonapi
-def readsettings(core, webui, httprequest, path, request, privileges):
+def getblockchains(core, webui, httprequest, path, request, privileges):
+  return [{"id": b.id, "name": b.settings.name} for b in core.blockchains]
+
+  
+
+@jsonapi
+def createblockchain(core, webui, httprequest, path, request, privileges):
   if privileges != "admin": return httprequest.send_response(403)
   try:
-    item = core.registry.get(request["id"])
-    settings = {}
-    for setting, data in item.__class__.settings.items():
-      settings[data["position"]] = {"name": setting, "spec": data, "value": item.settings[setting]}
-    return {"settings": settings}
+    name = request["name"]
+    from core.blockchain import Blockchain
+    blockchain = Blockchain(core)
+    blockchain.settings.name = name
+    blockchain.apply_settings()
+    core.add_blockchain(blockchain)
+    return {}
   except: return {"error": traceback.format_exc()}
 
   
 
 @jsonapi
-def writesettings(core, webui, httprequest, path, request, privileges):
+def deleteblockchain(core, webui, httprequest, path, request, privileges):
   if privileges != "admin": return httprequest.send_response(403)
   try:
-    item = core.registry.get(request["id"])
-    for setting in item.__class__.settings.keys():
-      if setting in request["settings"]:
-          item.settings[setting] = request["settings"][setting]
-    item.apply_settings()
+    blockchain = core.registry.get(request["id"])
+    core.remove_blockchain(blockchain)
+    blockchain.destroy()
     return {}
   except: return {"error": traceback.format_exc()}
