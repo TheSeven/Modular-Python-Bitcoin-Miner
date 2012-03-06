@@ -47,10 +47,12 @@ class BaseWorkSource(Inflatable):
   def __init__(self, core, state = None):
     super(BaseWorkSource, self).__init__(core, state)
     self.is_group = self.__class__.is_group
+    self.start_stop_lock = RLock()
 
     # Initialize work source state
-    self.start_stop_lock = RLock()
     self.parent = None
+    self.statelock = RLock()
+    self.mhashes_pending = 0
     self.stats = Bunch()
     self.stats.lock = RLock()
     self._zero_stats()
@@ -91,6 +93,7 @@ class BaseWorkSource(Inflatable):
   def stop(self):
     with self.start_stop_lock:
       if not self.started: return
+      self.core.workqueue.flush_all_of_work_source(self)
       self.started = False
 
         
@@ -100,3 +103,8 @@ class BaseWorkSource(Inflatable):
     
   def get_parent(self):
     return self.parent
+
+    
+  def add_pending_mhashes(self, mhashes):
+    with self.statelock: self.mhashes_pending += mhashes
+    if self.parent: self.parent.add_pending_mhashes(mhashes)

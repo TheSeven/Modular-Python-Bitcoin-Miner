@@ -40,12 +40,32 @@ class BaseWorker(Inflatable):
   })
 
 
-  def __init__(self, core, state = None):
+  def __init__(self, core, state = None, parent = None):
     super(BaseFrontend, self).__init__(core, state)
     self.start_stop_lock = RLock()
+    self.children = []
+    self.parent = parent
+    if parent: parent.children.add(self)
+    self.jobs_per_second = 0
+    self.parallel_jobs = 0
+    
+    
+  def destroy(self):
+    if self.parent: self.parent.children.remove(self)
 
 
   def apply_settings(self):
     super(BaseFrontend, self).apply_settings()
     if not "name" in self.settings or not self.settings.name:
       self.settings.name = getattr(self.__class__, "default_name", "Untitled worker")
+
+      
+  def get_jobs_per_second(self):
+    result = self.jobs_per_second
+    for child in self.children: result += child.get_jobs_per_second()
+    return result
+      
+  def get_parallel_jobs(self):
+    result = self.parallel_jobs
+    for child in self.children: result += child.get_parallel_jobs()
+    return result

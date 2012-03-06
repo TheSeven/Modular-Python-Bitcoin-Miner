@@ -162,7 +162,6 @@ mod.worksourceeditor = {
                                     }
                                     var box = mod.layerbox.LayerBox();
                                     box.setTitle(nls("Move work source"));
-                                    box.setStyle("error");
                                     var text = nls("Do you really want to move the work source") + " \"" + obj.name + "\" "
                                              + nls("into the work source") + " \"" + parent.name + "\"?";
                                     var buttons = box.multipleChoice(text, [nls("Yes"), nls("No")]);

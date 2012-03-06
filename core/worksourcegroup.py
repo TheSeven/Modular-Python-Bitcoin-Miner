@@ -26,6 +26,7 @@
 
 
 
+import time
 import traceback
 from threading import RLock
 from .baseworksource import BaseWorkSource
@@ -38,6 +39,7 @@ class WorkSourceGroup(BaseWorkSource):
   default_name = "Untitled work source group"
   is_group = True,
   settings = dict(BaseWorkSource.settings, **{
+    "distribution_granularity": {"title": "Distribution granularity", "type": "float", "position": 20000},
   })
 
 
@@ -53,6 +55,16 @@ class WorkSourceGroup(BaseWorkSource):
     self.children = []
     for childstate in self.state.children:
       self.add_work_source(BaseWorkSource.inflate(core, childstate))
+      
+    # Initialize arbiter state
+    self.last_index = 0
+    self.last_time = 0
+
+      
+  def apply_settings(self):
+    super(WorkSourceGroup, self).apply_settings()
+    if not "distribution_granularity" in self.settings or not self.settings.distribution_granularity:
+      self.settings.distribution_granularity = 16
 
       
   def deflate(self):
@@ -102,6 +114,8 @@ class WorkSourceGroup(BaseWorkSource):
           try: worksource.start()
           except Exception as e:
             self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+      self.last_index = 0
+      self.last_time = time.clock()
       self.started = True
   
   
@@ -114,3 +128,65 @@ class WorkSourceGroup(BaseWorkSource):
           except Exception as e:
             self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
       self.started = False
+      
+      
+  def _distribute_mhashes(self):
+    with self.statelock:
+      now = time.clock()
+      timestep = now - self.last_time
+      self.last_time = now
+      mhashes_remaining = 2**32 / 1000000. * self.settings.distribution_granularity
+      total_priority = 0
+      for child in self.children:
+        with child.statelock:
+          total_priority += child.settings.priority
+          mhashes = timestep * child.settings.hashrate
+          child.mhashes_pending += mhashes
+          mhashes_remaining -= mhashes
+      if mhashes_remaining > 0:
+        unit = mhashes_remaining / total_priority
+        for child in self.children:
+          with child.statelock:
+            mhashes = unit * child.settings.priority
+            child.mhashes_pending += mhashes
+            mhashes_remaining -= mhashes
+
+
+  def _get_start_index(self):
+    with self.statelock:
+      self.last_index += 1
+      if self.last_index >= len(self.children): self.last_index = 0
+      return self.last_index
+      
+      
+  def _get_job_round(self, force = False):
+    startindex = self._get_start_index()
+    found = False
+    while not found:
+      index = startindex
+      first = True
+      while index != startindex or first:
+        worksource = self.children[index]
+        mhashes = 0
+        if not worksource.is_group: mhashes = 2**32 / 1000000. * worksource.estimated_jobs
+        if force or worksource.mhashes_pending >= mhashes:
+          if mhashes: worksource.add_pending_mhashes(-mhashes)
+          job = worksource.get_job()
+          if job:
+            if mhashes: worksource.add_pending_mhashes(mhashes)
+            return job
+          self.add_pending_mhashes(mhashes)
+          found = True
+        index += 1
+        if index >= len(self.children): index = 0
+        first = False
+      if not found: self._distribute_mhashes()
+    return []
+
+    
+  def get_job(self):
+    with self.childlock:
+      if not self.children: return []
+      job = self._get_job_round()
+      if job: return job
+      return self._get_job_round(True)

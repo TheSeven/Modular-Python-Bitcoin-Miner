@@ -52,8 +52,10 @@ class ActualWorkSource(BaseWorkSource):
 
     # Initialize work source state
     self.signals_new_block = None
-    self.block_epoch = 0
-    self.canceluntil = time.time()
+    self.epoch = 0
+    self.errors = 0
+    self.lockoutend = 0
+    self.estimated_jobs = 1
     
       
   def destroy(self):
@@ -81,6 +83,15 @@ class ActualWorkSource(BaseWorkSource):
     if not "stalelockout" in self.settings: self.settings.stalelockout = 25
     
   
+  def start(self):
+    with self.start_stop_lock:
+      super(ActualWorkSource, self).start()
+      self.epoch = 0
+      self.errors = 0
+      self.lockoutend = 0
+      self.estimated_jobs = 1
+
+  
   def get_blockchain(self):
     if isinstance(self.blockchain, DummyBlockchain): return None
     return self.blockchain
@@ -91,3 +102,25 @@ class ActualWorkSource(BaseWorkSource):
     self.blockchain = blockchain
     if not self.blockchain: self.blockchain = DummyBlockchain(self.core)
     if self.blockchain: self.blockchain.add_work_source(self)
+    
+    
+  def _is_locked_out(self):
+    return time.clock() <= self.lockoutend
+    
+      
+  def _handle_success(self):
+    with self.statelock: self.errors = 0
+
+    
+  def _handle_error(self):
+    with self.statelock:
+      self.errors += 1
+      if self.errors >= self.settings.errorlimit:
+        lockout = min(self.settings.errorlockout_factor + self.errors, self.settings.errorlockout_max)
+        self.lockoutend = max(self.lockoutend, time.clock() + lockout)
+
+    
+  def _handle_stale(self):
+    with self.statelock:
+      self.lockoutend = max(self.lockoutend, time.clock() + self.settings.stalelockout)
+      

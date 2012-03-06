@@ -45,6 +45,10 @@ class Blockchain(Inflatable):
     super(Blockchain, self).__init__(core, state)
     self.start_stop_lock = RLock()
     
+    # Initialize blockchain state
+    self.epoch = 0
+    self.groupend = 0
+    self.epochlock = RLock()
     # Initialize job list (protected by global job queue lock)
     self.jobs = []
     # Initialize work source list
@@ -108,6 +112,7 @@ class Blockchain(Inflatable):
 
   def add_work_source(self, worksource):
     with self.worksourcelock:
+      worksource.epoch = self.epoch
       if not worksource in self.worksources: self.worksources.append(worksource)
   
 
@@ -116,10 +121,29 @@ class Blockchain(Inflatable):
       while worksource in self.worksources: self.worksources.remove(worksource)
 
 
-  def handle_block(self):
-    with self.stats.lock:
-      self.stats.blocks += 1
-      self.stats.lastblock = time.clock()
-    for job in self.jobs: job.cancel()
-    self.jobs = []
-    self.core.notify_job_canceled()
+  def handle_block(self, worksource):
+    now = time.clock()
+    with self.epochlock:
+      if now > groupend or worksource.epoch == self.epoch:
+        self.epoch += 1
+        self.groupend = now + self.settings.grouptime
+        with self.stats.lock:
+          self.stats.blocks += 1
+          self.stats.lastblock = now
+        for job in self.jobs: job.cancel()
+        self.jobs = []
+        worksource.epoch = self.epoch
+      else: worksource.epoch += 1
+
+      
+  def check_job(self, job):
+    with self.epochlock:
+      if job.epoch == self.epoch or time.clock() > groupend: return True
+      return False
+
+      
+  def check_work_source(self, worksource):
+    with self.epochlock:
+      if worksource.epoch == self.epoch or time.clock() > groupend: return True
+      return False
+  

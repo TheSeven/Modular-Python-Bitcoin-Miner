@@ -118,6 +118,14 @@ class Core(object):
     # Initialize worker list
     self.workerlock = RLock()
     self.workers = []
+    
+    # Initialize work queue
+    from .workqueue import WorkQueue
+    self.workqueue = WorkQueue(self)
+
+    # Initialize work fetcher
+    from .fetcher import Fetcher
+    self.fetcher = Fetcher(self)
 
     # Read saved instance state
     try:
@@ -205,6 +213,10 @@ class Core(object):
         self.log("Core: No working configuration frontend module present!\n"
                  "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 100, "yB")
 
+      # Start up work queue
+      try: self.workqueue.start()
+      except Exception as e: self.log("Core: Could not start work queue: %s\n" % traceback.format_exc(), 100, "rB")
+
       # Start up blockchains
       for blockchain in self.blockchains:
         try: blockchain.start()
@@ -216,6 +228,10 @@ class Core(object):
         try: self.root_work_source.start()
         except Exception as e:
           self.log("Core: Could not start root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
+
+      # Start up work fetcher
+      try: self.fetcher.start()
+      except Exception as e: self.log("Core: Could not start work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
 
       # Start up workers
       for worker in self.workers:
@@ -231,11 +247,15 @@ class Core(object):
       if not self.started: return
       self.log("Core: Shutting down...\n", 100, "B")
       
-      # Shut down blockchains
-      for blockchain in self.blockchains:
-        try: blockchain.stop()
+      # Shut down workers
+      for worker in self.workers:
+        try: worker.stop()
         except Exception as e:
-          self.log("Core: Could not stop blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
+          self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+
+      # Shut down work fetcher
+      try: self.fetcher.stop()
+      except Exception as e: self.log("Core: Could not stop work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
 
       # Shut down work source tree
       if self.root_work_source:
@@ -243,11 +263,15 @@ class Core(object):
         except Exception as e:
           self.log("Core: Could not stop root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
       
-      # Shut down workers
-      for worker in self.workers:
-        try: worker.stop()
+      # Shut down blockchains
+      for blockchain in self.blockchains:
+        try: blockchain.stop()
         except Exception as e:
-          self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+          self.log("Core: Could not stop blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
+
+      # Shut down work queue
+      try: self.workqueue.stop()
+      except Exception as e: self.log("Core: Could not stop work queue: %s\n" % traceback.format_exc(), 100, "rB")
 
       # Save instance configuration
       self.save()
@@ -371,6 +395,14 @@ class Core(object):
         try: worksource.start()
         except Exception as e:
           self.log("Core: Could not start root work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+          
+          
+  def get_job(self, worker, expiry_min_ahead):
+    return self.workqueue.get_job(worker, expiry_min_ahead)
+    
+    
+  def notify_speed_changed(self):
+    return self.fetcher.notify_speed_changed()
     
     
   def log(self, message, loglevel, format = ""):
