@@ -80,6 +80,11 @@ class SimpleRS232Worker(BaseWorker):
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.port = None
     self.baudrate = None
+#    # Initialize custom statistics. This is not neccessary for this worker module,
+#    # but might be interesting for other modules, so it is kept here for reference.
+#    stats.field1 = 0
+#    stats.field2 = 0
+#    stats.field3 = 0
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
@@ -127,6 +132,16 @@ class SimpleRS232Worker(BaseWorker):
       if self.job == job or self.nextjob == job:
         self.wakeup.notify()
 
+        
+#  # Report custom statistics. This is not neccessary for this worker module,
+#  # but might be interesting for other modules, so it is kept here for reference.
+#  def _get_statistics(self, stats, childstats):
+#    # Let our superclass handle everything that isn't specific to this worker module
+#    super(SimpleRS232Worker, self)._get_statistics(stats, childstats)
+#    stats.field1 = self.stats.field1
+#    stats.field2 = self.stats.field2 + childstats.calculatefieldsum("field2")
+#    stats.field3 = self.stats.field3 + childstats.calculatefieldavg("field3")
+        
         
   # Main thread entry point
   # This thread is responsible for fetching work and pushing it to the device.

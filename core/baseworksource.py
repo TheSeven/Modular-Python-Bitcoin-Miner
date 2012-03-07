@@ -88,15 +88,15 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
   def _get_statistics(self, stats, childstats):
     StatisticsProvider._get_statistics(self, stats, childstats)
     stats.starttime = self.stats.starttime
-    stats.ghashes = self.stats.ghashes + childstats.getfieldsum("ghashes")
-    stats.jobrequests = self.stats.jobrequests + childstats.getfieldsum("jobrequests")
-    stats.failedjobreqs = self.stats.failedjobreqs + childstats.getfieldsum("failedjobreqs")
-    stats.uploadretries = self.stats.uploadretries + childstats.getfieldsum("uploadretries")
-    stats.jobsaccepted = self.stats.jobsaccepted + childstats.getfieldsum("jobsaccepted")
-    stats.jobsaccepted = self.stats.jobsaccepted + childstats.getfieldsum("jobsaccepted")
-    stats.jobscanceled = self.stats.jobscanceled + childstats.getfieldsum("jobscanceled")
-    stats.sharesaccepted = self.stats.sharesaccepted + childstats.getfieldsum("sharesaccepted")
-    stats.sharesrejected = self.stats.sharesrejected + childstats.getfieldsum("sharesrejected")
+    stats.ghashes = self.stats.ghashes + childstats.calculatefieldsum("ghashes")
+    stats.jobrequests = self.stats.jobrequests + childstats.calculatefieldsum("jobrequests")
+    stats.failedjobreqs = self.stats.failedjobreqs + childstats.calculatefieldsum("failedjobreqs")
+    stats.uploadretries = self.stats.uploadretries + childstats.calculatefieldsum("uploadretries")
+    stats.jobsaccepted = self.stats.jobsaccepted + childstats.calculatefieldsum("jobsaccepted")
+    stats.jobsaccepted = self.stats.jobsaccepted + childstats.calculatefieldsum("jobsaccepted")
+    stats.jobscanceled = self.stats.jobscanceled + childstats.calculatefieldsum("jobscanceled")
+    stats.sharesaccepted = self.stats.sharesaccepted + childstats.calculatefieldsum("sharesaccepted")
+    stats.sharesrejected = self.stats.sharesrejected + childstats.calculatefieldsum("sharesrejected")
     stats.difficulty = self.stats.difficulty
     
     
