@@ -53,7 +53,6 @@ class SimpleRS232Worker(BaseWorker):
     self.wakeup = Condition()
     self.mainthread = None
     self.listenerthread = None
-    self.jobspersecond = 0
     
     
   def apply_settings(self):
@@ -61,36 +60,32 @@ class SimpleRS232Worker(BaseWorker):
     if not "port" in self.settings or not self.settings.port: self.settings.port = "/dev/ttyS0"
     if not "baudrate" in self.settings or not self.settings.baudrate: self.settings.baudrate = 115200
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
-    if self.started and (self.settings.port != self.port or self.settings.baudrate != self.baudrate):
-      Thread(None, self.restart, self.settings.name + "_restart").start()
+    if self.settings.port != self.port or self.settings.baudrate != self.baudrate: self.async_restart()
     
 
-  def restart(self):
-    with self.start_stop_lock:
-      self.stop()
-      self.start()
+  def _reset(self):
+    super(SimpleRS232Worker, self)._reset()
+    self.port = None
+    self.baudrate = None
 
       
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      self.port = self.settings.port
-      self.baudrate = self.settings.baudrate
-      self.jobspersecond = 1. / self.settings.jobinterval
-      self.shutdown = False
-      self.mainthread = Thread(None, self.main, self.settings.name + "_main")
-      self.mainthread.daemon = True
-      self.mainthread.start()
-      self.started = True
+  def _start(self):
+    super(SimpleRS232Worker, self)._start()
+    self.port = self.settings.port
+    self.baudrate = self.settings.baudrate
+    self.jobs_per_second = 1. / self.settings.jobinterval
+    self.parallel_jobs = 1
+    self.shutdown = False
+    self.mainthread = Thread(None, self.main, self.settings.name + "_main")
+    self.mainthread.daemon = True
+    self.mainthread.start()
   
   
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      self.shutdown = True
-      with self.wakeup: self.wakeup.notify()
-      self.mainthread.join(10)
-      self.started = False
+  def _stop(self):
+    super(SimpleRS232Worker, self)._stop()
+    self.shutdown = True
+    with self.wakeup: self.wakeup.notify()
+    self.mainthread.join(10)
 
       
   def notify_canceled(self, job):

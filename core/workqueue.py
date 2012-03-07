@@ -28,18 +28,22 @@
 
 import time
 from threading import Condition, RLock, Thread
+from .startable import Startable
 
 
 
-class WorkQueue(object):
+class WorkQueue(Startable):
 
   
   def __init__(self, core):
+    super(WorkQueue, self).__init__()
     self.core = core
-    self.start_stop_lock = RLock()
-    self.started = False
     # Initialize global work queue lock and wakeup condition
     self.lock = Condition()
+    
+    
+  def _reset(self):
+    super(WorkQueue, self)._reset()
     # Initialize job list container and count
     self.lists = {}
     self.count = 0
@@ -120,30 +124,19 @@ class WorkQueue(object):
       self.lock.wait()
 
         
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      self.lists = {}
-      self.takenlists = {}
-      self.count = 0
-      self.expirycutoff = 0
-      self.shutdown = False
-      self.cleanupthread = Thread(None, self.cleanuploop, "workqueue_cleanup")
-      self.cleanupthread.daemon = True
-      self.cleanupthread.start()
-      self.started = True
+  def _start(self):
+    super(WorkQueue, self)._start()
+    self.shutdown = False
+    self.cleanupthread = Thread(None, self.cleanuploop, "workqueue_cleanup")
+    self.cleanupthread.daemon = True
+    self.cleanupthread.start()
   
   
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      self.shutdown = True
-      self.cleanupthread.join(10)
-      self.lists = {}
-      self.takenlists = {}
-      self.count = 0
-      self.expirycutoff = 0
-      self.started = False
+  def _stop(self):
+    self.shutdown = True
+    self.cleanupthread.join(10)
+    self._reset()
+    super(WorkQueue, self)._stop()
 
     
   def cleanuploop(self):

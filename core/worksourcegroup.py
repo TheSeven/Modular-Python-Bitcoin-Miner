@@ -56,9 +56,11 @@ class WorkSourceGroup(BaseWorkSource):
     for childstate in self.state.children:
       self.add_work_source(BaseWorkSource.inflate(core, childstate))
       
-    # Initialize arbiter state
+
+  def _reset(self):
+    super(WorkSourceGroup, self)._reset()
     self.last_index = 0
-    self.last_time = 0
+    self.last_time = time.time()
 
       
   def apply_settings(self):
@@ -110,32 +112,26 @@ class WorkSourceGroup(BaseWorkSource):
           self.children.remove(worksource)
         
         
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      with self.childlock:
-        for worksource in self.children:
-          try:
-            self.core.log("%s: Starting up work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
-            worksource.start()
-          except Exception as e:
-            self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
-      self.last_index = 0
-      self.last_time = time.time()
-      self.started = True
+  def _start(self):
+    super(WorkSourceGroup, self)._start()
+    with self.childlock:
+      for worksource in self.children:
+        try:
+          self.core.log("%s: Starting up work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+          worksource.start()
+        except Exception as e:
+          self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
   
   
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      with self.childlock:
-        for worksource in self.children:
-          try:
-            self.core.log("%s: Shutting down work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
-            worksource.stop()
-          except Exception as e:
-            self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
-      self.started = False
+  def _stop(self):
+    with self.childlock:
+      for worksource in self.children:
+        try:
+          self.core.log("%s: Shutting down work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+          worksource.stop()
+        except Exception as e:
+          self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+    super(WorkSourceGroup, self)._stop()
       
       
   def _distribute_mhashes(self):

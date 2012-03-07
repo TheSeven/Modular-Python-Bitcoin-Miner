@@ -29,46 +29,44 @@
 import time
 import traceback
 from threading import RLock, Condition, Thread, current_thread
+from .startable import Startable
 
 
 
-class Fetcher(object):
+class Fetcher(Startable):
 
   
   def __init__(self, core):
+    super(Fetcher, self).__init__()
     self.core = core
-    self.start_stop_lock = RLock()
-    self.started = False
     # Initialize global fetcher lock and wakeup condition
     self.lock = Condition()
     # Fetcher controller thread
     self.controllerthread = None
-    # List of fetcher threads
-    self.threads = []
+    
+    
+  def _reset(self):
+    super(Fetcher, self)._reset()
+    self.speedchanged = True
+    self.queuetarget = 5
     self.fetchercount = 0
+    self.threads = []
     
 
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      self.shutdown = False
-      self.speedchanged = True
-      self.queuetarget = 5
-      self.fetchercount = 0
-      self.controllerthread = Thread(None, self.controllerloop, "fetcher_controller")
-      self.controllerthread.daemon = True
-      self.controllerthread.start()
-      self.started = True
+  def _start(self):
+    super(Fetcher, self)._start()
+    self.shutdown = False
+    self.controllerthread = Thread(None, self.controllerloop, "fetcher_controller")
+    self.controllerthread.daemon = True
+    self.controllerthread.start()
   
   
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      self.shutdown = True
-      self.wakeup()
-      self.controllerthread.join(10)
-      for thread in self.threads: thread.join(10)
-      self.started = False
+  def _stop(self):
+    self.shutdown = True
+    self.wakeup()
+    self.controllerthread.join(10)
+    for thread in self.threads: thread.join(10)
+    super(Fetcher, self)._stop()
       
       
   def wakeup(self):

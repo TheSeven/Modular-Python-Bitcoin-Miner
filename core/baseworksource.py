@@ -29,11 +29,12 @@
 import time
 from threading import RLock
 from .util import Bunch
+from .startable import Startable
 from .inflatable import Inflatable
 
 
 
-class BaseWorkSource(Inflatable):
+class BaseWorkSource(Startable, Inflatable):
 
   is_group = False
   settings = dict(Inflatable.settings, **{
@@ -45,21 +46,23 @@ class BaseWorkSource(Inflatable):
 
 
   def __init__(self, core, state = None):
-    super(BaseWorkSource, self).__init__(core, state)
-    self.is_group = self.__class__.is_group
-    self.start_stop_lock = RLock()
-
-    # Initialize work source state
-    self.parent = None
-    self.statelock = RLock()
-    self.mhashes_pending = 0
     self.stats = Bunch()
     self.stats.lock = RLock()
-    self._zero_stats()
+
+    Startable.__init__(self)
+    Inflatable.__init__(self, core, state)
+
+    self.parent = None
+    self.statelock = RLock()
+    
+    
+  def destroy(self):
+    Startable.destroy(self)
+    Inflatable.destroy(self)
     
     
   def apply_settings(self):
-    super(BaseWorkSource, self).apply_settings()
+    Inflatable.apply_settings(self)
     if not "name" in self.settings or not self.settings.name:
       self.settings.name = getattr(self.__class__, "default_name", "Untitled work source")
     if not "enabled" in self.settings: self.settings.enabled = True
@@ -67,11 +70,11 @@ class BaseWorkSource(Inflatable):
     if not "priority" in self.settings: self.settings.priority = 1
     
     
-  def _zero_stats(self):
+  def _reset(self):
+    Startable._reset(self)
+    self.mhashes_pending = 0
     self.stats.starttime = None
     self.stats.ghashes = 0
-    self.stats.lockout = 0
-    self.stats.sequentialerrors = 0
     self.stats.jobrequests = 0
     self.stats.failedjobreqs = 0
     self.stats.uploadretries = 0
@@ -82,21 +85,6 @@ class BaseWorkSource(Inflatable):
     self.stats.difficulty = 0
     
     
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      self.zero_stats()
-      self.starttime = time.time()
-      self.started = True
-  
-  
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      self.core.workqueue.flush_all_of_work_source(self)
-      self.started = False
-
-        
   def set_parent(self, parent = None):
     self.parent = parent
     

@@ -77,10 +77,6 @@ class WebUI(BaseFrontend):
 
   def __init__(self, core, state = None):
     super(WebUI, self).__init__(core, state)
-    
-    # Initialize log buffer, list of log listener queues, and a lock for both of them
-    self.log_buffer = []
-    self.log_listeners = []
     self.log_lock = RLock()
 
 
@@ -91,44 +87,31 @@ class WebUI(BaseFrontend):
     if not "uiconfig" in self.settings: self.settings.uiconfig = {"loggadget": {"loglevel": self.core.default_loglevel}}
     if not "log_buffer_max_length" in self.settings: self.settings.log_buffer_max_length = 1000
     if not "log_buffer_purge_size" in self.settings: self.settings.log_buffer_purge_size = 100
-    if self.started and self.settings.port != self.port:
-      Thread(None, self.restart, self.settings.name + "_restart").start()
+    if self.started and self.settings.port != self.port: self.async_restart(3)
+    
+    
+  def _reset(self):
+    self.log_buffer = []
+    self.log_listeners = []
 
-      
-  def restart(self):
-    time.sleep(3)
-    with self.start_stop_lock:
-      self.stop()
-      self.start()
-      
-
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-
-      # Start HTTP server
-      self.httpd = ThreadingTCPServer(("", self.settings.port), RequestHandler, False)
-      self.httpd.webui = self
-      self.httpd.allow_reuse_address = 1
-      self.httpd.server_bind()
-      self.httpd.server_activate()
-      self.serverthread = Thread(None, self.httpd.serve_forever, self.settings.name + "_httpd")
-      self.serverthread.daemon = True
-      self.serverthread.start()
-
-      self.port = self.settings.port
-      self.started = True
+    
+  def _start(self):
+    super(WebUI, self)._start()
+    self.httpd = ThreadingTCPServer(("", self.settings.port), RequestHandler, False)
+    self.httpd.webui = self
+    self.httpd.allow_reuse_address = 1
+    self.httpd.server_bind()
+    self.httpd.server_activate()
+    self.serverthread = Thread(None, self.httpd.serve_forever, self.settings.name + "_httpd")
+    self.serverthread.daemon = True
+    self.serverthread.start()
+    self.port = self.settings.port
 
 
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-
-      # Terminate HTTP server
-      self.httpd.shutdown()
-      self.serverthread.join(10)
-
-      self.started = False
+  def _stop(self):
+    self.httpd.shutdown()
+    self.serverthread.join(10)
+    super(WebUI, self)._stop()
 
 
   def write_log_message(self, timestamp, loglevel, messages):

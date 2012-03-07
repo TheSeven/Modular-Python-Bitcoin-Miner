@@ -86,18 +86,6 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     if not "longpollconnections" in self.settings: self.settings.longpollconnections = 1
     
 
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      self.started = True
-  
-  
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      self.started = False
-
-      
   def get_job(self):
     if not self.started: return []
     if not self.settings.host: return []

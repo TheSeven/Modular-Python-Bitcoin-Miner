@@ -26,49 +26,59 @@
 
 
 
-from .util import Bunch
+import time
+from threading import RLock, Thread
 
 
 
-class Inflatable(object):
+class Startable(object):
 
-  settings = {}
 
-  
-  def __init__(self, core, state = None):
-    self.core = core
+  def __init__(self):
+    self.start_stop_lock = RLock()
     self.started = False
-    
-    # Create and populate a new state dict if neccessary
-    if not state:
-      state = Bunch()
-      state.settings = Bunch()
-      self.is_new_instance = True
-    else: self.is_new_instance = False
-    self.state = state
-      
-    # Grab the settings from the state
-    self.settings = state.settings
-    self.apply_settings()
-    
-    # Register ourselves in the global object registry
-    self.id = core.registry.register(self)
+    self._reset()
     
     
   def destroy(self):
-    # Unregister ourselves from the global object registry
-    self.core.registry.unregister(self.id)
+    self.stop()
+    super(Startable, self).destroy()
     
     
-  def apply_settings(self):
+  def _reset(self):
     pass
     
+    
+  def _start(self):
+    pass
+
+
+  def _stop(self):
+    pass
+    
+    
+  def start(self):
+    with self.start_stop_lock:
+      if self.started: return
+      self._reset()
+      self._start()
+      self.started = True
+  
+  
+  def stop(self):
+    with self.start_stop_lock:
+      if not self.started: return
+      self._stop()
+      self.started = False
+
         
-  def deflate(self):
-    return (self.__class__, self.state)
-  
-  
-  @staticmethod
-  def inflate(core, state):
-    if not state: return None
-    return state[0](core, state[1])
+  def restart(self, delay = 0):
+    time.sleep(delay)
+    if not self.started: return
+    with self.start_stop_lock:
+      self.stop()
+      self.start()
+      
+      
+  def async_restart(self, delay = 0):
+    Thread(None, self.restart, self.settings.name + "_restart", (delay,)).start()

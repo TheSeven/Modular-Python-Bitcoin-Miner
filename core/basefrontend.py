@@ -28,11 +28,12 @@
 
 from threading import RLock
 from .util import Bunch
+from .startable import Startable
 from .inflatable import Inflatable
 
 
 
-class BaseFrontend(Inflatable):
+class BaseFrontend(Startable, Inflatable):
 
   can_log = False
   can_show_stats = False
@@ -44,13 +45,24 @@ class BaseFrontend(Inflatable):
 
 
   def __init__(self, core, state = None):
-    super(BaseFrontend, self).__init__(core, state)
-    self.start_stop_lock = RLock()
+    Startable.__init__(self)
+    Inflatable.__init__(self, core, state)
     self.does_log = self.__class__.can_log
     self.does_show_stats = self.__class__.can_show_stats
+    
+    
+  def destroy(self):
+    Startable.destroy(self)
+    Inflatable.destroy(self)
 
 
   def apply_settings(self):
-    super(BaseFrontend, self).apply_settings()
+    Inflatable.apply_settings(self)
     if not "name" in self.settings or not self.settings.name:
       self.settings.name = getattr(self.__class__, "default_name", "Untitled frontend")
+
+
+  def _reset(self):
+    Startable._reset(self)
+    self.jobs_per_second = 0
+    self.parallel_jobs = 0

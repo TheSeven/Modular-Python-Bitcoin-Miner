@@ -34,21 +34,21 @@ import traceback
 from datetime import datetime
 from threading import RLock, Thread
 from .inflatable import Inflatable
+from .startable import Startable
 from .util import Bunch
 try: from queue import Queue
 except ImportError: from Queue import Queue
 
 
 
-class Core(object):
+class Core(Startable):
 
   version = "Modular Python Bitcoin Miner v0.1.0alpha"
 
   
   def __init__(self, instance = "default", default_loglevel = 500):
+    super(Core, self).__init__()
     self.instance = instance
-    self.started = False
-    self.start_stop_lock = RLock()
 
     # Initialize log queue and hijack stdout/stderr
     self.default_loglevel = default_loglevel
@@ -182,143 +182,141 @@ class Core(object):
       self.log("Core: Could not save instance configuration: %s\n" % traceback.format_exc(), 100, "rB")
     
     
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      self.log("Core: Starting up...\n", 100, "B")
+  def _start(self):
+    self.log("Core: Starting up...\n", 100, "B")
+    super(Core, self)._start()
+    
+    # Start up frontends
+    self.log("Core: Starting up frontends...\n", 700)
+    have_logger = False
+    have_configurator = False
+    for frontend in self.frontends:
+      try:
+        self.log("Core: Starting up frontend %s...\n" % frontend.settings.name, 800)
+        frontend.start()
+        if frontend.can_log: have_logger = True
+        if frontend.can_configure: have_configurator = True
+      except Exception as e:
+        self.log("Core: Could not start frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "rB")
       
-      # Start up frontends
-      self.log("Core: Starting up frontends...\n", 700)
-      have_logger = False
-      have_configurator = False
-      for frontend in self.frontends:
-        try:
-          self.log("Core: Starting up frontend %s...\n" % frontend.settings.name, 800)
-          frontend.start()
-          if frontend.can_log: have_logger = True
-          if frontend.can_configure: have_configurator = True
-        except Exception as e:
-          self.log("Core: Could not start frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "rB")
-        
-      # Warn if there is no logger frontend (needs to be fone before enabling logger thread)
-      if not have_logger:
-        self.log("Core: No working logger frontend module present!\n"
-                 "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 10, "rB")
+    # Warn if there is no logger frontend (needs to be fone before enabling logger thread)
+    if not have_logger:
+      self.log("Core: No working logger frontend module present!\n"
+               "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 10, "rB")
 
-      # Start logger thread
-      self.log("Core: Starting up logging thread...\n", 700)
-      self.logger_thread = Thread(None, self.log_worker_thread, "Log worker thread")
-      self.logger_thread.start()
-      self.started = True
+    # Start logger thread
+    self.log("Core: Starting up logging thread...\n", 700)
+    self.logger_thread = Thread(None, self.log_worker_thread, "Log worker thread")
+    self.logger_thread.start()
+    self.started = True
 
-      # Warn if there is no configuration frontend
-      if not have_configurator:
-        self.log("Core: No working configuration frontend module present!\n"
-                 "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 100, "yB")
+    # Warn if there is no configuration frontend
+    if not have_configurator:
+      self.log("Core: No working configuration frontend module present!\n"
+               "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 100, "yB")
 
-      # Start up work queue
-      self.log("Core: Starting up work queue...\n", 700)
-      try: self.workqueue.start()
-      except Exception as e: self.log("Core: Could not start work queue: %s\n" % traceback.format_exc(), 100, "rB")
+    # Start up work queue
+    self.log("Core: Starting up work queue...\n", 700)
+    try: self.workqueue.start()
+    except Exception as e: self.log("Core: Could not start work queue: %s\n" % traceback.format_exc(), 100, "rB")
 
-      # Start up blockchains
-      self.log("Core: Starting up blockchains...\n", 700)
-      for blockchain in self.blockchains:
-        try:
-          self.log("Core: Starting up blockchain %s...\n" % blockchain.settings.name, 800)
-          blockchain.start()
-        except Exception as e:
-          self.log("Core: Could not start blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
+    # Start up blockchains
+    self.log("Core: Starting up blockchains...\n", 700)
+    for blockchain in self.blockchains:
+      try:
+        self.log("Core: Starting up blockchain %s...\n" % blockchain.settings.name, 800)
+        blockchain.start()
+      except Exception as e:
+        self.log("Core: Could not start blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
 
-      # Start up work source tree
-      self.log("Core: Starting up work source tree...\n", 700)
-      if self.root_work_source:
-        try:
-          self.log("Core: Starting up work source %s...\n" % self.root_work_source.settings.name, 800)
-          self.root_work_source.start()
-        except Exception as e:
-          self.log("Core: Could not start root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
+    # Start up work source tree
+    self.log("Core: Starting up work source tree...\n", 700)
+    if self.root_work_source:
+      try:
+        self.log("Core: Starting up work source %s...\n" % self.root_work_source.settings.name, 800)
+        self.root_work_source.start()
+      except Exception as e:
+        self.log("Core: Could not start root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
 
-      # Start up work fetcher
-      self.log("Core: Starting up work fetcher...\n", 700)
-      try: self.fetcher.start()
-      except Exception as e: self.log("Core: Could not start work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
+    # Start up work fetcher
+    self.log("Core: Starting up work fetcher...\n", 700)
+    try: self.fetcher.start()
+    except Exception as e: self.log("Core: Could not start work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
 
-      # Start up workers
-      self.log("Core: Starting up workers...\n", 700)
-      for worker in self.workers:
-        try:
-          self.log("Core: Starting up worker %s...\n" % worker.settings.name, 800)
-          worker.start()
-        except Exception as e:
-          self.log("Core: Could not start worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+    # Start up workers
+    self.log("Core: Starting up workers...\n", 700)
+    for worker in self.workers:
+      try:
+        self.log("Core: Starting up worker %s...\n" % worker.settings.name, 800)
+        worker.start()
+      except Exception as e:
+        self.log("Core: Could not start worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
 
-      self.log("Core: Startup completed\n", 200, "")
+    self.log("Core: Startup completed\n", 200, "")
   
   
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      self.log("Core: Shutting down...\n", 100, "B")
-      
-      # Shut down workers
-      self.log("Core: Shutting down workers...\n", 700)
-      for worker in self.workers:
-        try:
-          self.log("Core: Shutting down worker %s...\n" % worker.settings.name, 800)
-          worker.stop()
-        except Exception as e:
-          self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
+  def _stop(self):
+    self.log("Core: Shutting down...\n", 100, "B")
+    
+    # Shut down workers
+    self.log("Core: Shutting down workers...\n", 700)
+    for worker in self.workers:
+      try:
+        self.log("Core: Shutting down worker %s...\n" % worker.settings.name, 800)
+        worker.stop()
+      except Exception as e:
+        self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
 
-      # Shut down work fetcher
-      self.log("Core: Shutting down work fetcher...\n", 700)
-      try: self.fetcher.stop()
-      except Exception as e: self.log("Core: Could not stop work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
+    # Shut down work fetcher
+    self.log("Core: Shutting down work fetcher...\n", 700)
+    try: self.fetcher.stop()
+    except Exception as e: self.log("Core: Could not stop work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
 
-      # Shut down work source tree
-      self.log("Core: Shutting down work source tree...\n", 700)
-      if self.root_work_source:
-        try:
-          self.log("Core: Shutting down work source %s...\n" % self.root_work_source.settings.name, 800)
-          self.root_work_source.stop()
-        except Exception as e:
-          self.log("Core: Could not stop root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
-      
-      # Shut down blockchains
-      self.log("Core: Shutting down blockchains...\n", 700)
-      for blockchain in self.blockchains:
-        try:
-          self.log("Core: Shutting down blockchain %s...\n" % blockchain.settings.name, 800)
-          blockchain.stop()
-        except Exception as e:
-          self.log("Core: Could not stop blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
+    # Shut down work source tree
+    self.log("Core: Shutting down work source tree...\n", 700)
+    if self.root_work_source:
+      try:
+        self.log("Core: Shutting down work source %s...\n" % self.root_work_source.settings.name, 800)
+        self.root_work_source.stop()
+      except Exception as e:
+        self.log("Core: Could not stop root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
+    
+    # Shut down blockchains
+    self.log("Core: Shutting down blockchains...\n", 700)
+    for blockchain in self.blockchains:
+      try:
+        self.log("Core: Shutting down blockchain %s...\n" % blockchain.settings.name, 800)
+        blockchain.stop()
+      except Exception as e:
+        self.log("Core: Could not stop blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
 
-      # Shut down work queue
-      self.log("Core: Shutting down work queue...\n", 700)
-      try: self.workqueue.stop()
-      except Exception as e: self.log("Core: Could not stop work queue: %s\n" % traceback.format_exc(), 100, "rB")
+    # Shut down work queue
+    self.log("Core: Shutting down work queue...\n", 700)
+    try: self.workqueue.stop()
+    except Exception as e: self.log("Core: Could not stop work queue: %s\n" % traceback.format_exc(), 100, "rB")
 
-      # Save instance configuration
-      self.save()
-      
-      # We are about to shut down the logging infrastructure, so switch back to builtin logging
-      self.log("Core: Shutting down logging thread...\n", 700)
-      self.started = False
-      
-      # Shut down the log worker thread
-      self.logqueue.put(None)
-      self.logger_thread.join(10)
-      
-      # Shut down the frontends
-      self.log("Core: Shutting down frontends...\n", 700)
-      for frontend in self.frontends:
-        try:
-          self.log("Core: Shutting down frontend %s...\n" % frontend.settings.name, 800)
-          frontend.stop()
-        except Exception as e:
-          self.log("Core: Could not stop frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "rB")
+    # Save instance configuration
+    self.save()
+    
+    # We are about to shut down the logging infrastructure, so switch back to builtin logging
+    self.log("Core: Shutting down logging thread...\n", 700)
+    self.started = False
+    
+    # Shut down the log worker thread
+    self.logqueue.put(None)
+    self.logger_thread.join(10)
+    
+    # Shut down the frontends
+    self.log("Core: Shutting down frontends...\n", 700)
+    for frontend in self.frontends:
+      try:
+        self.log("Core: Shutting down frontend %s...\n" % frontend.settings.name, 800)
+        frontend.stop()
+      except Exception as e:
+        self.log("Core: Could not stop frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "rB")
 
-      self.log("Core: Shutdown completed\n", 200, "")
+    super(Core, self)._stop()
+    self.log("Core: Shutdown completed\n", 200, "")
           
   
   def detect_frontends(self):

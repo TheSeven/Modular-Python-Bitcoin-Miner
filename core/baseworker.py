@@ -26,13 +26,15 @@
 
 
 
-from threading import RLock
+import time
+from threading import RLock, Thread
 from .util import Bunch
+from .startable import Startable
 from .inflatable import Inflatable
 
 
 
-class BaseWorker(Inflatable):
+class BaseWorker(Startable, Inflatable):
 
   can_autodetect = False
   settings = dict(Inflatable.settings, **{
@@ -41,25 +43,35 @@ class BaseWorker(Inflatable):
 
 
   def __init__(self, core, state = None, parent = None):
-    super(BaseWorker, self).__init__(core, state)
-    self.start_stop_lock = RLock()
+    self.stats = Bunch()
+    self.stats.lock = RLock()
+
+    Startable.__init__(self)
+    Inflatable.__init__(self, core, state)
+
     self.children = []
     self.parent = parent
     if parent: parent.children.add(self)
-    self.jobs_per_second = 0
-    self.parallel_jobs = 0
     
     
   def destroy(self):
     if self.parent: self.parent.children.remove(self)
+    Startable.destroy(self)
+    Inflatable.destroy(self)
 
 
   def apply_settings(self):
-    super(BaseWorker, self).apply_settings()
+    Inflatable.apply_settings(self)
     if not "name" in self.settings or not self.settings.name:
       self.settings.name = getattr(self.__class__, "default_name", "Untitled worker")
 
       
+  def _reset(self):
+    Startable._reset(self)
+    self.jobs_per_second = 0
+    self.parallel_jobs = 0
+    
+    
   def get_jobs_per_second(self):
     result = self.jobs_per_second
     for child in self.children: result += child.get_jobs_per_second()

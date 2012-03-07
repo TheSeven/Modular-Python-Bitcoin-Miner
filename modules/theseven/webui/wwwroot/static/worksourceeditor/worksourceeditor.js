@@ -32,7 +32,7 @@ mod.worksourceeditor = {
         var box = mod.layerbox.LayerBox();
         box.setTitle(nls("Work source editor"));
         if (!mod.uiconfig.data.worksourceeditor) mod.uiconfig.data.worksourceeditor = {};
-        if (!mod.uiconfig.data.worksourceeditor.height) mod.uiconfig.data.worksourceeditor.height = "520px";
+        if (!mod.uiconfig.data.worksourceeditor.height) mod.uiconfig.data.worksourceeditor.height = "500px";
         if (!mod.uiconfig.data.worksourceeditor.width) mod.uiconfig.data.worksourceeditor.width = "700px";
         box.setOuterHeight(mod.uiconfig.data.worksourceeditor.height);
         box.setOuterWidth(mod.uiconfig.data.worksourceeditor.width);

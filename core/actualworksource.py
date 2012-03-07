@@ -49,8 +49,10 @@ class ActualWorkSource(BaseWorkSource):
     self.blockchain = None
     if not "blockchain" in self.state: self.state.blockchain = None
     self.set_blockchain(core.get_blockchain_by_name(self.state.blockchain))
-
-    # Initialize work source state
+    
+    
+  def _reset(self):
+    super(ActualWorkSource, self)._reset()
     self.signals_new_block = None
     self.epoch = 0
     self.errors = 0
@@ -82,15 +84,6 @@ class ActualWorkSource(BaseWorkSource):
       self.settings.errorlockout_max = 500
     if not "stalelockout" in self.settings: self.settings.stalelockout = 25
     
-  
-  def start(self):
-    with self.start_stop_lock:
-      super(ActualWorkSource, self).start()
-      self.epoch = 0
-      self.errors = 0
-      self.lockoutend = 0
-      self.estimated_jobs = 1
-
   
   def get_blockchain(self):
     if isinstance(self.blockchain, DummyBlockchain): return None
