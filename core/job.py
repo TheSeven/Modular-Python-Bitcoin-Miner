@@ -105,3 +105,24 @@ class Job(object):
     if self.worker: self.worker.notify_canceled(self)
     # TODO: Accounting
     
+
+    
+class ValidationJob(object):
+
+  
+  def __init__(self, core, data, nonce, midstate = None):
+    self.core = core
+    self.data = data
+    if midstate: self.midstate = midstate
+    else: self.midstate = SHA256.hash(data[:64], False)
+    self.nonce = nonce
+    self.worker = None
+    
+    
+  def hashes_processed(self, hashes):
+    pass
+    
+    
+  def nonce_found(self, nonce):
+    pass
+   

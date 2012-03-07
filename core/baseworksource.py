@@ -29,12 +29,13 @@
 import time
 from threading import RLock
 from .util import Bunch
+from .statistics import StatisticsProvider
 from .startable import Startable
 from .inflatable import Inflatable
 
 
 
-class BaseWorkSource(Startable, Inflatable):
+class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
 
   is_group = False
   settings = dict(Inflatable.settings, **{
@@ -46,9 +47,7 @@ class BaseWorkSource(Startable, Inflatable):
 
 
   def __init__(self, core, state = None):
-    self.stats = Bunch()
-    self.stats.lock = RLock()
-
+    StatisticsProvider.__init__(self)
     Startable.__init__(self)
     Inflatable.__init__(self, core, state)
 
@@ -83,6 +82,21 @@ class BaseWorkSource(Startable, Inflatable):
     self.stats.sharesaccepted = 0
     self.stats.sharesrejected = 0
     self.stats.difficulty = 0
+    
+    
+  def _get_statistics(self, stats, childstats):
+    StatisticsProvider._get_statistics(self, stats, childstats)
+    stats.starttime = self.stats.starttime
+    stats.ghashes = self.stats.ghashes + childstats.getfieldsum("ghashes")
+    stats.jobrequests = self.stats.jobrequests + childstats.getfieldsum("jobrequests")
+    stats.failedjobreqs = self.stats.failedjobreqs + childstats.getfieldsum("failedjobreqs")
+    stats.uploadretries = self.stats.uploadretries + childstats.getfieldsum("uploadretries")
+    stats.jobsaccepted = self.stats.jobsaccepted + childstats.getfieldsum("jobsaccepted")
+    stats.jobsaccepted = self.stats.jobsaccepted + childstats.getfieldsum("jobsaccepted")
+    stats.jobscanceled = self.stats.jobscanceled + childstats.getfieldsum("jobscanceled")
+    stats.sharesaccepted = self.stats.sharesaccepted + childstats.getfieldsum("sharesaccepted")
+    stats.sharesrejected = self.stats.sharesrejected + childstats.getfieldsum("sharesrejected")
+    stats.difficulty = self.stats.difficulty
     
     
   def set_parent(self, parent = None):

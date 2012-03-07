@@ -33,6 +33,7 @@ import pickle
 import traceback
 from datetime import datetime
 from threading import RLock, Thread
+from .statistics import StatisticsList
 from .inflatable import Inflatable
 from .startable import Startable
 from .util import Bunch
@@ -426,6 +427,24 @@ class Core(Startable):
           
   def get_job(self, worker, expiry_min_ahead):
     return self.workqueue.get_job(worker, expiry_min_ahead)
+    
+    
+  def get_blockchain_statistics(self):
+    stats = StatisticsList()
+    for blockchain in self.blockchains: stats.append(blockchain.get_statistics())
+    return stats
+    
+    
+  def get_work_source_statistics(self):
+    stats = StatisticsList()
+    if self.root_work_source: stats.append(self.root_work_source.get_statistics())
+    return stats
+    
+    
+  def get_worker_statistics(self):
+    stats = StatisticsList()
+    for worker in self.workers: stats.append(worker.get_statistics())
+    return stats
     
     
   def notify_speed_changed(self, worker):

@@ -33,7 +33,7 @@ import traceback
 from threading import RLock, Condition, Thread
 from binascii import hexlify, unhexlify
 from core.baseworker import BaseWorker
-from core.validationjob import ValidationJob
+from core.job import ValidationJob
 
 
 

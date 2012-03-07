@@ -29,12 +29,13 @@
 import time
 from threading import RLock
 from .util import Bunch
+from .statistics import StatisticsProvider
 from .startable import Startable
 from .inflatable import Inflatable
 
 
 
-class Blockchain(Startable, Inflatable):
+class Blockchain(StatisticsProvider, Startable, Inflatable):
 
   settings = dict(Inflatable.settings, **{
     "name": {"title": "Name", "type": "string", "position": 100},
@@ -43,9 +44,7 @@ class Blockchain(Startable, Inflatable):
 
   
   def __init__(self, core, state = None):
-    self.stats = Bunch()
-    self.stats.lock = RLock()
-
+    StatisticsProvider.__init__(self)
     Startable.__init__(self)
     Inflatable.__init__(self, core, state)
     
@@ -54,16 +53,6 @@ class Blockchain(Startable, Inflatable):
     self.epochlock = RLock()
 
 
-  def _reset(self):    
-    Startable._reset(self)
-    self.epoch = 0
-    self.groupend = 0
-    self.jobs = []
-    self.stats.starttime = time.time()
-    self.stats.blocks = 0
-    self.stats.lastblock = None
-
-    
   def destroy(self):
     with self.worksourcelock:
       for worksource in self.worksources:
@@ -86,6 +75,23 @@ class Blockchain(Startable, Inflatable):
         name = origname + (" (%d)" % i)
       self.settings.name = name
     if not "grouptime" in self.settings: self.settings.grouptime = 30
+    
+    
+  def _reset(self):    
+    Startable._reset(self)
+    self.epoch = 0
+    self.groupend = 0
+    self.jobs = []
+    self.stats.starttime = time.time()
+    self.stats.blocks = 0
+    self.stats.lastblock = None
+
+    
+  def _get_statistics(self, stats, childstats):
+    StatisticsProvider._get_statistics(self, stats, childstats)
+    stats.starttime = self.stats.starttime
+    stats.blocks = self.stats.blocks
+    stats.lastblock = self.stats.lastblock
     
     
   def add_job(self, job):
@@ -132,4 +138,35 @@ class Blockchain(Startable, Inflatable):
     with self.epochlock:
       if worksource.epoch == self.epoch or time.time() > groupend: return True
       return False
+  
+  
+  
+class DummyBlockchain(object):
+
+
+  def __init__(self, core):
+    # Initialize job list (protected by global job queue lock)
+    self.jobs = []
+    
+    
+  def add_job(self, job):
+    if not job in self.jobs: self.jobs.append(job)
+  
+
+  def remove_job(self, job):
+    while job in self.jobs: self.jobs.remove(job)
+    
+    
+  def add_work_source(self, worksource):
+    pass
+
+
+  def remove_work_source(self, worksource):
+    pass
+
+
+  def handle_block(self):
+    for job in self.jobs: job.cancel()
+    self.jobs = []
+    self.core.notify_job_canceled()
   

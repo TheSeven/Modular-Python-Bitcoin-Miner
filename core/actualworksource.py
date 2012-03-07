@@ -29,7 +29,7 @@
 import time
 from threading import RLock
 from .baseworksource import BaseWorkSource
-from .dummyblockchain import DummyBlockchain
+from .blockchain import DummyBlockchain
 
 
 

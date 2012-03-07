@@ -29,12 +29,13 @@
 import time
 from threading import RLock, Thread
 from .util import Bunch
+from .statistics import StatisticsProvider
 from .startable import Startable
 from .inflatable import Inflatable
 
 
 
-class BaseWorker(Startable, Inflatable):
+class BaseWorker(StatisticsProvider, Startable, Inflatable):
 
   can_autodetect = False
   settings = dict(Inflatable.settings, **{
@@ -43,9 +44,7 @@ class BaseWorker(Startable, Inflatable):
 
 
   def __init__(self, core, state = None, parent = None):
-    self.stats = Bunch()
-    self.stats.lock = RLock()
-
+    StatisticsProvider.__init__(self)
     Startable.__init__(self)
     Inflatable.__init__(self, core, state)
 
@@ -70,6 +69,10 @@ class BaseWorker(Startable, Inflatable):
     Startable._reset(self)
     self.jobs_per_second = 0
     self.parallel_jobs = 0
+    
+    
+  def _get_statistics(self, stats, childstats):
+    StatisticsProvider._get_statistics(self, stats, childstats)
     
     
   def get_jobs_per_second(self):
