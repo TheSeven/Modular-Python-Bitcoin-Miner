@@ -94,7 +94,6 @@ class Fetcher(object):
               paralleljobs += worker.get_parallel_jobs()
           self.queuetarget = max(2, paralleljobs, jobspersecond * 30)
         while self.core.workqueue.count + self.fetchercount < self.queuetarget:
-          print("%.6f + %.6f < %.6f" % (self.core.workqueue.count, self.fetchercount, self.queuetarget))
           try:
             thread = Thread(None, self.fetcherthread, "fetcher_worker")
             thread.daemon = True

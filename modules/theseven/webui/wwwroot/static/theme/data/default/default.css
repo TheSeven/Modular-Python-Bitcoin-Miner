@@ -37,7 +37,11 @@ body, table
 {
     cursor: default;
 }
-input[type=text], input[type=password], textarea, .textcursor, .textcursor *
+input[type=text], input[type=password], textarea, .autocursor, .autocursor *
+{
+    cursor: auto;
+}
+.textcursor, .textcursor *
 {
     cursor: text;
 }

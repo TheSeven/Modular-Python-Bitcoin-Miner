@@ -18,28 +18,24 @@
 // Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh if you
 // want to support further development of the Modular Python Bitcoin Miner.
 
-mod.menugadget = {
+mod.debugmenu = {
 
     // Called on module initialisation, ensures that all dependencies are satisfied
     "init": function(callback)
     {
-        depend(["dom", "box", "event"], callback);
+        depend(["csc", "dom", "layerbox", "uiconfig"], callback);
     },
 
-    // Shows a list of buttons that launch layers
-    "Gadget": function(box, config)
+    // Shows the frontend editor window
+    "LayerUI": function(config)
     {
-        mod.dom.clean(box.contentNode);
-        box.setTitle(nls("Menu"));
+        var box = mod.layerbox.LayerBox();
+        box.setTitle(nls("Debug menu"));
+        box.setOuterWidth("200px");
         
         var buttons =
         [
-            {"name": "Frontends", "module": "frontendeditor", "moduleparam": null},
-            {"name": "Workers", "module": "workereditor", "moduleparam": null},
-            {"name": "Work sources", "module": "worksourceeditor", "moduleparam": null},
-            {"name": "Blockchains", "module": "blockchaineditor", "moduleparam": null},
-            {"name": "Save configuration", "handler": saveconfiguration},
-            {"name": "Debug menu", "module": "debugmenu", "moduleparam": null},
+            {"name": "Dump thread states", "module": "debugviewer", "moduleparam": {"function": "dumpthreadstates", "title": nls("Dump thread states")}},
         ]
         
         for (var i in buttons)

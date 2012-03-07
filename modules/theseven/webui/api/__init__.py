@@ -1,5 +1,6 @@
 from . import init
 from . import gadgethost
+from . import menugadget
 from . import log
 from . import uiconfig
 from . import frontendeditor
@@ -7,11 +8,12 @@ from . import workereditor
 from . import worksourceeditor
 from . import blockchaineditor
 from . import settingseditor
-from . import menugadget
+from . import debug
 
 handlermap = {
   "/api/init/init": init.init,
   "/api/gadgethost/getgadgets": gadgethost.getgadgets,
+  "/api/menugadget/saveconfiguration": menugadget.saveconfiguration,
   "/api/log/stream": log.stream,
   "/api/uiconfig/read": uiconfig.read,
   "/api/uiconfig/write": uiconfig.write,
@@ -35,5 +37,5 @@ handlermap = {
   "/api/blockchaineditor/deleteblockchain": blockchaineditor.deleteblockchain,
   "/api/settingseditor/readsettings": settingseditor.readsettings,
   "/api/settingseditor/writesettings": settingseditor.writesettings,
-  "/api/menugadget/saveconfiguration": menugadget.saveconfiguration,
+  "/api/debug/dumpthreadstates": debug.dumpthreadstates,
 }

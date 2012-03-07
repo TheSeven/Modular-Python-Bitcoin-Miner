@@ -50,11 +50,11 @@ mod.loggadget = {
         table.appendChild(tbody);
         div.style.height = "100%";
         div.style.overflow = "auto";
+        div.allowSelect = true;
+        div.allowDrag = true;
+        div.allowContextMenu = true;
+        div.className = "autocursor";
         div.appendChild(table);
-        box.contentNode.allowSelect = true;
-        box.contentNode.allowDrag = true;
-        box.contentNode.allowContextMenu = true;
-        box.contentNode.className = "textcursor";
         box.contentNode.style.backgroundColor = "#000";
         box.contentNode.style.color = "#fff";
         box.contentNode.style.padding = "0px";
