@@ -105,7 +105,7 @@ class ActualWorkSource(BaseWorkSource):
     
     
   def _is_locked_out(self):
-    return time.clock() <= self.lockoutend
+    return time.time() <= self.lockoutend
     
       
   def _handle_success(self):
@@ -117,10 +117,10 @@ class ActualWorkSource(BaseWorkSource):
       self.errors += 1
       if self.errors >= self.settings.errorlimit:
         lockout = min(self.settings.errorlockout_factor + self.errors, self.settings.errorlockout_max)
-        self.lockoutend = max(self.lockoutend, time.clock() + lockout)
+        self.lockoutend = max(self.lockoutend, time.time() + lockout)
 
     
   def _handle_stale(self):
     with self.statelock:
-      self.lockoutend = max(self.lockoutend, time.clock() + self.settings.stalelockout)
+      self.lockoutend = max(self.lockoutend, time.time() + self.settings.stalelockout)
       

@@ -90,7 +90,7 @@ class Blockchain(Inflatable):
     with self.start_stop_lock:
       if self.started: return
       with self.stats.lock:
-        self.stats.starttime = time.clock()
+        self.stats.starttime = time.time()
         self.stats.blocks = 0
         self.stats.lastblock = None
       self.started = True
@@ -122,7 +122,7 @@ class Blockchain(Inflatable):
 
 
   def handle_block(self, worksource):
-    now = time.clock()
+    now = time.time()
     with self.epochlock:
       if now > groupend or worksource.epoch == self.epoch:
         self.epoch += 1
@@ -138,12 +138,12 @@ class Blockchain(Inflatable):
       
   def check_job(self, job):
     with self.epochlock:
-      if job.epoch == self.epoch or time.clock() > groupend: return True
+      if job.epoch == self.epoch or time.time() > groupend: return True
       return False
 
       
   def check_work_source(self, worksource):
     with self.epochlock:
-      if worksource.epoch == self.epoch or time.clock() > groupend: return True
+      if worksource.epoch == self.epoch or time.time() > groupend: return True
       return False
   

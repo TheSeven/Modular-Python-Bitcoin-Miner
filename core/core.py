@@ -188,10 +188,12 @@ class Core(object):
       self.log("Core: Starting up...\n", 100, "B")
       
       # Start up frontends
+      self.log("Core: Starting up frontends...\n", 700)
       have_logger = False
       have_configurator = False
       for frontend in self.frontends:
         try:
+          self.log("Core: Starting up frontend %s...\n" % frontend.settings.name, 800)
           frontend.start()
           if frontend.can_log: have_logger = True
           if frontend.can_configure: have_configurator = True
@@ -204,6 +206,7 @@ class Core(object):
                  "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 10, "rB")
 
       # Start logger thread
+      self.log("Core: Starting up logging thread...\n", 700)
       self.logger_thread = Thread(None, self.log_worker_thread, "Log worker thread")
       self.logger_thread.start()
       self.started = True
@@ -214,28 +217,39 @@ class Core(object):
                  "Core: Run with --detect-frontends after ensuring that all neccessary modules are installed.\n", 100, "yB")
 
       # Start up work queue
+      self.log("Core: Starting up work queue...\n", 700)
       try: self.workqueue.start()
       except Exception as e: self.log("Core: Could not start work queue: %s\n" % traceback.format_exc(), 100, "rB")
 
       # Start up blockchains
+      self.log("Core: Starting up blockchains...\n", 700)
       for blockchain in self.blockchains:
-        try: blockchain.start()
+        try:
+          self.log("Core: Starting up blockchain %s...\n" % blockchain.settings.name, 800)
+          blockchain.start()
         except Exception as e:
           self.log("Core: Could not start blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
 
       # Start up work source tree
+      self.log("Core: Starting up work source tree...\n", 700)
       if self.root_work_source:
-        try: self.root_work_source.start()
+        try:
+          self.log("Core: Starting up work source %s...\n" % self.root_work_source.settings.name, 800)
+          self.root_work_source.start()
         except Exception as e:
           self.log("Core: Could not start root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
 
       # Start up work fetcher
+      self.log("Core: Starting up work fetcher...\n", 700)
       try: self.fetcher.start()
       except Exception as e: self.log("Core: Could not start work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
 
       # Start up workers
+      self.log("Core: Starting up workers...\n", 700)
       for worker in self.workers:
-        try: worker.start()
+        try:
+          self.log("Core: Starting up worker %s...\n" % worker.settings.name, 800)
+          worker.start()
         except Exception as e:
           self.log("Core: Could not start worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
 
@@ -248,28 +262,39 @@ class Core(object):
       self.log("Core: Shutting down...\n", 100, "B")
       
       # Shut down workers
+      self.log("Core: Shutting down workers...\n", 700)
       for worker in self.workers:
-        try: worker.stop()
+        try:
+          self.log("Core: Shutting down worker %s...\n" % worker.settings.name, 800)
+          worker.stop()
         except Exception as e:
           self.log("Core: Could not stop worker %s: %s\n" % (worker.settings.name, traceback.format_exc()), 100, "rB")
 
       # Shut down work fetcher
+      self.log("Core: Shutting down work fetcher...\n", 700)
       try: self.fetcher.stop()
       except Exception as e: self.log("Core: Could not stop work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
 
       # Shut down work source tree
+      self.log("Core: Shutting down work source tree...\n", 700)
       if self.root_work_source:
-        try: self.root_work_source.stop()
+        try:
+          self.log("Core: Shutting down work source %s...\n" % self.root_work_source.settings.name, 800)
+          self.root_work_source.stop()
         except Exception as e:
           self.log("Core: Could not stop root work source %s: %s\n" % (self.root_work_source.settings.name, traceback.format_exc()), 100, "rB")
       
       # Shut down blockchains
+      self.log("Core: Shutting down blockchains...\n", 700)
       for blockchain in self.blockchains:
-        try: blockchain.stop()
+        try:
+          self.log("Core: Shutting down blockchain %s...\n" % blockchain.settings.name, 800)
+          blockchain.stop()
         except Exception as e:
           self.log("Core: Could not stop blockchain %s: %s\n" % (blockchain.settings.name, traceback.format_exc()), 100, "rB")
 
       # Shut down work queue
+      self.log("Core: Shutting down work queue...\n", 700)
       try: self.workqueue.stop()
       except Exception as e: self.log("Core: Could not stop work queue: %s\n" % traceback.format_exc(), 100, "rB")
 
@@ -277,6 +302,7 @@ class Core(object):
       self.save()
       
       # We are about to shut down the logging infrastructure, so switch back to builtin logging
+      self.log("Core: Shutting down logging thread...\n", 700)
       self.started = False
       
       # Shut down the log worker thread
@@ -284,8 +310,11 @@ class Core(object):
       self.logger_thread.join(10)
       
       # Shut down the frontends
+      self.log("Core: Shutting down frontends...\n", 700)
       for frontend in self.frontends:
-        try: frontend.stop()
+        try:
+          self.log("Core: Shutting down frontend %s...\n" % frontend.settings.name, 800)
+          frontend.stop()
         except Exception as e:
           self.log("Core: Could not stop frontend %s: %s\n" % (frontend.settings.name, traceback.format_exc()), 100, "rB")
 
@@ -401,8 +430,8 @@ class Core(object):
     return self.workqueue.get_job(worker, expiry_min_ahead)
     
     
-  def notify_speed_changed(self):
-    return self.fetcher.notify_speed_changed()
+  def notify_speed_changed(self, worker):
+    return self.fetcher.notify_speed_changed(worker)
     
     
   def log(self, message, loglevel, format = ""):

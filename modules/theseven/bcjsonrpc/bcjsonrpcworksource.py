@@ -30,8 +30,8 @@ import time
 import json
 import base64
 import traceback
-from binascii import unhexlify
-from threading import RLock
+from binascii import hexlify, unhexlify
+from threading import RLock, Thread
 from core.actualworksource import ActualWorkSource
 from core.job import Job
 try: import http.client as http_client
@@ -89,7 +89,6 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   def start(self):
     with self.start_stop_lock:
       if self.started: return
-      if not self.settings.host: raise Exception("Host name may not be empty")
       self.started = True
   
   
@@ -100,9 +99,11 @@ class BCJSONRPCWorkSource(ActualWorkSource):
 
       
   def get_job(self):
+    if not self.started: return []
+    if not self.settings.host: return []
     if self._is_locked_out(): return []
     try:
-      now = time.clock()
+      now = time.time()
       conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
       req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
       headers = {"User-Agent": self.useragent, "Content-type": "application/json", "Content-Length": len(req)}
@@ -139,5 +140,37 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       response = json.loads(response.read().decode("utf_8"))
       data = unhexlify(response["result"]["data"].encode("ascii"))
       target = unhexlify(response["result"]["target"].encode("ascii"))
-      return [Job(self.core, self, self.epoch, now + 60, data[:88], target)]
-    except: self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "r")
+      self._handle_success()
+      return [Job(self.core, self, self.epoch, now + 60, data, target)]
+    except:
+      self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "r")
+      self._handle_error()
+      return []
+      
+      
+  def nonce_found(self, job, data, nonce, noncediff):
+    uploader = Thread(None, self.uploadthread, self.settings.name + "_uploadnonce_" + hexlify(nonce).decode("ascii"), (job, data, nonce, noncediff))
+    uploader.daemon = True
+    uploader.start()
+
+    
+  def uploadthread(self, job, data, nonce, noncediff):
+    while True:
+      try:
+        conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
+        req = json.dumps({"method": "getwork", "params": [hexlify(data).decode("ascii")], "id": 0}).encode("utf_8")
+        headers = {"User-Agent": self.useragent, "Content-type": "application/json", "Content-Length": len(req)}
+        if self.auth != None: headers["Authorization"] = self.auth
+        conn.request("POST", self.settings.path, req, headers)
+        response = conn.getresponse()
+        rdata = json.loads(response.read().decode("utf_8"))
+        if rdata["result"] == True: return job.nonce_handled_callback(nonce, noncediff, True)
+        if rdata["error"] != None: return job.nonce_handled_callback(nonce, noncediff, rdata["error"])
+        headers = response.getheaders()
+        for h in headers:
+          if h[0].lower() == "x-reject-reason":
+            return job.nonce_handled_callback(nonce, noncediff, h[1])
+        return job.nonce_handled_callback(nonce, noncediff, False)
+      except:
+        self.core.log("Error while uploading share %s (difficulty %.5f) to %s (%s:%d): %s\n" % (hexlify(nonce).decode("ascii"), noncediff, self.settings.name, self.settings.host, self.settings.port, traceback.format_exc()), 200, "rB")
+        time.sleep(1)

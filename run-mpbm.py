@@ -109,7 +109,7 @@ if __name__ == "__main__":
     worksource.set_blockchain(blockchain)
     worksource.settings.name = "BTCGuild (donation)"
     worksource.settings.priority = 1
-    worksource.settings.host = "btcguild.com"
+    worksource.settings.host = "mine3.btcguild.com"
     worksource.settings.username = "TheSeven_guest"
     worksource.settings.password = "x"
     worksource.settings.longpollconnections = 0

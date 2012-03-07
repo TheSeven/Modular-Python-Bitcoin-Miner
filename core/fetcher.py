@@ -74,7 +74,7 @@ class Fetcher(object):
     with self.lock: self.lock.notify()
 
     
-  def notify_speed_changed(self):
+  def notify_speed_changed(self, worker):
     with self.lock:
       self.speedchanged = True
       self.lock.notify()
@@ -97,6 +97,7 @@ class Fetcher(object):
           thread.daemon = True
           thread.start()
           self.threads.append(thread)
+          self.fetchercount += 1
         self.lock.wait()
 
         

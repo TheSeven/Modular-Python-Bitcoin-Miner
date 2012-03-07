@@ -28,12 +28,13 @@
 
 import os
 import time
-import urllib
 import shutil
 import base64
 from threading import RLock, Thread
 from core.basefrontend import BaseFrontend
 from .api import handlermap
+try: import urllib.parse as urllib
+except: import urllib
 try: from socketserver import ThreadingTCPServer
 except: from SocketServer import ThreadingTCPServer
 try: from http.server import BaseHTTPRequestHandler
@@ -115,8 +116,8 @@ class WebUI(BaseFrontend):
       self.serverthread.daemon = True
       self.serverthread.start()
 
-      self.started = True
       self.port = self.settings.port
+      self.started = True
 
 
   def stop(self):
@@ -199,7 +200,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     # Figure out the base path that will be prepended to the requested path
     basepath = os.path.realpath(os.path.join(os.path.dirname(__file__), "wwwroot"))
     # Remove query strings and anchors, and unescape the path
-    path = urllib.parse.unquote(self.path.split('?',1)[0].split('#',1)[0])
+    path = urllib.unquote(self.path.split('?',1)[0].split('#',1)[0])
     # Rewrite requests to "/" to the specified root file
     if path == "/": path = self.__class__.rootfile
     # Paths that don't start with a slash are invalid => 400 Bad Request
@@ -247,7 +248,7 @@ class RequestHandler(BaseHTTPRequestHandler):
       
   def do_POST(self):
     # Remove query strings and anchors, and unescape the path
-    path = urllib.parse.unquote(self.path.split('?',1)[0].split('#',1)[0])
+    path = urllib.unquote(self.path.split('?',1)[0].split('#',1)[0])
     # Paths that don't start with a slash are invalid => 400 Bad Request
     if path[0] != "/": return self.fail(400)
     # Check authentication and figure out privilege level

@@ -68,7 +68,7 @@ class SHA256(object):
       t2 = (self._rotr(a, 2) ^ self._rotr(a, 13) ^ self._rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))
       h, g, f, e, d, c, b, a = g, f, e, (d + t1) & 0xffffffff, c, b, a, (t1 + t2) & 0xffffffff
         
-    self.state = ((x + y) & 0xffffffff for x, y in zip(self.state, (a, b, c, d, e, f, g, h)))
+    self.state = tuple((x + y) & 0xffffffff for x, y in zip(self.state, (a, b, c, d, e, f, g, h)))
 
     
   def update(self, data):

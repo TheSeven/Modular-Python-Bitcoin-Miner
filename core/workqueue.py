@@ -86,6 +86,7 @@ class WorkQueue(object):
   def get_job(self, worker, expiry_min_ahead):
     with self.lock:
       job = self._get_job_internal(expiry_min_ahead)
+      self.core.fetcher.wakeup()
       job.set_worker(worker)
       with self.takenlock:
         expiry = int(job.expiry)
@@ -98,7 +99,7 @@ class WorkQueue(object):
     self.count -= 1
     while True:
       keys = sorted(self.lists.keys())
-      min_expiry = time.clock() + expiry_min_ahead
+      min_expiry = time.time() + expiry_min_ahead
       # Look for a job that meets min_expiry as closely as possible
       for expiry in keys:
         if expiry <= min_expiry: continue
@@ -113,6 +114,7 @@ class WorkQueue(object):
         if not list: continue
         return list.pop(0)
       # There were no jobs at all => Wait for some to arrive
+      self.core.fetcher.wakeup()
       self.lock.wait()
 
         
@@ -144,13 +146,13 @@ class WorkQueue(object):
     
   def cleanuploop(self):
     while not self.shutdown:
-      now = time.clock()
+      now = time.time()
       with self.lock:
         keys = sorted(self.lists.keys())
         cutoff = now + 10
         for expiry in keys:
           if expiry > cutoff: break
-          if expiry > self.expirycutoff and expiry <= cutoff: self.count -= self.lists[expiry]
+          if expiry > self.expirycutoff and expiry <= cutoff: self.count -= len(self.lists[expiry])
           if expiry <= now:
             for job in self.lists[expiry]: job.destroy()
             del self.lists[expiry]

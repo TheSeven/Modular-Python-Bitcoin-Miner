@@ -88,7 +88,9 @@ class WorkSourceGroup(BaseWorkSource):
       with self.childlock:
         if not worksource in self.children:
           if self.started:
-            try: worksource.start()
+            try:
+              self.core.log("%s: Starting up work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+              worksource.start()
             except Exception as e:
               self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
           self.children.append(worksource)
@@ -100,7 +102,9 @@ class WorkSourceGroup(BaseWorkSource):
         while worksource in self.children:
           worksource.set_parent()
           if self.started:
-            try: worksource.stop()
+            try:
+              self.core.log("%s: Shutting down work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+              worksource.stop()
             except Exception as e:
               self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
           self.children.remove(worksource)
@@ -111,11 +115,13 @@ class WorkSourceGroup(BaseWorkSource):
       if self.started: return
       with self.childlock:
         for worksource in self.children:
-          try: worksource.start()
+          try:
+            self.core.log("%s: Starting up work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+            worksource.start()
           except Exception as e:
             self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
       self.last_index = 0
-      self.last_time = time.clock()
+      self.last_time = time.time()
       self.started = True
   
   
@@ -124,7 +130,9 @@ class WorkSourceGroup(BaseWorkSource):
       if not self.started: return
       with self.childlock:
         for worksource in self.children:
-          try: worksource.stop()
+          try:
+            self.core.log("%s: Shutting down work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+            worksource.stop()
           except Exception as e:
             self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
       self.started = False
@@ -132,7 +140,7 @@ class WorkSourceGroup(BaseWorkSource):
       
   def _distribute_mhashes(self):
     with self.statelock:
-      now = time.clock()
+      now = time.time()
       timestep = now - self.last_time
       self.last_time = now
       mhashes_remaining = 2**32 / 1000000. * self.settings.distribution_granularity
@@ -185,6 +193,7 @@ class WorkSourceGroup(BaseWorkSource):
 
     
   def get_job(self):
+    if not self.started: return []
     with self.childlock:
       if not self.children: return []
       job = self._get_job_round()

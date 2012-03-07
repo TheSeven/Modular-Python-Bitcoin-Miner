@@ -41,7 +41,7 @@ class BaseWorker(Inflatable):
 
 
   def __init__(self, core, state = None, parent = None):
-    super(BaseFrontend, self).__init__(core, state)
+    super(BaseWorker, self).__init__(core, state)
     self.start_stop_lock = RLock()
     self.children = []
     self.parent = parent
@@ -55,7 +55,7 @@ class BaseWorker(Inflatable):
 
 
   def apply_settings(self):
-    super(BaseFrontend, self).apply_settings()
+    super(BaseWorker, self).apply_settings()
     if not "name" in self.settings or not self.settings.name:
       self.settings.name = getattr(self.__class__, "default_name", "Untitled worker")
 
