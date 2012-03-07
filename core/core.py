@@ -32,7 +32,7 @@ import time
 import pickle
 import traceback
 from datetime import datetime
-from threading import RLock, Thread
+from threading import RLock, Thread, current_thread
 from .statistics import StatisticsList
 from .inflatable import Inflatable
 from .startable import Startable
@@ -55,8 +55,8 @@ class Core(Startable):
     self.default_loglevel = default_loglevel
     self.logger_thread = None
     self.logqueue = Queue()
-    self.logtime = 0
-    self.logbuf = []
+    self.logbuf = {}
+    self.printlock = RLock()
     self.stdout = sys.stdout
     self.stderr = sys.stderr
     from .util import OutputRedirector
@@ -452,17 +452,13 @@ class Core(Startable):
     
     
   def log(self, message, loglevel, format = ""):
-    now = datetime.now()
-    self.log_multi(loglevel, [(message, format)], now)
-
-    
-  def log_print(self, message, loglevel, format = ""):
     # Concatenate messages until there is a linefeed
-    if not self.logbuf: self.logtime = datetime.now()
-    self.logbuf.append((message, format))
+    thread = current_thread()
+    if not thread in self.logbuf: self.logbuf[thread] = {"time": datetime.now(), "data": []}
+    self.logbuf[thread]["data"].append((message, format))
     if message[-1:] != "\n": return
-    self.log_multi(loglevel, self.logbuf, self.logtime)
-    self.logbuf = []
+    self.log_multi(loglevel, self.logbuf[thread]["data"], self.logbuf[thread]["time"])
+    del self.logbuf[thread]
 
     
   def log_multi(self, loglevel, messages, timestamp = datetime.now()):
@@ -475,7 +471,8 @@ class Core(Startable):
       message = ""
       for string, format in messages: message += string
       prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
-      for line in string.splitlines(True): self.stderr.write(prefix + line)
+      with self.printlock:
+        for line in string.splitlines(True): self.stderr.write(prefix + line)
 
 
   def log_worker_thread(self):
