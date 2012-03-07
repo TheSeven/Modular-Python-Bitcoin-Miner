@@ -69,6 +69,15 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
     Startable._reset(self)
     self.jobs_per_second = 0
     self.parallel_jobs = 0
+    self.mhashes_pending = 0
+    self.stats.starttime = time.time()
+    self.stats.ghashes = 0
+    self.stats.mhps = 0
+    self.stats.jobsaccepted = 0
+    self.stats.jobscanceled = 0
+    self.stats.sharesaccepted = 0
+    self.stats.sharesrejected = 0
+    self.stats.sharesinvalid = 0
     
     
   def _get_statistics(self, stats, childstats):

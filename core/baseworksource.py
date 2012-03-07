@@ -72,11 +72,12 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
   def _reset(self):
     Startable._reset(self)
     self.mhashes_pending = 0
-    self.stats.starttime = None
+    self.stats.starttime = time.time()
     self.stats.ghashes = 0
     self.stats.jobrequests = 0
     self.stats.failedjobreqs = 0
     self.stats.uploadretries = 0
+    self.stats.jobsreceived = 0
     self.stats.jobsaccepted = 0
     self.stats.jobscanceled = 0
     self.stats.sharesaccepted = 0

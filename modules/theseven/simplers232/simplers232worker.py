@@ -100,7 +100,7 @@ class SimpleRS232Worker(BaseWorker):
         self.error = None
         self.job = None
         self.nextjob = None
-        self.speed = 0
+        self.stats.mhps = 0
         self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, None, False, None)
         self.handle.write(struct.pack("45B", *([0] * 45)))
         data = self.handle.read(100)
@@ -119,8 +119,8 @@ class SimpleRS232Worker(BaseWorker):
         self.wakeup.wait(60)
         if self.error != None: raise self.error
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
-        self.core.log(self.settings.name + ": Running at %f MH/s\n" % (self.speed / 1000000.), 300, "B")
-        interval = min(60, 2**32 / self.speed)
+        self.core.log(self.settings.name + ": Running at %f MH/s\n" % self.stats.mhps, 300, "B")
+        interval = min(60, 2**32 / 1000000. / self.stats.mhps)
         self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
         self.core.log(self.settings.name + ": Job interval: %f seconds\n" % self.jobinterval, 400, "B")
         self.jobspersecond = 1. / self.jobinterval
@@ -142,14 +142,14 @@ class SimpleRS232Worker(BaseWorker):
         self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
         self.error = e
       finally:
-        self.speed = 0
+        self.stats.mhps = 0
         try: self.wakeup.release()
         except: pass
         try: self.handle.close()
         except: pass
         try: self.listenerthread.join(10)
         except: pass
-        self.speed = 0
+        self.stats.mhps = 0
         if not self.shutdown: time.sleep(1)
 
 
@@ -164,7 +164,7 @@ class SimpleRS232Worker(BaseWorker):
           if self.nextjob == None: raise Exception("Got spurious job ACK from mining device")
           now = time.time()
           if self.job != None and self.job.starttime != None:
-            hashes = (now - self.job.starttime) * self.speed
+            hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
             self.job.hashes_processed(hashes)
             self.job.starttime = None
           with self.wakeup:
@@ -179,7 +179,7 @@ class SimpleRS232Worker(BaseWorker):
           now = time.time()
           self.job.nonce_found(nonce)
           delta = (now - self.job.starttime) - 40. / self.baudrate
-          self.speed = struct.unpack("<I", nonce)[0] / delta
+          self.stats.mhps = struct.unpack("<I", nonce)[0] / delta / 1000000.
           if isinstance(self.job, ValidationJob):
             if self.job.nonce != nonce:
               raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(self.job.nonce).decode("ascii")))
@@ -193,7 +193,7 @@ class SimpleRS232Worker(BaseWorker):
           self.core.log(self.settings.name + " exhausted keyspace!\n", 200, "y")
           if isinstance(self.job, ValidationJob): raise Exception("Validation job terminated without finding a share")
           if self.job != None and self.job.starttime != None:
-            hashes = (time.time() - self.job.starttime) * self.speed
+            hashes = (time.time() - self.job.starttime) * self.stats.mhps * 1000000
             self.job.hashes_processed(hashes)
             self.job.starttime = None
           with self.wakeup: self.wakeup.notify()

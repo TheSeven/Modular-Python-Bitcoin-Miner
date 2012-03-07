@@ -27,7 +27,9 @@
 
 
 import time
-from threading import RLock
+import traceback
+from binascii import hexlify
+from threading import RLock, Thread
 from .baseworksource import BaseWorkSource
 from .blockchain import DummyBlockchain
 
@@ -35,6 +37,7 @@ from .blockchain import DummyBlockchain
 
 class ActualWorkSource(BaseWorkSource):
 
+  nonce_found_async = True
   settings = dict(BaseWorkSource.settings, **{
     "errorlimit": {"title": "Error limit", "type": "int", "position": 20000},
     "errorlockout_factor": {"title": "Error lockout factor", "type": "int", "position": 20100},
@@ -101,19 +104,61 @@ class ActualWorkSource(BaseWorkSource):
     return time.time() <= self.lockoutend
     
       
-  def _handle_success(self):
-    with self.statelock: self.errors = 0
+  def _handle_success(self, jobs = None):
+    with self.statelock:
+      self.errors = 0
+      if jobs: self.estimated_jobs = jobs
 
     
-  def _handle_error(self):
+  def _handle_error(self, upload = False):
     with self.statelock:
       self.errors += 1
       if self.errors >= self.settings.errorlimit:
         lockout = min(self.settings.errorlockout_factor + self.errors, self.settings.errorlockout_max)
         self.lockoutend = max(self.lockoutend, time.time() + lockout)
+    with self.stats.lock:
+      if upload: self.stats.uploadretries += 1
+      else: self.stats.failedjobreqs += 1
 
     
   def _handle_stale(self):
     with self.statelock:
       self.lockoutend = max(self.lockoutend, time.time() + self.settings.stalelockout)
       
+      
+  def get_job(self):
+    if not self.started: return []
+    if self._is_locked_out(): return []
+    try:
+      with self.stats.lock: self.stats.jobrequests += 1
+      jobs = self._get_job()
+      if jobs: self._handle_success(len(jobs))
+      else: self._handle_error()
+      return jobs
+    except:
+      self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
+      self._handle_error()
+      return []
+  
+
+  def nonce_found(self, job, data, nonce, noncediff):
+    if self.nonce_found_async:
+      thread = Thread(None, self.nonce_found_thread, self.settings.name + "_nonce_found_" + hexlify(nonce).decode("ascii"), (job, data, nonce, noncediff))
+      thread.daemon = True
+      thread.start()
+    else: self.none_found_thread(job, data, nonce, noncediff)
+
+    
+  def nonce_found_thread(self, job, data, nonce, noncediff):
+    tries = 0
+    while True:
+      try:
+        result = self._nonce_found(job, data, nonce, noncediff)
+        self._handle_success()
+        return job.nonce_handled_callback(nonce, noncediff, result)
+      except:
+        self.core.log("Error while sending share %s (difficulty %.5f) to %s: %s\n" % (hexlify(nonce).decode("ascii"), noncediff, self.settings.name, traceback.format_exc()), 200, "y")
+        tries += 1
+        self._handle_error(True)
+        time.sleep(min(30, tries))
+        

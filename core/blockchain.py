@@ -29,7 +29,7 @@
 import time
 from threading import RLock
 from .util import Bunch
-from .statistics import StatisticsProvider
+from .statistics import StatisticsProvider, StatisticsList
 from .startable import Startable
 from .inflatable import Inflatable
 
@@ -48,14 +48,13 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     Startable.__init__(self)
     Inflatable.__init__(self, core, state)
     
-    self.worksources = []
     self.worksourcelock = RLock()
     self.epochlock = RLock()
 
 
   def destroy(self):
     with self.worksourcelock:
-      for worksource in self.worksources:
+      for worksource in self.children:
         worksource.set_blockchain(None)
     Startable.destroy(self)
     Inflatable.destroy(self)
@@ -92,6 +91,10 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     stats.starttime = self.stats.starttime
     stats.blocks = self.stats.blocks
     stats.lastblock = self.stats.lastblock
+    self.stats.jobsaccepted = childstats.calculatefieldsum("jobsaccepted")
+    self.stats.jobscanceled = childstats.calculatefieldsum("jobscanceled")
+    self.stats.sharesaccepted = childstats.calculatefieldsum("sharesaccepted")
+    self.stats.sharesrejected = childstats.calculatefieldsum("sharesrejected")
     
     
   def add_job(self, job):
@@ -105,12 +108,12 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
   def add_work_source(self, worksource):
     with self.worksourcelock:
       worksource.epoch = self.epoch
-      if not worksource in self.worksources: self.worksources.append(worksource)
+      if not worksource in self.children: self.children.append(worksource)
   
 
   def remove_work_source(self, worksource):
     with self.worksourcelock:
-      while worksource in self.worksources: self.worksources.remove(worksource)
+      while worksource in self.children: self.children.remove(worksource)
 
 
   def handle_block(self, worksource):
