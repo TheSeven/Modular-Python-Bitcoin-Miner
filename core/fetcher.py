@@ -26,6 +26,7 @@
 
 
 
+import time
 import traceback
 from threading import RLock, Condition, Thread, current_thread
 
@@ -93,11 +94,16 @@ class Fetcher(object):
               paralleljobs += worker.get_parallel_jobs()
           self.queuetarget = max(2, paralleljobs, jobspersecond * 30)
         while self.core.workqueue.count + self.fetchercount < self.queuetarget:
-          thread = Thread(None, self.fetcherthread, "fetcher_worker")
-          thread.daemon = True
-          thread.start()
-          self.threads.append(thread)
-          self.fetchercount += 1
+          print("%.6f + %.6f < %.6f" % (self.core.workqueue.count, self.fetchercount, self.queuetarget))
+          try:
+            thread = Thread(None, self.fetcherthread, "fetcher_worker")
+            thread.daemon = True
+            thread.start()
+            self.threads.append(thread)
+            self.fetchercount += 1
+          except:
+            self.core.log("Fetcher: Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
+            time.sleep(1)
         self.lock.wait()
 
         

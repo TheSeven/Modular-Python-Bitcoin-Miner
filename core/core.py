@@ -435,6 +435,11 @@ class Core(object):
     
     
   def log(self, message, loglevel, format = ""):
+    now = datetime.now()
+    self.log_multi(loglevel, [(message, format)], now)
+
+    
+  def log_print(self, message, loglevel, format = ""):
     # Concatenate messages until there is a linefeed
     if not self.logbuf: self.logtime = datetime.now()
     self.logbuf.append((message, format))

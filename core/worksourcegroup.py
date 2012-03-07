@@ -168,13 +168,15 @@ class WorkSourceGroup(BaseWorkSource):
       
       
   def _get_job_round(self, force = False):
-    startindex = self._get_start_index()
+    with self.childlock:
+      children = [child for child in self.children]
+      startindex = self._get_start_index()
     found = False
     while not found:
       index = startindex
       first = True
       while index != startindex or first:
-        worksource = self.children[index]
+        worksource = children[index]
         mhashes = 0
         if not worksource.is_group: mhashes = 2**32 / 1000000. * worksource.estimated_jobs
         if force or worksource.mhashes_pending >= mhashes:
@@ -186,7 +188,7 @@ class WorkSourceGroup(BaseWorkSource):
           self.add_pending_mhashes(mhashes)
           found = True
         index += 1
-        if index >= len(self.children): index = 0
+        if index >= len(children): index = 0
         first = False
       if not found: self._distribute_mhashes()
     return []
@@ -194,8 +196,13 @@ class WorkSourceGroup(BaseWorkSource):
     
   def get_job(self):
     if not self.started: return []
-    with self.childlock:
-      if not self.children: return []
-      job = self._get_job_round()
-      if job: return job
-      return self._get_job_round(True)
+    if not self.children: return []
+    job = self._get_job_round()
+    if job: return job
+    job = self._get_job_round(True)
+    if job: return job
+    if self.parent:
+      mhashes = 2**32 / 1000000.
+      self.add_pending_mhashes(-mhashes)
+      self.parent.add_pending_mhashes(mhashes)
+    return []

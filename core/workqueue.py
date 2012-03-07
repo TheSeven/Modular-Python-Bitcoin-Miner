@@ -55,7 +55,7 @@ class WorkQueue(object):
       expiry = int(job.expiry)
       if not expiry in self.lists: self.lists[expiry] = [job]
       else: self.lists[expiry].append(job)
-      self.count += 1
+      if expiry > self.expirycutoff: self.count += 1
       job.register()
       self.lock.notify_all()
     
@@ -63,8 +63,9 @@ class WorkQueue(object):
   def remove_job(self, job):
     with self.lock:
       try:
-        self.lists[int(job.expiry)].remove(job)
-        self.count -= 1
+        expiry = int(job.expiry)
+        self.lists[expiry].remove(job)
+        if expiry > self.expirycutoff: self.count -= 1
       except: pass
       
       
@@ -74,7 +75,7 @@ class WorkQueue(object):
         for job in list:
           if job.worksource == worksource:
             list.remove(job)
-            self.count -= 1
+            if int(job.expiry) > self.expirycutoff: self.count -= 1
             job.destroy()
       for list in self.takenlists:
         for job in list:
@@ -88,8 +89,9 @@ class WorkQueue(object):
       job = self._get_job_internal(expiry_min_ahead)
       self.core.fetcher.wakeup()
       job.set_worker(worker)
+      expiry = int(job.expiry)
+      if int(job.expiry) <= self.expirycutoff: self.count += 1
       with self.takenlock:
-        expiry = int(job.expiry)
         if not expiry in self.takenlists: self.takenlists[expiry] = [job]
         else: self.takenlists[expiry].append(job)
       return job
@@ -157,6 +159,7 @@ class WorkQueue(object):
             for job in self.lists[expiry]: job.destroy()
             del self.lists[expiry]
         self.expirycutoff = cutoff
+      self.core.fetcher.wakeup()
       with self.takenlock:
         keys = sorted(self.takenlists.keys())
         for expiry in keys:

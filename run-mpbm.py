@@ -129,6 +129,19 @@ if __name__ == "__main__":
   core.start()
   
   try:
-    while True: time.sleep(100)
+    while True:
+      import threading
+      import traceback
+      import sys
+      id2name = dict([(th.ident, th.name) for th in threading.enumerate()])
+      code = []
+      for threadId, stack in sys._current_frames().items():
+          code.append("\n# Thread: %s(%d)" % (id2name.get(threadId,""), threadId))
+          for filename, lineno, name, line in traceback.extract_stack(stack):
+              code.append('File: "%s", line %d, in %s' % (filename, lineno, name))
+              if line:
+                  code.append("  %s" % (line.strip()))
+      print("\n".join(code))
+      time.sleep(10)
   except KeyboardInterrupt:
     core.stop()

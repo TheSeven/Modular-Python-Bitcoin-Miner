@@ -109,6 +109,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       headers = {"User-Agent": self.useragent, "Content-type": "application/json", "Content-Length": len(req)}
       if self.auth != None: headers["Authorization"] = self.auth
       conn.request("POST", self.settings.path, req, headers)
+      conn.sock.settimeout(self.settings.getworktimeout)
       response = conn.getresponse()
       """
       with self.statlock:

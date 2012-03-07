@@ -36,7 +36,7 @@ class OutputRedirector(object):
 
     
   def write(self, data):
-    self.core.log(data, self.loglevel, self.flags)
+    self.core.log_print(data, self.loglevel, self.flags)
 
     
   def flush(self): pass
