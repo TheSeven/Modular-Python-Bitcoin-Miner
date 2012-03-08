@@ -67,6 +67,7 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
       
   def _reset(self):
     Startable._reset(self)
+    self.job = None
     self.jobs_per_second = 0
     self.parallel_jobs = 0
     self.mhashes_pending = 0
@@ -82,6 +83,10 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
     
   def _get_statistics(self, stats, childstats):
     StatisticsProvider._get_statistics(self, stats, childstats)
+    stats.current_job = self.job
+    stats.current_work_source = self.job.worksource
+    stats.current_work_source_id = self.job.worksource.id
+    stats.current_work_source_name = self.job.worksource.name
     
     
   def get_jobs_per_second(self):
