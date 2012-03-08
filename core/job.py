@@ -136,3 +136,6 @@ class ValidationJob(object):
   def nonce_found(self, nonce):
     pass
    
+   
+  def destroy(self):
+    pass
