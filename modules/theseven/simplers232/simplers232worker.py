@@ -228,10 +228,11 @@ class SimpleRS232Worker(BaseWorker):
         # Main loop, continues until something goes wrong or we're shutting down.
         while not self.shutdown:
 
-          # Fetch a job. Blocks until one is available. Because of this we need to release the
-          # wake lock temporarily in order to avoid possible deadlocks.
+          # Fetch a job, add 2 seconds safety margin to the requested minimum expiration time.
+          # Blocks until one is available. Because of this we need to release the
+          # wakeup lock temporarily in order to avoid possible deadlocks.
           self.wakeup.release()
-          job = self.core.get_job(self, self.jobinterval)
+          job = self.core.get_job(self, self.jobinterval + 2)
           self.wakeup.acquire()
           
           # If a new block was found while we were fetching that job, just discard it and get a new one.
