@@ -270,7 +270,7 @@ class SimpleRS232Worker(BaseWorker):
         self.error = e
       finally:
         # We're not doing productive work any more, update stats and destroy current job
-        self._endjob()
+        self._jobend()
         self.stats.mhps = 0
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
         try: self.wakeup.release()
