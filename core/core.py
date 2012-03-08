@@ -425,8 +425,8 @@ class Core(Startable):
           self.log("Core: Could not start root work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
           
           
-  def get_job(self, worker, expiry_min_ahead):
-    return self.workqueue.get_job(worker, expiry_min_ahead)
+  def get_job(self, worker, expiry_min_ahead, async = False):
+    return self.workqueue.get_job(worker, expiry_min_ahead, async)
     
     
   def get_blockchain_statistics(self):

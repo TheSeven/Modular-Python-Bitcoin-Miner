@@ -88,20 +88,21 @@ class WorkQueue(Startable):
             job.cancel()
     
     
-  def get_job(self, worker, expiry_min_ahead):
+  def get_job(self, worker, expiry_min_ahead, async = False):
     with self.lock:
-      job = self._get_job_internal(expiry_min_ahead)
-      self.core.fetcher.wakeup()
-      job.set_worker(worker)
-      expiry = int(job.expiry)
-      if int(job.expiry) <= self.expirycutoff: self.count += 1
-      with self.takenlock:
-        if not expiry in self.takenlists: self.takenlists[expiry] = [job]
-        else: self.takenlists[expiry].append(job)
+      job = self._get_job_internal(expiry_min_ahead, async)
+      if job:
+        self.core.fetcher.wakeup()
+        job.set_worker(worker)
+        expiry = int(job.expiry)
+        if int(job.expiry) <= self.expirycutoff: self.count += 1
+        with self.takenlock:
+          if not expiry in self.takenlists: self.takenlists[expiry] = [job]
+          else: self.takenlists[expiry].append(job)
       return job
 
 
-  def _get_job_internal(self, expiry_min_ahead):
+  def _get_job_internal(self, expiry_min_ahead, async = False):
     self.count -= 1
     while True:
       keys = sorted(self.lists.keys())
@@ -121,6 +122,7 @@ class WorkQueue(Startable):
         return list.pop(0)
       # There were no jobs at all => Wait for some to arrive
       self.core.fetcher.wakeup()
+      if async: return None
       self.lock.wait()
 
         
