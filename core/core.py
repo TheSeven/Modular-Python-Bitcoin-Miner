@@ -207,7 +207,7 @@ class Core(Startable):
 
     # Start logger thread
     self.log("Core: Starting up logging thread...\n", 700)
-    self.logger_thread = Thread(None, self.log_worker_thread, "Log worker thread")
+    self.logger_thread = Thread(None, self.log_worker_thread, "core_log_worker")
     self.logger_thread.start()
     self.started = True
 

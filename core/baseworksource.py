@@ -92,7 +92,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     stats.jobrequests = self.stats.jobrequests + childstats.calculatefieldsum("jobrequests")
     stats.failedjobreqs = self.stats.failedjobreqs + childstats.calculatefieldsum("failedjobreqs")
     stats.uploadretries = self.stats.uploadretries + childstats.calculatefieldsum("uploadretries")
-    stats.jobsaccepted = self.stats.jobsaccepted + childstats.calculatefieldsum("jobsaccepted")
+    stats.jobsreceived = self.stats.jobsreceived + childstats.calculatefieldsum("jobsreceived")
     stats.jobsaccepted = self.stats.jobsaccepted + childstats.calculatefieldsum("jobsaccepted")
     stats.jobscanceled = self.stats.jobscanceled + childstats.calculatefieldsum("jobscanceled")
     stats.sharesaccepted = self.stats.sharesaccepted + childstats.calculatefieldsum("sharesaccepted")

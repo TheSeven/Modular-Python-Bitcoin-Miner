@@ -70,7 +70,6 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
     self.job = None
     self.jobs_per_second = 0
     self.parallel_jobs = 0
-    self.mhashes_pending = 0
     self.stats.starttime = time.time()
     self.stats.ghashes = 0
     self.stats.mhps = 0
@@ -83,10 +82,19 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
     
   def _get_statistics(self, stats, childstats):
     StatisticsProvider._get_statistics(self, stats, childstats)
+    stats.starttime = self.stats.starttime
+    stats.ghashes = self.stats.ghashes + childstats.calculatefieldsum("ghashes")
+    stats.mhps = self.stats.mhps + childstats.calculatefieldsum("mhps")
+    stats.jobsaccepted = self.stats.jobsaccepted + childstats.calculatefieldsum("jobsaccepted")
+    stats.jobscanceled = self.stats.jobscanceled + childstats.calculatefieldsum("jobscanceled")
+    stats.sharesaccepted = self.stats.sharesaccepted + childstats.calculatefieldsum("sharesaccepted")
+    stats.sharesrejected = self.stats.sharesrejected + childstats.calculatefieldsum("sharesrejected")
+    stats.sharesinvalid = self.stats.sharesrejected + childstats.calculatefieldsum("sharesinvalid")
+    stats.parallel_jobs = self.parallel_jobs
     stats.current_job = self.job
-    stats.current_work_source = self.job.worksource
-    stats.current_work_source_id = self.job.worksource.id
-    stats.current_work_source_name = self.job.worksource.name
+    stats.current_work_source = self.job.worksource if self.job else None
+    stats.current_work_source_id = self.job.worksource.id if self.job else None
+    stats.current_work_source_name = self.job.worksource.settings.name if self.job else None
     
     
   def get_jobs_per_second(self):

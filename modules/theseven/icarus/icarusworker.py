@@ -193,6 +193,8 @@ class IcarusWorker(BaseWorker):
         self.wakeup.wait(60)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
+        # Honor shutdown flag
+        if self.shutdown: break
         # We woke up, but the validation job hasn't succeeded in the mean time.
         # This usually means that the wakeup timeout has expired.
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
@@ -271,8 +273,9 @@ class IcarusWorker(BaseWorker):
         if not self.shutdown:
           tries += 1
           if time.time() - starttime >= 300: tries = 0
-          if tries > 5: time.sleep(30)
-          else: time.sleep(1)
+          with self.wakeup:
+            if tries > 5: self.wakeup.wait(30)
+            else: self.wakeup.wait(1)
         # Restart (handled by "while not self.shutdown:" loop above)
 
 

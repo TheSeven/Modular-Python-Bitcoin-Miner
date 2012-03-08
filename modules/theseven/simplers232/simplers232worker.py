@@ -199,6 +199,8 @@ class SimpleRS232Worker(BaseWorker):
         self.wakeup.wait(1)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
+        # Honor shutdown flag
+        if self.shutdown: break
         # If the job that was enqueued above has not been moved from nextjob to job by the
         # listener thread yet, something went wrong. Throw an exception to make everything restart.
         if self.nextjob != None: raise Exception("Timeout waiting for job ACK")
@@ -209,6 +211,8 @@ class SimpleRS232Worker(BaseWorker):
         self.wakeup.wait(60)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
+        # Honor shutdown flag
+        if self.shutdown: break
         # We woke up, but the validation job hasn't succeeded in the mean time.
         # This usually means that the wakeup timeout has expired.
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
@@ -247,6 +251,8 @@ class SimpleRS232Worker(BaseWorker):
           self._sendjob(job)
           # Wait for up to one second for the device to accept it
           self.wakeup.wait(1)
+          # Honor shutdown flag
+          if self.shutdown: break
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
           # If the job that was send above has not been moved from nextjob to job by the listener
@@ -292,8 +298,9 @@ class SimpleRS232Worker(BaseWorker):
         if not self.shutdown:
           tries += 1
           if time.time() - starttime >= 300: tries = 0
-          if tries > 5: time.sleep(30)
-          else: time.sleep(1)
+          with self.wakeup:
+            if tries > 5: self.wakeup.wait(30)
+            else: self.wakeup.wait(1)
         # Restart (handled by "while not self.shutdown:" loop above)
 
 

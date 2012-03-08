@@ -21,6 +21,7 @@
 
 
 import json
+import traceback
 
 
 
@@ -46,7 +47,7 @@ class jsonapi(object):
       data = self.f(core, webui, httprequest, path, data, privileges)
       if data == None: return
       # Encode the response
-      data = json.dumps(data, ensure_ascii = False).encode("utf_8")
+      data = json.dumps(data, ensure_ascii = False, default = lambda obj: None).encode("utf_8")
       # Send response headers
       httprequest.log_request(200, len(data))
       httprequest.send_response(200)
@@ -56,5 +57,6 @@ class jsonapi(object):
       httprequest.wfile.write(data)
     # Something went wrong, no matter what => 500 Internal Server Error
     except:
+      core.log("Exception while handling API call: %s\n" % traceback.format_exc(), 700, "y")
       try: httprequest.send_response(500)
       except: pass

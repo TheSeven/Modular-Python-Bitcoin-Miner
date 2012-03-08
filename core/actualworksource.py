@@ -64,7 +64,7 @@ class ActualWorkSource(BaseWorkSource):
     
       
   def _get_statistics(self, stats, childstats):
-    super(ActualWorkSource, self)._get_statistics()
+    super(ActualWorkSource, self)._get_statistics(stats, childstats)
     stats.signals_new_block = self.signals_new_block
     lockout = self.lockoutend - time.time()
     stats.locked_out = lockout if lockout > 0 else 0

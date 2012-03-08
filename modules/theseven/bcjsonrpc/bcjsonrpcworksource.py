@@ -94,7 +94,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     
     
   def _get_statistics(self, stats, childstats):
-    super(BCJSONRPCWorkSource, self)._get_statistics()
+    super(BCJSONRPCWorkSource, self)._get_statistics(stats, childstats)
     stats.supports_rollntime = self.stats.supports_rollntime
     
 
