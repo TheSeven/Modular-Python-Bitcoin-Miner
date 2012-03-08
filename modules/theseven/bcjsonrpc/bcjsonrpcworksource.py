@@ -47,7 +47,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   settings = dict(ActualWorkSource.settings, **{
     "getworktimeout": {"title": "Getwork timeout", "type": "float", "position": 19000},
     "sendsharetimeout": {"title": "Sendshare timeout", "type": "float", "position": 19100},
-    "longpolltimeout": {"title": "Long poll timeout", "type": "float", "position": 19200},
+    "longpolltimeout": {"title": "Long poll connect timeout", "type": "float", "position": 19200},
+    "longpollresponsetimeout": {"title": "Long poll response timeout", "type": "float", "position": 19200},
     "host": {"title": "Host", "type": "string", "position": 1000},
     "port": {"title": "Port", "type": "int", "position": 1010},
     "path": {"title": "Path", "type": "string", "position": 1020},
@@ -71,6 +72,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       self.settings.sendsharetimeout = 5
     if not "longpolltimeout" in self.settings or not self.settings.longpolltimeout:
       self.settings.longpolltimeout = 10
+    if not "longpollresponsetimeout" in self.settings or not self.settings.longpollresponsetimeout:
+      self.settings.longpollresponsetimeout = 1800
     if not "host" in self.settings: self.settings.host = ""
     if not "port" in self.settings or not self.settings.port:
       self.settings.port = 8332
@@ -168,6 +171,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions}
         if self.auth != None: headers["Authorization"] = self.auth
         conn.request("GET", path, None, headers)
+        conn.sock.settimeout(self.settings.longpollresponsetimeout)
         response = conn.getresponse()
         if master: self.blockchain.handle_block()
         jobs = self._build_jobs(response, time.time() - 1, epoch + 1)
