@@ -46,7 +46,7 @@ class Job(object):
     self.difficulty = 65535. * 2**48 / struct.unpack("<Q", self.target[-12:-4])[0]
     with self.worksource.stats.lock: self.worksource.stats.difficulty = self.difficulty
     if midstate: self.midstate = midstate
-    else: self.midstate = struct.pack("<8I", *struct.unpack(">8I", SHA256.hash(struct.pack("<16I", *struct.unpack(">16I", data[:64])), False)))
+    else: self.midstate = Job.calculate_midstate(data)
     self.canceled = False
     self.worker = None
     self.hashes_remaining = 2**32
@@ -82,7 +82,7 @@ class Job(object):
   def nonce_found(self, nonce):
     self.core.log("%s found share: %s:%s:%s\n" % (self.worker.settings.name, self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), hexlify(nonce).decode("ascii")), 350, "g")
     data = self.data[:76] + nonce + self.data[80:]
-    hash = SHA256.hash(SHA256.hash(struct.pack("<20I", *struct.unpack(">20I", data[:80]))))
+    hash = Job.calculate_hash(data)
     if hash[-4:] != b"\0\0\0\0":
       self.core.log("%s sent K-not-zero share %s\n" % (self.worker.settings.name, hexlify(nonce).decode("ascii")), 200, "yB")
       with self.worker.stats.lock: self.worker.stats.sharesinvalid += 1
@@ -114,8 +114,18 @@ class Job(object):
       self.worker.notify_canceled(self)
       with self.worker.stats.lock: self.worker.stats.jobscanceled += 1
       with self.worksource.stats.lock: self.worksource.stats.jobscanceled += 1
-    
+      
+      
+  @staticmethod
+  def calculate_midstate(data):
+    return struct.pack("<8I", *struct.unpack(">8I", SHA256.hash(struct.pack("<16I", *struct.unpack(">16I", data[:64])), False)))
+      
+      
+  @staticmethod
+  def calculate_hash(data):
+    return SHA256.hash(SHA256.hash(struct.pack("<20I", *struct.unpack(">20I", data[:80]))))
 
+    
     
 class ValidationJob(object):
 

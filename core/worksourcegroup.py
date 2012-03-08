@@ -174,7 +174,7 @@ class WorkSourceGroup(BaseWorkSource):
       while index != startindex or first:
         worksource = children[index]
         mhashes = 0
-        if not worksource.is_group: mhashes = 2**32 / 1000000. * worksource.estimated_jobs
+        if not worksource.is_group: mhashes = 2**32 / 1000000.
         if force or worksource.mhashes_pending >= mhashes:
           if mhashes: worksource.add_pending_mhashes(-mhashes)
           job = worksource.get_job()

@@ -68,8 +68,12 @@ class WorkQueue(Startable):
     with self.lock:
       try:
         expiry = int(job.expiry)
-        self.lists[expiry].remove(job)
-        if expiry > self.expirycutoff: self.count -= 1
+        try:
+          self.lists[expiry].remove(job)
+          if expiry > self.expirycutoff: self.count -= 1
+        except: pass
+        try: self.takenlists[expiry].remove(job)
+        except: pass
       except: pass
       
       
@@ -151,7 +155,7 @@ class WorkQueue(Startable):
           if expiry > cutoff: break
           if expiry > self.expirycutoff and expiry <= cutoff: self.count -= len(self.lists[expiry])
           if expiry <= now:
-            for job in self.lists[expiry]: job.destroy()
+            while self.lists[expiry]: self.lists[expiry].pop(0).destroy()
             del self.lists[expiry]
         self.expirycutoff = cutoff
       self.core.fetcher.wakeup()
@@ -159,6 +163,6 @@ class WorkQueue(Startable):
         keys = sorted(self.takenlists.keys())
         for expiry in keys:
           if expiry <= now:
-            for job in self.takenlists[expiry]: job.cancel()
+            while self.takenlists[expiry]: self.takenlists[expiry].pop(0).cancel()
             del self.takenlists[expiry]
       time.sleep(1)

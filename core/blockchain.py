@@ -129,17 +129,18 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
         self.jobs = []
         worksource.epoch = self.epoch
       else: worksource.epoch += 1
+    self.core.log("%s indicates that a new block was found" % worksource.settings.name, 300, "B")
 
       
   def check_job(self, job):
     with self.epochlock:
-      if job.epoch == self.epoch or time.time() > groupend: return True
+      if job.epoch == self.epoch or time.time() > self.groupend: return True
       return False
 
       
   def check_work_source(self, worksource):
     with self.epochlock:
-      if worksource.epoch == self.epoch or time.time() > groupend: return True
+      if worksource.epoch == self.epoch or time.time() > self.groupend: return True
       return False
   
   

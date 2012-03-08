@@ -63,6 +63,15 @@ class ActualWorkSource(BaseWorkSource):
     self.estimated_jobs = 1
     
       
+  def _get_statistics(self, stats, childstats):
+    super(ActualWorkSource, self)._get_statistics()
+    stats.signals_new_block = self.signals_new_block
+    lockout = self.lockoutend - time.time()
+    stats.locked_out = lockout if lockout > 0 else 0
+    stats.consecutive_errors = self.errors
+    stats.jobs_per_request = self.estimated_jobs
+
+
   def destroy(self):
     super(ActualWorkSource, self).destroy()
     if self.blockchain: self.blockchain.remove_work_source(self)
@@ -132,7 +141,9 @@ class ActualWorkSource(BaseWorkSource):
     try:
       with self.stats.lock: self.stats.jobrequests += 1
       jobs = self._get_job()
-      if jobs: self._handle_success(len(jobs))
+      if jobs:
+        self._handle_success(len(jobs))
+        self.core.log("%s: Got %d jobs\n" % (self.settings.name, len(jobs)), 500)
       else: self._handle_error()
       return jobs
     except:
