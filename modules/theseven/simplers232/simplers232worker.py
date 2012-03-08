@@ -163,6 +163,7 @@ class SimpleRS232Worker(BaseWorker):
         self.stats.mhps = 0
 
         # Job that the device is currently working on (found nonces are coming from this one).
+        # This variable is used by BaseWorker to figure out the current work source for statistics.
         self.job = None
         # Job that is currently being uploaded to the device but not yet being processed.
         self.nextjob = None
@@ -234,13 +235,15 @@ class SimpleRS232Worker(BaseWorker):
           self.wakeup.acquire()
           
           # If a new block was found while we were fetching that job, just discard it and get a new one.
-          if job.canceled: continue
+          if job.canceled:
+            job.destroy()
+            continue
 
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
 
           # Upload the job to the device
-          self.sendjob(job)
+          self._sendjob(job)
           # Wait for up to one second for the device to accept it
           self.wakeup.wait(1)
           # If an exception occurred in the listener thread, rethrow it
@@ -266,7 +269,8 @@ class SimpleRS232Worker(BaseWorker):
         # Make sure that the listener thread realizes that something went wrong
         self.error = e
       finally:
-        # We're not doing productive work any more, update stats
+        # We're not doing productive work any more, update stats and destroy current job
+        self._endjob()
         self.stats.mhps = 0
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
         try: self.wakeup.release()
@@ -313,13 +317,9 @@ class SimpleRS232Worker(BaseWorker):
           # If we didn't expect one (no job waiting to be accepted in nextjob), throw an exception.
           if self.nextjob == None: raise Exception("Got spurious job ACK from mining device")
           # The job has been uploaded. Start counting time for the new job, and if there was a
-          # previous one, calculate for how long that one was running. Multiply that by the hash
-          # rate to get the number of hashes calculated for that job and update statistics.
+          # previous one, calculate for how long that one was running and destroy it.
           now = time.time()
-          if self.job != None and self.job.starttime != None:
-            hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
-            self.job.hashes_processed(hashes)
-            self.job.starttime = None
+          self._jobend(now)
 
           # Acknowledge the job by moving it from nextjob to job and wake up
           # the main thread that's waiting for the job acknowledgement.
@@ -366,10 +366,7 @@ class SimpleRS232Worker(BaseWorker):
           # or that the "found share" message was lost on the communication channel.
           if isinstance(self.job, ValidationJob): raise Exception("Validation job terminated without finding a share")
           # Stop measuring time because the device is doing duplicate work right now
-          if self.job != None and self.job.starttime != None:
-            hashes = (time.time() - self.job.starttime) * self.stats.mhps * 1000000
-            self.job.hashes_processed(hashes)
-            self.job.starttime = None
+          self._jobend()
           # Wake up the main thread to fetch new work ASAP.
           with self.wakeup: self.wakeup.notify()
           continue
@@ -388,9 +385,25 @@ class SimpleRS232Worker(BaseWorker):
 
 
   # This function uploads a job to the device
-  def sendjob(self, job):
+  def _sendjob(self, job):
     # Put it into nextjob. It will be moved to job by the listener
     # thread as soon as it gets acknowledged by the device.
     self.nextjob = job
     # Send it to the device
     self.handle.write(struct.pack("B", 1) + job.midstate[::-1] + job.data[75:63:-1])
+
+    
+  # This function needs to be called whenever the device terminates working on a job.
+  # It calculates how much work was actually done for the job and destroys it.
+  def _jobend(self, now = time.time()):
+    # Calculate how long the job was actually running and multiply that by the hash
+    # rate to get the number of hashes calculated for that job and update statistics.
+    if self.job != None:
+      if self.job.starttime != None:
+        hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
+        self.job.hashes_processed(hashes)
+        self.job.starttime = None
+      # Destroy the job, which is neccessary to actually account the calculated amount
+      # of work to the worker and work source, and to remove the job from cancellation lists.
+      self.job.destroy()
+      self.job = None
