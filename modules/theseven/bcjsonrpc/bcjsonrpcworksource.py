@@ -126,7 +126,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               parts = parts[0].split(":")
               if len(parts) != 2: raise Exception("Long poll URL contains host but no port!")
               host = parts[0]
-              port = parts[1]
+              port = int(parts[1])
               self.core.log("Found long polling URL for %s: %s\n" % (self.settings.name, url), 500, "g")
               self.signals_new_block = True
               first = True

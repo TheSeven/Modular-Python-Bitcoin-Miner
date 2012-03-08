@@ -191,8 +191,7 @@ class WorkSourceGroup(BaseWorkSource):
 
     
   def get_job(self):
-    if not self.started: return []
-    if not self.children: return []
+    if not self.started or not self.settings.enabled or not self.children: return []
     job = self._get_job_round()
     if job: return job
     job = self._get_job_round(True)

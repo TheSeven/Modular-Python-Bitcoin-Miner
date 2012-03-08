@@ -151,6 +151,7 @@ class DummyBlockchain(object):
   def __init__(self, core):
     # Initialize job list (protected by global job queue lock)
     self.jobs = []
+    self.epochlock = RLock()
     
     
   def add_job(self, job):
@@ -170,7 +171,19 @@ class DummyBlockchain(object):
 
 
   def handle_block(self):
-    for job in self.jobs: job.cancel()
-    self.jobs = []
-    self.core.notify_job_canceled()
+    with self.epochlock:
+      for job in self.jobs: job.cancel()
+      self.jobs = []
+      self.core.notify_job_canceled()
+      worksource.epoch += 1
+  
+  
+  def check_job(self, job):
+    with self.epochlock:
+      if job.epoch == self.epoch: return True
+      return False
+
+      
+  def check_work_source(self, worksource):
+    return True
   

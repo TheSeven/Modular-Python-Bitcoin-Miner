@@ -136,8 +136,7 @@ class ActualWorkSource(BaseWorkSource):
       
       
   def get_job(self):
-    if not self.started: return []
-    if self._is_locked_out(): return []
+    if not self.started or not self.settings.enabled or self._is_locked_out(): return []
     try:
       with self.stats.lock: self.stats.jobrequests += 1
       jobs = self._get_job()
