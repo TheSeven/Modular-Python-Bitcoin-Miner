@@ -1,6 +1,7 @@
 from . import init
 from . import gadgethost
 from . import menugadget
+from . import statsgadget
 from . import log
 from . import uiconfig
 from . import frontendeditor
@@ -14,6 +15,10 @@ handlermap = {
   "/api/init/init": init.init,
   "/api/gadgethost/getgadgets": gadgethost.getgadgets,
   "/api/menugadget/saveconfiguration": menugadget.saveconfiguration,
+  "/api/statsgadget/getworkerstats": statsgadget.getworkerstats,
+  "/api/statsgadget/getworksourcestats": statsgadget.getworksourcestats,
+  "/api/statsgadget/getblockchainstats": statsgadget.getblockchainstats,
+  "/api/statsgadget/getallstats": statsgadget.getallstats,
   "/api/log/stream": log.stream,
   "/api/uiconfig/read": uiconfig.read,
   "/api/uiconfig/write": uiconfig.write,
