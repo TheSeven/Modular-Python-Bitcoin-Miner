@@ -90,7 +90,7 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
     stats.jobscanceled = self.stats.jobscanceled + childstats.calculatefieldsum("jobscanceled")
     stats.sharesaccepted = self.stats.sharesaccepted + childstats.calculatefieldsum("sharesaccepted")
     stats.sharesrejected = self.stats.sharesrejected + childstats.calculatefieldsum("sharesrejected")
-    stats.sharesinvalid = self.stats.sharesrejected + childstats.calculatefieldsum("sharesinvalid")
+    stats.sharesinvalid = self.stats.sharesinvalid + childstats.calculatefieldsum("sharesinvalid")
     stats.parallel_jobs = self.parallel_jobs + childstats.calculatefieldsum("parallel_jobs")
     stats.current_job = self.job
     stats.current_work_source = getattr(stats.current_job, "worksource", None) if stats.current_job else None
