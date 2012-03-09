@@ -359,7 +359,7 @@ mod.statsgadget = {
                 function floatPercentageRenderer(td, stats, value, def, config)
                 {
                     floatRenderer(td, stats, value, def, config);
-                    var percentage = value / config.reference(stats, value, def);
+                    var percentage = 100 * value / config.reference(stats, value, def);
                     if (!percentage) percentage = 0;
                     if (config.percentagePrecision)
                         percentage = percentage.toFixed(config.percentagePrecision);
