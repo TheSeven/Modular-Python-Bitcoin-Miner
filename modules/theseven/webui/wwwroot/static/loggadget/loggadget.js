@@ -48,6 +48,9 @@ mod.loggadget = {
         var table = document.createElement("table");
         var tbody = document.createElement("tbody");
         table.appendChild(tbody);
+        div.style.position = "absolute";
+        div.style.left = "0px";
+        div.style.right = "0px";
         div.style.height = "100%";
         div.style.overflow = "auto";
         div.allowSelect = true;
@@ -55,6 +58,7 @@ mod.loggadget = {
         div.allowContextMenu = true;
         div.className = "autocursor";
         div.appendChild(table);
+        box.contentNode.style.position = "relative";
         box.contentNode.style.backgroundColor = "#000";
         box.contentNode.style.color = "#fff";
         box.contentNode.style.padding = "0px";
@@ -163,12 +167,14 @@ mod.loggadget = {
                                       + pad(d.getMinutes(), 2) + ":" + pad(d.getSeconds(), 2) + "." 
                                       + pad(d.getMilliseconds(), 3);
                         td1.style.padding = "0px 3px";
+                        td1.style.whiteSpace = "pre";
                         td1.appendChild(document.createTextNode(timestamp));
                         td2.style.padding = "0px 3px";
+                        td2.style.whiteSpace = "pre";
                         td2.style.textAlign = "right";
                         td2.appendChild(document.createTextNode("[" + data[i].loglevel + "]"));
                         td3.style.padding = "0px 3px";
-                        td3.className = "pre";
+                        td3.style.whiteSpace = "pre";
                         for (var j in data[i].message)
                           if (data[i].message.hasOwnProperty(j))
                           {
