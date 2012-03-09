@@ -84,17 +84,18 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
     StatisticsProvider._get_statistics(self, stats, childstats)
     stats.starttime = self.stats.starttime
     stats.ghashes = self.stats.ghashes + childstats.calculatefieldsum("ghashes")
+    stats.avgmhps = 1000. * self.stats.ghashes / (time.time() - stats.starttime) + childstats.calculatefieldsum("avgmhps")
     stats.mhps = self.stats.mhps + childstats.calculatefieldsum("mhps")
     stats.jobsaccepted = self.stats.jobsaccepted + childstats.calculatefieldsum("jobsaccepted")
     stats.jobscanceled = self.stats.jobscanceled + childstats.calculatefieldsum("jobscanceled")
     stats.sharesaccepted = self.stats.sharesaccepted + childstats.calculatefieldsum("sharesaccepted")
     stats.sharesrejected = self.stats.sharesrejected + childstats.calculatefieldsum("sharesrejected")
     stats.sharesinvalid = self.stats.sharesrejected + childstats.calculatefieldsum("sharesinvalid")
-    stats.parallel_jobs = self.parallel_jobs
+    stats.parallel_jobs = self.parallel_jobs + childstats.calculatefieldsum("parallel_jobs")
     stats.current_job = self.job
-    stats.current_work_source = self.job.worksource if self.job else None
-    stats.current_work_source_id = self.job.worksource.id if self.job else None
-    stats.current_work_source_name = self.job.worksource.settings.name if self.job else None
+    stats.current_work_source = getattr(stats.current_job, "worksource", None) if stats.current_job else None
+    stats.current_work_source_id = stats.current_work_source.id if stats.current_work_source else None
+    stats.current_work_source_name = stats.current_work_source.settings.name if stats.current_work_source else None
     
     
   def get_jobs_per_second(self):

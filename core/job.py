@@ -36,13 +36,13 @@ from .sha256 import SHA256
 class Job(object):
 
   
-  def __init__(self, core, worksource, epoch, expiry, data, target, midstate = None):
+  def __init__(self, core, worksource, expiry, data, target, midstate = None):
     self.core = core
     self.worksource = worksource
-    self.epoch = epoch
     self.expiry = expiry
     self.data = data
     self.target = target
+    self.prevhash = data[4:36]
     self.difficulty = 65535. * 2**48 / struct.unpack("<Q", self.target[-12:-4])[0]
     with self.worksource.stats.lock: self.worksource.stats.difficulty = self.difficulty
     if midstate: self.midstate = midstate

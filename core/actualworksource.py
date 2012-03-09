@@ -57,10 +57,10 @@ class ActualWorkSource(BaseWorkSource):
   def _reset(self):
     super(ActualWorkSource, self)._reset()
     self.signals_new_block = None
-    self.epoch = 0
     self.errors = 0
     self.lockoutend = 0
     self.estimated_jobs = 1
+    self.estimated_expiry = 60
     
       
   def _get_statistics(self, stats, childstats):
@@ -70,6 +70,10 @@ class ActualWorkSource(BaseWorkSource):
     stats.locked_out = lockout if lockout > 0 else 0
     stats.consecutive_errors = self.errors
     stats.jobs_per_request = self.estimated_jobs
+    stats.job_expiry = self.estimated_expiry
+    stats.blockchain = self.blockchain
+    stats.blockchain_id = self.blockchain.id
+    stats.blockchain_name = self.blockchain.settings.name
 
 
   def destroy(self):
@@ -118,6 +122,7 @@ class ActualWorkSource(BaseWorkSource):
       self.errors = 0
       if jobs:
         self.estimated_jobs = jobs
+        self.estimated_expiry = int(jobs[0].expiry - time.time())
         with self.stats.lock: self.stats.jobsreceived += jobs
 
     
@@ -135,6 +140,11 @@ class ActualWorkSource(BaseWorkSource):
   def _handle_stale(self):
     with self.statelock:
       self.lockoutend = max(self.lockoutend, time.time() + self.settings.stalelockout)
+      
+      
+  def _push_jobs(self, jobs):
+    with self.core.workqueue.lock:
+      for job in jobs: self.core.workqueue.add_job(job)
       
       
   def get_job(self):

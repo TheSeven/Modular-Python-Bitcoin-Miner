@@ -124,6 +124,8 @@ class IcarusWorker(BaseWorker):
   # This function should interrupt processing of the specified job if possible.
   # This is neccesary to avoid producing stale shares after a new block was found,
   # or if a job expires for some other reason. If we don't know about the job, just ignore it.
+  # Never attempts to fetch a new job in here, always do that asynchronously!
+  # This needs to be very lightweight and fast.
   def notify_canceled(self, job):
     # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.wakeup:

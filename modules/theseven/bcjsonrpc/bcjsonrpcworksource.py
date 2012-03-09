@@ -62,6 +62,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   def __init__(self, core, state = None):
     super(BCJSONRPCWorkSource, self).__init__(core, state)
     self.extensions = "longpoll midstate rollntime"
+    self.runcycle = 0
     
     
   def apply_settings(self):
@@ -96,6 +97,11 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.stats.supports_rollntime = None
     
     
+  def _stop(self):
+    self.runcycle += 1
+    super(BCJSONRPCWorkSource, self)._stop()
+    
+    
   def _get_statistics(self, stats, childstats):
     super(BCJSONRPCWorkSource, self)._get_statistics(stats, childstats)
     stats.supports_rollntime = self.stats.supports_rollntime
@@ -104,7 +110,6 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   def _get_job(self):
     if not self.settings.host: return []
     now = time.time()
-    epoch = self.epoch
     conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
     req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
     headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
@@ -132,16 +137,14 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               port = int(parts[1])
               self.core.log("Found long polling URL for %s: %s\n" % (self.settings.name, url), 500, "g")
               self.signals_new_block = True
-              first = True
               for i in range(self.settings.longpollconnections):
-                thread = Thread(None, self._longpollingworker, self.settings.name + "_longpolling", (host, port, path, first))
+                thread = Thread(None, self._longpollingworker, "%s_longpolling_%d" % (self.settings.name, i), (host, port, path))
                 thread.daemon = True
                 thread.start()
-                first = False
             except Exception as e:
               self.core.log("Invalid long polling URL for %s: %s (%s)\n" % (self.settings.name, url, str(e)), 200, "y")
             break
-    return self._build_jobs(response, now, epoch)
+    return self._build_jobs(response, now)
       
       
   def _nonce_found(self, job, data, nonce, noncediff):
@@ -161,24 +164,23 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         return h[1]
 
 
-  def _longpollingworker(self, host, port, path, master):
+  def _longpollingworker(self, host, port, path):
+    runcycle = self.runcycle
     tries = 0
     starttime = time.time()
     while True:
+      if self.runcycle > runcycle: return
       try:
-        epoch = self.epoch
         conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
         headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions}
         if self.auth != None: headers["Authorization"] = self.auth
         conn.request("GET", path, None, headers)
         conn.sock.settimeout(self.settings.longpollresponsetimeout)
         response = conn.getresponse()
-        if master: self.blockchain.handle_block()
-        jobs = self._build_jobs(response, time.time() - 1, epoch + 1)
-        jobcount = len(jobs)
-        self.core.log("%s: Got %d jobs from long poll response\n" % (self.settings.name, jobcount), 500)
-        self._handle_success(jobcount)
-        for job in jobs: self.core.add_job(job)
+        if self.runcycle > runcycle: return
+        jobs = self._build_jobs(response, time.time() - 1)
+        self._push_jobs(jobs)
+        self.core.log("%s: Got %d jobs from long poll response\n" % (self.settings.name, len(jobs)), 500)
       except:
         self.core.log("%s long poll failed: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
         tries += 1
@@ -188,7 +190,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         starttime = time.time()
         
         
-  def _build_jobs(self, response, now, epoch):
+  def _build_jobs(self, response, now):
     roll_ntime = 1
     expiry = 60
     headers = response.getheaders()
@@ -199,9 +201,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         if parts[0].strip().lower() == "expire":
           try: roll_ntime = int(parts[1])
           except: pass
-        roll_ntime = int(roll_ntime - time.time() + now - 2)
         expiry = roll_ntime
         break
+    self.stats.supports_rollntime = roll_ntime > 1
     response = json.loads(response.read().decode("utf_8"))
     data = unhexlify(response["result"]["data"].encode("ascii"))
     target = unhexlify(response["result"]["target"].encode("ascii"))
@@ -209,5 +211,5 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     prefix = data[:68]
     timebase = struct.unpack(">I", data[68:72])[0]
     suffix = data[72:]
-    return [Job(self.core, self, epoch, now + expiry, prefix + struct.pack(">I", timebase + i) + suffix, target) for i in range(roll_ntime)]
+    return [Job(self.core, self, now + expiry - 2, prefix + struct.pack(">I", timebase + i) + suffix, target, midstate) for i in range(roll_ntime)]
   

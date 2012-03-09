@@ -39,7 +39,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
 
   settings = dict(Inflatable.settings, **{
     "name": {"title": "Name", "type": "string", "position": 100},
-    "grouptime": {"title": "Block grouping time", "type": "float", "position": 1000},
+    "timeout": {"title": "History timeout", "type": "float", "position": 1000},
   })
 
   
@@ -49,7 +49,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     Inflatable.__init__(self, core, state)
     
     self.worksourcelock = RLock()
-    self.epochlock = RLock()
+    self.blocklock = RLock()
 
 
   def destroy(self):
@@ -73,13 +73,14 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
         i += 1
         name = origname + (" (%d)" % i)
       self.settings.name = name
-    if not "grouptime" in self.settings: self.settings.grouptime = 30
+    if not "timeout" in self.settings: self.settings.timeout = 60
     
     
   def _reset(self):    
     Startable._reset(self)
-    self.epoch = 0
-    self.groupend = 0
+    self.currentprevhash = None
+    self.knownprevhashes = []
+    self.timeoutend = 0
     self.jobs = []
     self.stats.starttime = time.time()
     self.stats.blocks = 0
@@ -91,10 +92,13 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     stats.starttime = self.stats.starttime
     stats.blocks = self.stats.blocks
     stats.lastblock = self.stats.lastblock
-    self.stats.jobsaccepted = childstats.calculatefieldsum("jobsaccepted")
-    self.stats.jobscanceled = childstats.calculatefieldsum("jobscanceled")
-    self.stats.sharesaccepted = childstats.calculatefieldsum("sharesaccepted")
-    self.stats.sharesrejected = childstats.calculatefieldsum("sharesrejected")
+    stats.ghashes = childstats.calculatefieldsum("ghashes")
+    stats.avgmhps = childstats.calculatefieldsum("avgmhps")
+    stats.jobsaccepted = childstats.calculatefieldsum("jobsaccepted")
+    stats.jobscanceled = childstats.calculatefieldsum("jobscanceled")
+    stats.sharesaccepted = childstats.calculatefieldsum("sharesaccepted")
+    stats.sharesrejected = childstats.calculatefieldsum("sharesrejected")
+    stats.children = []
     
     
   def add_job(self, job):
@@ -107,7 +111,6 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
 
   def add_work_source(self, worksource):
     with self.worksourcelock:
-      worksource.epoch = self.epoch
       if not worksource in self.children: self.children.append(worksource)
   
 
@@ -116,33 +119,25 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
       while worksource in self.children: self.children.remove(worksource)
 
 
-  def handle_block(self, worksource):
-    now = time.time()
-    with self.epochlock:
-      if now > groupend or worksource.epoch == self.epoch:
-        self.epoch += 1
-        self.groupend = now + self.settings.grouptime
-        with self.stats.lock:
-          self.stats.blocks += 1
-          self.stats.lastblock = now
-        for job in self.jobs: job.cancel()
-        self.jobs = []
-        worksource.epoch = self.epoch
-      else: worksource.epoch += 1
-    self.core.log("%s indicates that a new block was found" % worksource.settings.name, 300, "B")
-
-      
   def check_job(self, job):
-    with self.epochlock:
-      if job.epoch == self.epoch or time.time() > self.groupend: return True
-      return False
-
-      
-  def check_work_source(self, worksource):
-    with self.epochlock:
-      if worksource.epoch == self.epoch or time.time() > self.groupend: return True
-      return False
-  
+    if self.currentprevhash == job.prevhash: return True
+    with self.blocklock:
+      now = time.time()
+      timeout_expired = now > self.timeoutend
+      self.timeoutend = now + self.settings.timeout
+      if job.prevhash in self.knownprevhashes: return False
+      if timeout_expired: self.knownprevhashes = [self.currentprevhash]
+      else: self.knownprevhashes.append(self.currentprevhash)
+      self.currentprevhash = job.prevhash
+      with self.core.workqueue.lock:
+        for job in self.jobs: job.cancel()
+      self.jobs = []
+      with self.stats.lock:
+        self.stats.blocks += 1
+        self.stats.lastblock = now
+    self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
+    return True
+ 
   
   
 class DummyBlockchain(object):
@@ -151,7 +146,9 @@ class DummyBlockchain(object):
   def __init__(self, core):
     # Initialize job list (protected by global job queue lock)
     self.jobs = []
-    self.epochlock = RLock()
+    self.currentprevhash = None
+    self.knownprevhashes = []
+    self.timeoutend = 0
     
     
   def add_job(self, job):
@@ -169,22 +166,22 @@ class DummyBlockchain(object):
   def remove_work_source(self, worksource):
     pass
 
-
-  def handle_block(self):
-    with self.epochlock:
-      for job in self.jobs: job.cancel()
-      self.jobs = []
-      self.core.notify_job_canceled()
-      worksource.epoch += 1
-    self.core.log("%s indicates that a new block was found" % worksource.settings.name, 300, "B")
-  
   
   def check_job(self, job):
-    with self.epochlock:
-      if job.epoch == self.epoch: return True
-      return False
-
-      
-  def check_work_source(self, worksource):
+    if self.currentprevhash == job.prevhash: return True
+    with self.blocklock:
+      now = time.time()
+      timeout_expired = now > self.timeoutend
+      self.timeoutend = now + 10
+      if job.prevhash in self.knownprevhashes: return False
+      if timeout_expired: self.knownprevhashes = [self.currentprevhash]
+      else: self.knownprevhashes.append(self.currentprevhash)
+      self.currentprevhash = job.prevhash
+      with self.core.workqueue.lock:
+        for job in self.jobs: job.cancel()
+      self.jobs = []
+      with self.stats.lock:
+        self.stats.blocks += 1
+        self.stats.lastblock = now
+    self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
     return True
-  

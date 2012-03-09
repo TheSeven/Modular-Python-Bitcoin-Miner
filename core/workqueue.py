@@ -48,15 +48,14 @@ class WorkQueue(Startable):
     self.lists = {}
     self.count = 0
     self.expirycutoff = 0
-    # Initialize taken job list and a lock for it
-    self.takenlock = RLock()
+    # Initialize taken job list container
     self.takenlists = {}
     
     
   def add_job(self, job):
+    if not job.worksource.blockchain.check_job(job): return
+    expiry = int(job.expiry)
     with self.lock:
-      if not job.worksource.blockchain.check_job(job): return
-      expiry = int(job.expiry)
       if not expiry in self.lists: self.lists[expiry] = [job]
       else: self.lists[expiry].append(job)
       if expiry > self.expirycutoff: self.count += 1
@@ -100,9 +99,8 @@ class WorkQueue(Startable):
         job.set_worker(worker)
         expiry = int(job.expiry)
         if int(job.expiry) <= self.expirycutoff: self.count += 1
-        with self.takenlock:
-          if not expiry in self.takenlists: self.takenlists[expiry] = [job]
-          else: self.takenlists[expiry].append(job)
+        if not expiry in self.takenlists: self.takenlists[expiry] = [job]
+        else: self.takenlists[expiry].append(job)
       return job
 
 
@@ -158,11 +156,10 @@ class WorkQueue(Startable):
             while self.lists[expiry]: self.lists[expiry].pop(0).destroy()
             del self.lists[expiry]
         self.expirycutoff = cutoff
-      self.core.fetcher.wakeup()
-      with self.takenlock:
         keys = sorted(self.takenlists.keys())
         for expiry in keys:
           if expiry <= now:
             while self.takenlists[expiry]: self.takenlists[expiry].pop(0).cancel()
             del self.takenlists[expiry]
+      self.core.fetcher.wakeup()
       time.sleep(1)

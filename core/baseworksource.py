@@ -89,6 +89,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     StatisticsProvider._get_statistics(self, stats, childstats)
     stats.starttime = self.stats.starttime
     stats.ghashes = self.stats.ghashes + childstats.calculatefieldsum("ghashes")
+    stats.avgmhps = 1000. * self.stats.ghashes / (time.time() - stats.starttime) + childstats.calculatefieldsum("avgmhps")
     stats.jobrequests = self.stats.jobrequests + childstats.calculatefieldsum("jobrequests")
     stats.failedjobreqs = self.stats.failedjobreqs + childstats.calculatefieldsum("failedjobreqs")
     stats.uploadretries = self.stats.uploadretries + childstats.calculatefieldsum("uploadretries")

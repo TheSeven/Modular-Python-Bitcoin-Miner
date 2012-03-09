@@ -124,6 +124,8 @@ class SimpleRS232Worker(BaseWorker):
   # This function should interrupt processing of the specified job if possible.
   # This is neccesary to avoid producing stale shares after a new block was found,
   # or if a job expires for some other reason. If we don't know about the job, just ignore it.
+  # Never attempts to fetch a new job in here, always do that asynchronously!
+  # This needs to be very lightweight and fast.
   def notify_canceled(self, job):
     # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.wakeup:
@@ -341,9 +343,10 @@ class SimpleRS232Worker(BaseWorker):
         elif result == 2:
           # We found a share! Download the nonce.
           nonce = self.handle.read(4)[::-1]
-          # If there is no job, this must be a leftover from somewhere.
-          # In that case, just restart things to clean up the situation.
-          if self.job == None: raise Exception("Mining device sent a share before even getting a job")
+          # If there is no job, this must be a leftover from somewhere, e.g. previous invocation
+          # or reiterating the keyspace because we couldn't provide new work fast enough.
+          # In both cases we can't make any use of that nonce, so just discard it.
+          if self.job == None: continue
           # Stop time measurement
           now = time.time()
           # Pass the nonce that we found to the work source, if there is one.
