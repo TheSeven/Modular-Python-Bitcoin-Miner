@@ -94,6 +94,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     stats.lastblock = self.stats.lastblock
     stats.ghashes = childstats.calculatefieldsum("ghashes")
     stats.avgmhps = childstats.calculatefieldsum("avgmhps")
+    stats.jobsreceived = childstats.calculatefieldsum("jobsreceived")
     stats.jobsaccepted = childstats.calculatefieldsum("jobsaccepted")
     stats.jobscanceled = childstats.calculatefieldsum("jobscanceled")
     stats.sharesaccepted = childstats.calculatefieldsum("sharesaccepted")

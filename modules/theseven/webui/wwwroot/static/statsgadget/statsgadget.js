@@ -121,6 +121,12 @@ mod.statsgadget = {
                     "renderer": intPercentageRenderer,
                     "rendererconfig": {"reference": makeReference("jobrequests"), "percentagePrecision": 2},
                 };
+                var acceptedJobsPercentageDefinition =
+                {
+                    "title": "Accepted jobs",
+                    "renderer": intPercentageRenderer,
+                    "rendererconfig": {"reference": makeReference("jobsreceived"), "percentagePrecision": 2},
+                };
                 var canceledJobsDefinition =
                 {
                     "title": "Canceled jobs",
@@ -178,7 +184,7 @@ mod.statsgadget = {
                     "failedjobreqs": {320: failedJobRequestsDefinition, 330: makePerHourDefinition("Failed requests per hour", 2)},
                     "uploadretries": {340: uploadRetriesDefinition, 350: makePerHourDefinition("Upload retries per hour", 2)},
                     "jobsreceived": {400: receivedJobsDefinition, 410: makePerHourDefinition("Received per hour", 2)},
-                    "jobsaccepted": {420: acceptedJobsDefinition, 430: makePerHourDefinition("Accepted per hour", 2)},
+                    "jobsaccepted": {420: acceptedJobsPercentageDefinition, 430: makePerHourDefinition("Accepted per hour", 2)},
                     "jobscanceled": {440: canceledJobsDefinition, 450: makePerHourDefinition("Canceled per hour", 2)},
                     "sharesaccepted": {500: acceptedSharesDefinition},
                     "sharesrejected": {510: rejectedSharesDefinition, 520: makePerHourDefinition("Rejects per hour", 2)},
@@ -195,8 +201,9 @@ mod.statsgadget = {
                     "lastblock": {220: {"title": "Last block", "renderer": timestampRenderer}, 230: timeAgoDefinition},
                     "avgmhps": {300: averageMHpsDefinition},
                     "ghashes": {310: gHashesTotalDefinition},
-                    "jobsaccepted": {400: acceptedJobsDefinition, 410: makePerHourDefinition("Jobs per hour", 2)},
-                    "jobscanceled": {420: canceledJobsDefinition, 430: makePerHourDefinition("Canceled per hour", 2)},
+                    "jobsreceived": {400: receivedJobsDefinition, 410: makePerHourDefinition("Received per hour", 2)},
+                    "jobsaccepted": {420: acceptedJobsPercentageDefinition, 430: makePerHourDefinition("Accepted per hour", 2)},
+                    "jobscanceled": {440: canceledJobsDefinition, 450: makePerHourDefinition("Canceled per hour", 2)},
                     "sharesaccepted": {500: acceptedSharesDefinition},
                     "sharesrejected": {510: rejectedSharesDefinition, 520: makePerHourDefinition("Rejects per hour", 2)},
                     "starttime": {1000: uptimeDefinition},
