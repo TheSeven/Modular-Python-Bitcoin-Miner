@@ -121,9 +121,10 @@ class ActualWorkSource(BaseWorkSource):
     with self.statelock:
       self.errors = 0
       if jobs:
-        self.estimated_jobs = jobs
+        jobcount = len(jobs)
+        self.estimated_jobs = jobcount
         self.estimated_expiry = int(jobs[0].expiry - time.time())
-        with self.stats.lock: self.stats.jobsreceived += jobs
+        with self.stats.lock: self.stats.jobsreceived += jobcount
 
     
   def _handle_error(self, upload = False):
@@ -143,6 +144,7 @@ class ActualWorkSource(BaseWorkSource):
       
       
   def _push_jobs(self, jobs):
+    self._handle_success(jobs)
     with self.core.workqueue.lock:
       for job in jobs: self.core.workqueue.add_job(job)
       
@@ -153,9 +155,8 @@ class ActualWorkSource(BaseWorkSource):
       with self.stats.lock: self.stats.jobrequests += 1
       jobs = self._get_job()
       if jobs:
-        jobcount = len(jobs)
-        self._handle_success(jobcount)
-        self.core.log("%s: Got %d jobs\n" % (self.settings.name, jobcount), 500)
+        self._handle_success(jobs)
+        self.core.log("%s: Got %d jobs\n" % (self.settings.name, len(jobs)), 500)
       else: self._handle_error()
       return jobs
     except:
