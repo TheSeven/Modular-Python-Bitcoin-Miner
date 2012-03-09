@@ -116,7 +116,9 @@ class ActualWorkSource(BaseWorkSource):
   def _handle_success(self, jobs = None):
     with self.statelock:
       self.errors = 0
-      if jobs: self.estimated_jobs = jobs
+      if jobs:
+        self.estimated_jobs = jobs
+        with self.stats.lock: self.stats.jobsreceived += jobs
 
     
   def _handle_error(self, upload = False):
@@ -141,8 +143,9 @@ class ActualWorkSource(BaseWorkSource):
       with self.stats.lock: self.stats.jobrequests += 1
       jobs = self._get_job()
       if jobs:
-        self._handle_success(len(jobs))
-        self.core.log("%s: Got %d jobs\n" % (self.settings.name, len(jobs)), 500)
+        jobcount = len(jobs)
+        self._handle_success(jobcount)
+        self.core.log("%s: Got %d jobs\n" % (self.settings.name, jobcount), 500)
       else: self._handle_error()
       return jobs
     except:

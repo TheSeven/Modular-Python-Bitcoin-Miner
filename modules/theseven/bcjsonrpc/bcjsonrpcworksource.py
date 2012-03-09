@@ -134,10 +134,10 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               self.signals_new_block = True
               first = True
               for i in range(self.settings.longpollconnections):
-                first = False
                 thread = Thread(None, self._longpollingworker, self.settings.name + "_longpolling", (host, port, path, first))
                 thread.daemon = True
                 thread.start()
+                first = False
             except Exception as e:
               self.core.log("Invalid long polling URL for %s: %s (%s)\n" % (self.settings.name, url, str(e)), 200, "y")
             break
@@ -175,7 +175,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         response = conn.getresponse()
         if master: self.blockchain.handle_block()
         jobs = self._build_jobs(response, time.time() - 1, epoch + 1)
-        self.core.log("%s: Got %d jobs from long poll response" % (self.settings.name, len(jobs)), 500)
+        jobcount = len(jobs)
+        self.core.log("%s: Got %d jobs from long poll response\n" % (self.settings.name, jobcount), 500)
+        self._handle_success(jobcount)
         for job in jobs: self.core.add_job(job)
       except:
         self.core.log("%s long poll failed: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")

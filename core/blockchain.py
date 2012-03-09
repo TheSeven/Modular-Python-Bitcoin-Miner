@@ -176,6 +176,7 @@ class DummyBlockchain(object):
       self.jobs = []
       self.core.notify_job_canceled()
       worksource.epoch += 1
+    self.core.log("%s indicates that a new block was found" % worksource.settings.name, 300, "B")
   
   
   def check_job(self, job):
