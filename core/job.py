@@ -82,20 +82,21 @@ class Job(object):
     with self.worksource.stats.lock: self.worksource.stats.jobsaccepted += 1
     
     
-  def nonce_found(self, nonce):
-    self.core.log("%s found share: %s:%s:%s\n" % (self.worker.settings.name, self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), hexlify(nonce).decode("ascii")), 350, "g")
+  def nonce_found(self, nonce, ignore_invalid = False):
     data = self.data[:76] + nonce + self.data[80:]
     hash = Job.calculate_hash(data)
     if hash[-4:] != b"\0\0\0\0":
+      if ignore_invalid: return False
       self.core.log("%s sent K-not-zero share %s\n" % (self.worker.settings.name, hexlify(nonce).decode("ascii")), 200, "yB")
       with self.worker.stats.lock: self.worker.stats.sharesinvalid += 1
-      return
+      return False
+    self.core.log("%s found share: %s:%s:%s\n" % (self.worker.settings.name, self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), hexlify(nonce).decode("ascii")), 350, "g")
     noncediff = 65535. * 2**48 / struct.unpack("<Q", hash[-12:-4])[0]
     if hash[::-1] > self.target[::-1]:
       self.core.log("Share %s (difficulty %.5f) didn't meet difficulty %.5f\n" % (hexlify(nonce).decode("ascii"), noncediff, self.difficulty), 300, "g")
-      return
+      return True
     self.worksource.nonce_found(self, data, nonce, noncediff)
-    pass
+    return True
     
     
   def nonce_handled_callback(self, nonce, noncediff, result):

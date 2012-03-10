@@ -295,20 +295,27 @@ class IcarusWorker(BaseWorker):
         # If no response was available, retry
         if len(nonce) != 4: continue
         nonce = nonce[::-1]
-        # If there is no job, this must be a leftover from somewhere.
-        # In that case, just restart things to clean up the situation.
-        if self.job == None: raise Exception("Mining device sent a share before even getting a job")
+        # Snapshot the current jobs to avoid race conditions
+        nextjob = self.nextjob
+        oldjob = self.job
+        # If there is no job, this must be a leftover from somewhere, e.g. previous invocation
+        # or reiterating the keyspace because we couldn't provide new work fast enough.
+        # In both cases we can't make any use of that nonce, so just discard it.
+        if oldjob == None: continue
         # Stop time measurement
         now = time.time()
         # Pass the nonce that we found to the work source, if there is one.
         # Do this before calculating the hash rate as it is latency critical.
-        self.job.nonce_found(nonce)
-        # Calculate actual on-device processing time (not including transfer times) of the job.
-        delta = (now - self.job.starttime) - 40. / self.baudrate
-        # Calculate the hash rate based on the processing time and number of neccessary MHashes.
-        self.mhps = (struct.unpack("<I", nonce)[0] & 0x7fffffff) / 500000. / delta
-        # This needs self.mhps to be set, don't merge it with the inverse if above!
-        # Otherwise a race condition between the main and listener threads may be the result.
+        valid = oldjob.nonce_found(nonce, True)
+        if not valid and nextjob: nextjob.nonce_found(nonce, True)
+        # If the nonce is too low, the measurement may be inaccurate.
+        if valid and oldjob.starttime and nonce >= 0x02000000:
+          # Calculate actual on-device processing time (not including transfer times) of the job.
+          delta = (now - self.job.starttime) - 40. / self.baudrate
+          # Calculate the hash rate based on the processing time and number of neccessary MHashes.
+          # This assumes that the device processes all nonces (starting at zero) sequentially.
+          self.stats.mhps = (struct.unpack("<I", nonce)[0] & 0x7fffffff) / 500000. / delta
+        # This needs self.stats.mhps to be set.
         if isinstance(self.job, ValidationJob):
           # This is a validation job. Validate that the nonce is correct, and complain if not.
           if self.job.nonce != nonce:
@@ -319,8 +326,9 @@ class IcarusWorker(BaseWorker):
               self.checksuccess = True
               self.wakeup.notify()
         else:
-          self._jobend()
-          with self.wakeup: self.wakeup.notify()
+          with self.wakeup:
+            self._jobend()
+            self.wakeup.notify()
 
     # If an exception is thrown in the listener thread...
     except Exception as e:
