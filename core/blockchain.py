@@ -131,7 +131,8 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
       else: self.knownprevhashes.append(self.currentprevhash)
       self.currentprevhash = job.prevhash
       with self.core.workqueue.lock:
-        for job in self.jobs:
+        while self.jobs:
+          job = self.jobs.pop(0)
           if job.worker: job.cancel()
           else: job.destroy()
       self.jobs = []
@@ -181,7 +182,10 @@ class DummyBlockchain(object):
       else: self.knownprevhashes.append(self.currentprevhash)
       self.currentprevhash = job.prevhash
       with self.core.workqueue.lock:
-        for job in self.jobs: job.cancel()
+        while self.jobs:
+          job = self.jobs.pop(0)
+          if job.worker: job.cancel()
+          else: job.destroy()
       self.jobs = []
       with self.stats.lock:
         self.stats.blocks += 1
