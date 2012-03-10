@@ -254,23 +254,32 @@ mod.statsgadget = {
                     };
                 }
                 
-                function makeTable(data, defs)
+                function buildKeyMap(keymap, defs, col, data)
                 {
-                    var col = 5000;
-                    defs.children = {};
-                    keymap = {};
                     for (var i in data)
                         if (data.hasOwnProperty(i))
                             for (var j in data[i])
                                 if (data[i].hasOwnProperty(j))
                                 {
-                                    keymap[j] = true;
-                                    if (!defs[j])
+                                    if (j == "children") col = buildKeyMap(keymap, defs, col, data[i][j]);
+                                    else
                                     {
-                                        defs[j] = {};  
-                                        defs[j][col++] = {};
+                                        keymap[j] = true;
+                                        if (!defs[j])
+                                        {
+                                            defs[j] = {};  
+                                            defs[j][col++] = {};
+                                        }
                                     }
                                 }
+                    return col;
+                }
+                
+                function makeTable(data, defs)
+                {
+                    defs.children = {};
+                    keymap = {};
+                    buildKeyMap(keymap, defs, 5000, data);
                     var cols = {};
                     for (var i in keymap)
                         if (keymap.hasOwnProperty(i))
@@ -331,7 +340,7 @@ mod.statsgadget = {
                                     if (first)
                                     {
                                         td.style.textAlign = "left";
-                                        td.style.paddingLeft = (level * 20) + "px";
+                                        td.style.paddingLeft = (3 + level * 20) + "px";
                                     }
                                     var value = data[i][defs[j].field];
                                     if (defs[j].transform) value = defs[j].transform(data[i], value, defs[j]);
