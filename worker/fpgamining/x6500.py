@@ -35,8 +35,8 @@
 #   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
 #   invalidwarning: if the FPGA invalid rate gets this high (in %), reduce the clock (default: 1)
 #   invalidcritical: if the FPGA invalid rate gets this high (in %), drastically reduce the clock (default: 10)
-#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 40)
-#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 50)
+#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 45)
+#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 55)
 
 
 import sys
@@ -107,8 +107,8 @@ class X6500Worker(object):
     
     self.invalidwarning = getattr(self, "invalidwarning", 1)
     self.invalidcritical = getattr(self, "invalidcritical", 10)
-    self.tempwarning = getattr(self, "tempwarning", 40)
-    self.tempcritical = getattr(self, "tempcritical", 50)
+    self.tempwarning = getattr(self, "tempwarning", 45)
+    self.tempcritical = getattr(self, "tempcritical", 55)
 
     # Initialize object properties (for statistics)
     # Only children that have died are counted here, the others will report statistics themselves
