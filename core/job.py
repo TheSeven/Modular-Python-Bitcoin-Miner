@@ -147,7 +147,7 @@ class ValidationJob(object):
     pass
     
     
-  def nonce_found(self, nonce):
+  def nonce_found(self, nonce, ignore_invalid = False):
     pass
    
    
