@@ -30,7 +30,7 @@ import serial
 import time
 import struct
 import traceback
-from threading import RLock, Condition, Thread
+from threading import Condition, Thread
 from binascii import hexlify, unhexlify
 from core.baseworker import BaseWorker
 from core.job import ValidationJob
@@ -194,7 +194,7 @@ class SimpleRS232Worker(BaseWorker):
         self.listenerthread.start()
 
         # Send validation job to device
-        job = ValidationJob(self.core, b"\0" * 64 + unhexlify(b"4c0afa494de837d81a269421"), unhexlify(b"7bc2b302"), unhexlify(b"1625cbf1a5bc6ba648d1218441389e00a9dc79768a2fc6f2b79c70cf576febd0"))
+        job = ValidationJob(self.core, unhexlify(b"00000001a452aa4d7c529564e6f489b4ff9fbc5ce1f801d8104de8730000029900000000f3a88a7e15630db38d159e13544632f9c8c4a85e1e61b047cf73335d294f75a44f5b47631a0b350c"), unhexlify(b"41ce6404"))
         self._sendjob(job)
 
         # Wait for validation job to be accepted by the device
@@ -209,7 +209,7 @@ class SimpleRS232Worker(BaseWorker):
 
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 60 seconds should be sufficient for devices
-        # down to about 760KH/s, for slower devices this timeout will need to be increased.
+        # down to about 1228KH/s, for slower devices this timeout will need to be increased.
         self.wakeup.wait(60)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error

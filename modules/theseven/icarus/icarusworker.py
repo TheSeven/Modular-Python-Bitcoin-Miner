@@ -30,7 +30,7 @@ import serial
 import time
 import struct
 import traceback
-from threading import RLock, Condition, Thread
+from threading import Condition, Thread
 from binascii import hexlify, unhexlify
 from core.baseworker import BaseWorker
 from core.job import ValidationJob
@@ -183,7 +183,7 @@ class IcarusWorker(BaseWorker):
         self.listenerthread.start()
 
         # Send validation job to device
-        job = ValidationJob(self.core, b"\0" * 64 + unhexlify(b"4c0afa494de837d81a269421"), unhexlify(b"7bc2b302"), unhexlify(b"1625cbf1a5bc6ba648d1218441389e00a9dc79768a2fc6f2b79c70cf576febd0"))
+        job = ValidationJob(self.core, unhexlify(b"00000001a452aa4d7c529564e6f489b4ff9fbc5ce1f801d8104de8730000029900000000f3a88a7e15630db38d159e13544632f9c8c4a85e1e61b047cf73335d294f75a44f5b47631a0b350c"), unhexlify(b"41ce6404"))
         self._sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it
@@ -191,7 +191,7 @@ class IcarusWorker(BaseWorker):
 
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 60 seconds should be sufficient for devices
-        # down to about 1520KH/s, for slower devices this timeout will need to be increased.
+        # down to about 2456KH/s, for slower devices this timeout will need to be increased.
         self.wakeup.wait(60)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
@@ -310,7 +310,7 @@ class IcarusWorker(BaseWorker):
         if not valid and nextjob: nextjob.nonce_found(nonce, True)
         # If the nonce is too low, the measurement may be inaccurate.
         nonceval = struct.unpack("<I", nonce)[0] & 0x7fffffff
-        if valid and oldjob.starttime and nonceval >= 0x02000000:
+        if valid and oldjob.starttime and nonceval >= 0x04000000:
           # Calculate actual on-device processing time (not including transfer times) of the job.
           delta = (now - oldjob.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
@@ -348,8 +348,8 @@ class IcarusWorker(BaseWorker):
     # Send it to the device
     self._jobend()
     self.handle.write(job.midstate[::-1] + b"\0" * 20 + job.data[75:63:-1])
+    self.nextjob.starttime = time.time()
     self.job = self.nextjob
-    self.job.starttime = time.time()
     self.nextjob = None
 
     
