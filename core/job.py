@@ -134,12 +134,12 @@ class Job(object):
 class ValidationJob(object):
 
   
-  def __init__(self, core, data, nonce, midstate = None):
+  def __init__(self, core, data, midstate = None):
     self.core = core
     self.data = data
     if midstate: self.midstate = midstate
-    else: self.midstate = SHA256.hash(data[:64], False)
-    self.nonce = nonce
+    else: self.midstate = Job.calculate_midstate(data)
+    self.nonce = self.data[76:80]
     self.worker = None
     
     
@@ -148,8 +148,7 @@ class ValidationJob(object):
     
     
   def nonce_found(self, nonce, ignore_invalid = False):
-    data = self.data[:76] + nonce + self.data[80:]
-    return Job.calculate_hash(data)[-4:] == b"\0\0\0\0"
+    return Job.calculate_hash(self.data[:76] + nonce)[-4:] == b"\0\0\0\0"
    
    
   def destroy(self):
