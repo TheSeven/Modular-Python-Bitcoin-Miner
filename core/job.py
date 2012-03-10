@@ -148,7 +148,9 @@ class ValidationJob(object):
     
     
   def nonce_found(self, nonce, ignore_invalid = False):
-    pass
+    data = self.data[:76] + nonce + self.data[80:]
+    hash = Job.calculate_hash(data)
+    return hash[-4:] == b"\0\0\0\0"
    
    
   def destroy(self):
