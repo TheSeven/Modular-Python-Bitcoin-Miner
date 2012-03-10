@@ -28,6 +28,7 @@ import binascii
 import struct
 import hashlib
 
+
 class Job(object):
   MAX_UPLOAD_RETRIES = 10
   
@@ -49,7 +50,10 @@ class Job(object):
     hash = hashlib.sha256(hashlib.sha256(struct.pack("<20I", *struct.unpack(">20I", data[:80]))).digest()).digest()
     if hash[-4:] != b"\0\0\0\0":
       self.miner.log("%s sent K-not-zero share %s\n" % (worker.name, binascii.hexlify(nonce).decode("ascii")), "rB")
-      with worker.statlock: worker.invalid = worker.invalid + 1
+      with worker.statlock: 
+        worker.invalid = worker.invalid + 1
+        try: worker.recentinvalid = worker.recentinvalid + 1
+        except: pass
       return
     self.difficulty = 65535. * 2**48 / struct.unpack("<Q", self.target[-12:-4])[0]
     self.realdiff = 65535. * 2**48 / struct.unpack("<Q", hash[-12:-4])[0]
@@ -61,14 +65,20 @@ class Job(object):
   def uploadcallback(self, nonce, worker, result):
     if result == True:
       self.miner.log("%s accepted share %s (difficulty %.5f)\n" % (self.pool.name, binascii.hexlify(nonce).decode("ascii"), self.realdiff), "gB")
-      with worker.statlock: worker.accepted = worker.accepted + self.difficulty
+      with worker.statlock: 
+        worker.accepted = worker.accepted + self.difficulty
+        try: worker.recentaccepted = worker.recentaccepted + 1
+        except: pass
       with self.pool.statlock:
         self.pool.accepted = self.pool.accepted + 1
         self.pool.score = self.pool.score + self.miner.sharebias
     else:
       if result == False or result == None or len(result) == 0: result = "Unknown reason"
       self.miner.log("%s rejected share %s (difficulty %.5f): %s\n" % (self.pool.name, binascii.hexlify(nonce).decode("ascii"), self.realdiff, result), "rB")
-      with worker.statlock: worker.rejected = worker.rejected + self.difficulty
+      with worker.statlock: 
+        worker.rejected = worker.rejected + self.difficulty
+        try: worker.recentrejected = worker.recentrejected + 1
+        except: pass
       with self.pool.statlock:
         self.pool.rejected = self.pool.rejected + 1
         self.pool.score = self.pool.score + self.miner.stalebias

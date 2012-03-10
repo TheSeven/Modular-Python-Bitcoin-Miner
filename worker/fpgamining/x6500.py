@@ -109,6 +109,7 @@ class X6500Worker(object):
     self.invalidcritical = getattr(self, "invalidcritical", 10)
     self.tempwarning = getattr(self, "tempwarning", 45)
     self.tempcritical = getattr(self, "tempcritical", 55)
+    self.testing = getattr(self, "testing", False)
 
     # Initialize object properties (for statistics)
     # Only children that have died are counted here, the others will report statistics themselves
@@ -178,6 +179,8 @@ class X6500Worker(object):
   # Main thread entry point
   # This thread is responsible for booting the individual FPGAs and spawning worker threads for them
   def main(self):
+if self.testing: 
+      atexit.register(self.dumpstatssummary)
 
     try:
       fpga_list = [FPGA(self.miner, self.name + " FPGA0", self.device, 0), FPGA(self.miner, self.name + " FPGA1", self.device, 1)]
@@ -240,6 +243,8 @@ class X6500Worker(object):
       self.dead = True
     
     try:    
+      if self.testing:
+        self.setupstatslog()
       while True:
         time.sleep(3)
         
@@ -248,12 +253,28 @@ class X6500Worker(object):
         self.children[0].temperature = temp0
         self.children[1].temperature = temp1
         
-        # Check for unsafe operation, and downclock as necessary:
+        # Log stats every minute if testing
+        if self.testing and time.time() > self.laststatsdump + 60:
+          self.dumpstatslog()
         
     except Exception as e:
       self.miner.log(self.name + ": Reading FPGA temperatures failed: %s\n" % e, "y")
       
-    
+  def setupstatslog(self):
+    import datetime
+    datestring = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    self.statslog = open('testing/' + self.name[6:] + '_' + datestring, "w")
+    self.laststatsdump = 0
+  
+  def dumpstatslog(self):
+    stats = self.miner.collectstatistics([self,])
+    stats[0]['time'] = time.time()
+    self.statslog.write(str(stats) + "\n")
+    self.laststatsdump = time.time()
+
+  def dumpstatssummary(self):
+    self.dumpstatslog()
+    self.statslog.close()
         
         
 # FPGA handler main class, child worker of X6500Worker
