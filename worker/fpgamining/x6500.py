@@ -179,7 +179,7 @@ class X6500Worker(object):
   # Main thread entry point
   # This thread is responsible for booting the individual FPGAs and spawning worker threads for them
   def main(self):
-if self.testing: 
+    if self.testing: 
       atexit.register(self.dumpstatssummary)
 
     try:
