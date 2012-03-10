@@ -294,6 +294,11 @@ class X6500FPGA(object):
     self.tempwarning = parent.tempwarning
     self.tempcritical = parent.tempcritical
     
+    self.recentaccepted = 0
+    self.recentrejected = 0
+    self.recentinvalid = 0
+    self.recentstarttime = time.time()
+    
     # Statistics lock, ensures that the UI can get a consistent statistics state
     # Needs to be acquired during all operations that affect the above values
     self.statlock = threading.RLock()
@@ -332,6 +337,10 @@ class X6500FPGA(object):
         "invalidcritical": self.invalidcritical, \
         "tempwarning": self.tempwarning, \
         "tempcritical": self.tempcritical, \
+        "recentaccepted": self.recentaccepted, \
+        "recentrejected": self.recentrejected, \
+        "recentinvalid": self.recentinvalid, \
+        "recentstarttime": self.recentstarttime, \
       }
     # Return result
     return statistics
@@ -650,15 +659,16 @@ class X6500FPGA(object):
     warning = False
     critical = False
     
-    total = self.accepted + self.rejected + self.invalid
+    total = self.recentaccepted + self.recentrejected + self.recentinvalid
+
     if total != 0:
-      invalid_pct = 100. * self.invalid / total
-      if self.invalid > 3 and invalid_pct > self.invalidwarning:
+      invalid_pct = 100. * self.recentinvalid / total
+      if self.recentinvalid > 3 and invalid_pct > self.invalidwarning:
         warning = True
-      if self.invalid > 10 and invalid_pct > self.invalidcritical:
+      if self.recentinvalid > 10 and invalid_pct > self.invalidcritical:
         critical = True
     
-    if self.temperature is not None and time.time() > self.starttime + 20:
+    if self.temperature is not None and time.time() > self.recentstarttime + 30:
       if self.temperature > self.tempwarning: 
         warning = True
       if self.temperature > self.tempcritical: 
@@ -680,12 +690,10 @@ class X6500FPGA(object):
         # Reset stats:
         with self.statlock:
           self.mhps = self.clockspeed * 1
-          self.mhashes = 0
-          self.jobsaccepted = 0
-          self.accepted = 0
-          self.rejected = 0
-          self.invalid = 0
-          self.starttime = time.time()
+          self.recentaccepted = 0
+          self.recentrejected = 0
+          self.recentinvalid = 0
+          self.recentstarttime = time.time()
         self.miner.updatehashrate(self)
       else:
         self.miner.log(self.name + " is running old firmware, can not automatically reduce clock!\n", "rB")
@@ -696,23 +704,21 @@ class X6500FPGA(object):
           raise Exception("FPGA critical state")
     
     elif total > 100 and time.time() > self.starttime + 600 and invalid_pct < self.invalidwarning and self.temperature < self.tempwarning:
-      # The FPGA is safe, and has been for some time, maybe we should increase the clock?
-      # To be safe, don't increase the clock higher than the speed the user set in the config file
-      newclock = min(self.clockspeed + 2, self.startingclock)
-      if newclock > self.clockspeed:
-        self.miner.log(self.name + ": Increasing clock speed to %d MHz.\n", "B")
-        self.fpga.setClockSpeed(newclock)
-        if self.fpga.readClockSpeed() != newclock:
-          self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
-          raise Exception("Setting FPGA clock speed failed")
-        self.clockspeed = newclock
-        # Reset stats:
-        with self.statlock:
-          self.mhps = self.clockspeed * 1
-          self.mhashes = 0
-          self.jobsaccepted = 0
-          self.accepted = 0
-          self.rejected = 0
-          self.invalid = 0
-          self.starttime = time.time()
-        self.miner.updatehashrate(self)
+     # The FPGA is safe, and has been for some time, maybe we should increase the clock?
+     # To be safe, don't increase the clock higher than the speed the user set in the config file
+     newclock = min(self.clockspeed + 2, self.startingclock)
+     if newclock > self.clockspeed:
+       self.miner.log(self.name + ": Increasing clock speed to %d MHz.\n", "B")
+       self.fpga.setClockSpeed(newclock)
+       if self.fpga.readClockSpeed() != newclock:
+         self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
+         raise Exception("Setting FPGA clock speed failed")
+       self.clockspeed = newclock
+       # Reset stats:
+       with self.statlock:
+         self.mhps = self.clockspeed * 1
+         self.recentaccepted = 0
+         self.recentrejected = 0
+         self.recentinvalid = 0
+         self.recentstarttime = time.time()
+       self.miner.updatehashrate(self)
