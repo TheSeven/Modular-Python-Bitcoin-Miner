@@ -353,13 +353,13 @@ class SimpleRS232Worker(BaseWorker):
           # Do this before calculating the hash rate as it is latency critical.
           self.job.nonce_found(nonce)
           # If the nonce is too low, the measurement may be inaccurate.
-          nonce = struct.unpack("<I", nonce)[0]
-          if nonce >= 0x02000000:
+          nonceval = struct.unpack("<I", nonce)[0]
+          if nonceval >= 0x02000000:
             # Calculate actual on-device processing time (not including transfer times) of the job.
             delta = (now - self.job.starttime) - 40. / self.baudrate
             # Calculate the hash rate based on the processing time and number of neccessary MHashes.
             # This assumes that the device processes all nonces (starting at zero) sequentially.
-            self.stats.mhps = nonce / delta / 1000000.
+            self.stats.mhps = nonceval / delta / 1000000.
           # This needs self.mhps to be set.
           if isinstance(self.job, ValidationJob):
             # This is a validation job. Validate that the nonce is correct, and complain if not.
