@@ -33,11 +33,11 @@
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
 #   scaninterval: Bus scan interval in seconds (default: 10)
 #   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
-#   ### The following settings aren't implemented yet. They are here just as placeholders:
 #   errorwarning: if the FPGA error rate gets this high (in %), reduce the clock (default: 1)
 #   errorcritical: if the FPGA error rate gets this high (in %), drastically reduce the clock (default: 4)
 #   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 35)
 #   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 45)
+#   testing: log all worker stats once per minute (default: false)
 
 
 import sys
@@ -76,6 +76,7 @@ class X6500HotplugWorker(object):
     self.errorcritical = getattr(self, "errorcritical", 4)
     self.tempwarning = getattr(self, "tempwarning", 35)
     self.tempcritical = getattr(self, "tempcritical", 45)
+    self.testing = getattr(self, "testing", False)
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
 
     # Initialize object properties (for statistics)

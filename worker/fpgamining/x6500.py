@@ -37,6 +37,7 @@
 #   invalidcritical: if the FPGA invalid rate gets this high (in %), drastically reduce the clock (default: 10)
 #   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 45)
 #   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 55)
+#   testing: log all worker stats once per minute (default: false)
 
 
 import sys
