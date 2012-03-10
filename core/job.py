@@ -48,6 +48,7 @@ class Job(object):
     if midstate: self.midstate = midstate
     else: self.midstate = Job.calculate_midstate(data)
     self.canceled = False
+    self.destroyed = False
     self.worker = None
     self.hashes_remaining = 2**32
     
@@ -58,6 +59,8 @@ class Job(object):
     
     
   def destroy(self):
+    if self.destroyed: return
+    self.destroyed = True
     self.worksource.blockchain.remove_job(self)
     self.core.workqueue.remove_job(self)
     self.worksource.add_pending_mhashes(self.hashes_remaining / 1000000.)
