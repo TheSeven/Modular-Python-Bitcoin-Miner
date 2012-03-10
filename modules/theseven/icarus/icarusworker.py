@@ -296,8 +296,8 @@ class IcarusWorker(BaseWorker):
         if len(nonce) != 4: continue
         nonce = nonce[::-1]
         # Snapshot the current jobs to avoid race conditions
-        nextjob = self.nextjob
         oldjob = self.job
+        nextjob = self.nextjob
         # If there is no job, this must be a leftover from somewhere, e.g. previous invocation
         # or reiterating the keyspace because we couldn't provide new work fast enough.
         # In both cases we can't make any use of that nonce, so just discard it.
@@ -312,15 +312,15 @@ class IcarusWorker(BaseWorker):
         nonce = struct.unpack("<I", nonce)[0] & 0x7fffffff
         if valid and oldjob.starttime and nonce >= 0x02000000:
           # Calculate actual on-device processing time (not including transfer times) of the job.
-          delta = (now - self.job.starttime) - 40. / self.baudrate
+          delta = (now - oldjob.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
           # This assumes that the device processes all nonces (starting at zero) sequentially.
           self.stats.mhps = nonce / 500000. / delta
         # This needs self.stats.mhps to be set.
-        if isinstance(self.job, ValidationJob):
+        if isinstance(oldjob, ValidationJob):
           # This is a validation job. Validate that the nonce is correct, and complain if not.
-          if self.job.nonce != nonce:
-            raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (binascii.hexlify(nonce).decode("ascii"), binascii.hexlify(self.job.check).decode("ascii")))
+          if oldjob.nonce != nonce:
+            raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(oldjob.nonce).decode("ascii")))
           else:
             # The nonce was correct. Wake up the main thread.
             with self.wakeup:
