@@ -309,12 +309,13 @@ class IcarusWorker(BaseWorker):
         valid = oldjob.nonce_found(nonce, True)
         if not valid and nextjob: nextjob.nonce_found(nonce, True)
         # If the nonce is too low, the measurement may be inaccurate.
+        nonce = struct.unpack("<I", nonce)[0] & 0x7fffffff
         if valid and oldjob.starttime and nonce >= 0x02000000:
           # Calculate actual on-device processing time (not including transfer times) of the job.
           delta = (now - self.job.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
           # This assumes that the device processes all nonces (starting at zero) sequentially.
-          self.stats.mhps = (struct.unpack("<I", nonce)[0] & 0x7fffffff) / 500000. / delta
+          self.stats.mhps = nonce / 500000. / delta
         # This needs self.stats.mhps to be set.
         if isinstance(self.job, ValidationJob):
           # This is a validation job. Validate that the nonce is correct, and complain if not.
