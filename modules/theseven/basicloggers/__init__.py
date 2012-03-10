@@ -1,3 +1,4 @@
 from .stderrlogger import StderrLogger
+from .logfilelogger import LogFileLogger
 
-frontendclasses = [StderrLogger]
+frontendclasses = [StderrLogger, LogFileLogger]
