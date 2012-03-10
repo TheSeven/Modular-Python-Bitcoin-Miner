@@ -154,6 +154,7 @@ mod.loggadget = {
             mod.dom.clean(tbody);
             stream = mod.csc.request("log", "stream", {"loglevel": mod.uiconfig.data.loggadget.loglevel}, function(data)
             {
+                var atBottom = div.scrollTop + div.offsetHeight + 20 > div.scrollHeight;
                 for (var i in data)
                     if (data.hasOwnProperty(i))
                     {
@@ -191,7 +192,7 @@ mod.loggadget = {
                         tr.appendChild(td2);
                         tr.appendChild(td3);
                         tbody.appendChild(tr);
-                        div.scrollTop = div.scrollHeight;
+                        if (atBottom) div.scrollTop = div.scrollHeight;
                     }
             },
             {
