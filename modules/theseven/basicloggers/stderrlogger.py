@@ -59,23 +59,14 @@ class StderrLogger(BaseFrontend):
     if not "useansi" in self.settings: self.settings.useansi = "TERM" in os.environ
     
   
-  def start(self):
-    with self.start_stop_lock:
-      if self.started: return
-      
-      # Clear screen
-      if self.settings.useansi: self.core.stderr.write("\x1b[2J")
-      else: self.core.stderr.write("\n" * 100)
-      
-      self.started = True
-  
-  
-  def stop(self):
-    with self.start_stop_lock:
-      if not self.started: return
-      self.started = False
+  def _start(self):
+    super(StderrLogger, self)._start()
 
-      
+    # Clear screen
+    if self.settings.useansi: self.core.stderr.write("\x1b[2J")
+    else: self.core.stderr.write("\n" * 100)
+  
+  
   def write_log_message(self, timestamp, loglevel, messages):
     if not self.started: return
     if loglevel > self.settings.loglevel: return
