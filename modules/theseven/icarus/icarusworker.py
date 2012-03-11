@@ -348,7 +348,7 @@ class IcarusWorker(BaseWorker):
   def _sendjob(self, job):
     # Move previous job to oldjob, and new one to job
     self.oldjob = self.job
-    self.job.destroy()
+    if self.job: self.job.destroy()
     self.job = job
     # Send it to the device
     now = time.time()
@@ -364,7 +364,7 @@ class IcarusWorker(BaseWorker):
   def _jobend(self, now = time.time()):
     # Calculate how long the job was actually running and multiply that by the hash
     # rate to get the number of hashes calculated for that job and update statistics.
-    if self.job != None:
+    if self.job:
       if self.job.starttime:
         self.job.hashes_processed((now - self.job.starttime) * self.stats.mhps * 1000000)
       # Destroy the job, which is neccessary to actually account the calculated amount
