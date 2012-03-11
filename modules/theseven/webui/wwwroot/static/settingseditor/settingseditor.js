@@ -154,6 +154,64 @@ mod.settingseditor = {
                     };
                 },
                 
+                "list": function(range, setting, id)
+                {
+                    var table = document.createElement("table");
+                    var tbody = document.createElement("tbody");
+                    var tr = document.createElement("tr");
+                    var th = document.createElement("th");
+                    th.appendChild(document.createTextNode(setting.spec.element.title));
+                    tr.appendChild(th);
+                    th = document.createElement("th");
+                    var addButton = makeTag("input", "button", null, "+", true);
+                    th.appendChild(addButton);
+                    tr.appendChild(th);
+                    tbody.appendChild(tr);
+                    table.style.width = "100%";
+                    var rows = [];
+                    for (var i in setting.value)
+                        if (setting.value.hasOwnProperty(i))
+                            rows.push(makeRow(setting.value[i]));
+                    table.appendChild(tbody);
+                    range.appendChild(table);
+                    addButton.onclick = function(e)
+                    {
+                        rows.push(makeRow(""));
+                    };
+                    function makeRow(value)
+                    {
+                        var elementsetting = {"spec": setting.spec.element, "value": value};
+                        var row = {"element": elementsetting};
+                        var tr = document.createElement("tr");
+                        td = document.createElement("td");
+                        editor = editors[row.element.spec.type];
+                        if (editor) row.element.editor = new editor(td, row.element, null);
+                        tr.appendChild(td);
+                        td = document.createElement("td");
+                        var removeButton = makeTag("input", "button", null, "-", true);
+                        td.appendChild(removeButton);
+                        tr.appendChild(td);
+                        tbody.appendChild(tr);
+                        removeButton.onclick = function(e)
+                        {
+                            var idx = rows.indexOf(row);
+                            if (idx != -1) rows.splice(idx, 1);
+                            if (tr.parentNode) tr.parentNode.removeChild(tr);
+                        }
+                        return row;
+                    }
+                    this.getValue = function()
+                    {
+                        var list = [];
+                        for (var i in rows)
+                            if (rows.hasOwnProperty(i))
+                            {
+                                list.push(rows[i].element.editor ? rows[i].element.editor.getValue() : rows[i].element.value);
+                            }
+                        return list;
+                    };
+                },
+                
                 "dict": function(range, setting, id)
                 {
                     var table = document.createElement("table");

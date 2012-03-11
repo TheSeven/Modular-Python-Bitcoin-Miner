@@ -51,7 +51,7 @@ class WebUI(BaseFrontend):
   can_autodetect = True
   settings = dict(BaseFrontend.settings, **{
     "port": {"title": "HTTP port", "type": "int", "position": 1000},
-    "users":  {
+    "users": {
       "title": "Users",
       "type": "dict",
       "key": {"title": "User:Password", "type": "string"},
