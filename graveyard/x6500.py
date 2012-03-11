@@ -24,7 +24,7 @@
 ###########################################################
 
 # Module configuration options:
-#   name: Display name for this work source (default: "X6500 board " device id)
+#   name: Display name for this work source (default: "X6500 " device id)
 #   deviceid: Serial number of the device to be used (default: take first available device)
 #   firmware: Path to the firmware file (default: "worker/fpgamining/firmware/x6500.bit")
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
@@ -32,6 +32,12 @@
 #   useftd2xx: Use FTDI D2XX driver instead direct access via PyUSB (default: false)
 #   takeover: Forcibly grab control over the USB device (default: false, not supported by D2XX)
 #   uploadfirmware: Upload FPGA firmware during startup (default: false)
+#   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
+#   invalidwarning: if the FPGA invalid rate gets this high (in %), reduce the clock (default: 1)
+#   invalidcritical: if the FPGA invalid rate gets this high (in %), drastically reduce the clock (default: 10)
+#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 45)
+#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 55)
+#   testing: log all worker stats once per minute (default: false)
 
 
 import sys
@@ -70,7 +76,7 @@ class X6500Worker(object):
     nameattr = getattr(self, "name", None)
     self.name = nameattr
     self.deviceid = getattr(self, "deviceid", "")
-    if nameattr == None: self.name = "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver"
+    if nameattr == None: self.name = "X6500 " + self.deviceid if self.deviceid != "" else "X6500 driver"
     self.useftd2xx = getattr(self, "useftd2xx", False)
     self.takeover = getattr(self, "takeover", False)
     self.uploadfirmware = getattr(self, "uploadfirmware", False)
@@ -81,7 +87,7 @@ class X6500Worker(object):
       self.device = None
       self.miner.log(self.name + ": %s\n" % e, "rB")
     if self.device != None: self.deviceid = self.device.serial
-    if nameattr == None: self.name = "X6500 board " + self.deviceid if self.deviceid != "" else "X6500 driver"
+    if nameattr == None: self.name = "X6500 " + self.deviceid if self.deviceid != "" else "X6500 driver"
     if self.device == None:
       self.name = self.name + " (disconnected)"
       self.dead = True
@@ -89,6 +95,22 @@ class X6500Worker(object):
     self.jobinterval = getattr(self, "jobinterval", 30)
     self.pollinterval = getattr(self, "pollinterval", 0.1)
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
+    self.clockspeed = getattr(self, "clockspeed", 150)
+    if self.clockspeed > 300:
+      self.miner.log(self.name + ": ERROR: Clock speed set too high!!! Please be careful with this setting, it could DAMAGE your miner!!!", "rB")
+      self.name = self.name + " (disconnected)"
+      self.device = None
+      self.dead = True
+    if self.clockspeed < 4:
+      self.miner.log(self.name + ": ERROR: Clock speed set too low. Setting clock speed to the minimum (4 MHz).", "rB")
+      self.clockspeed = 4
+    self.startingclock = self.clockspeed # the software 
+    
+    self.invalidwarning = getattr(self, "invalidwarning", 1)
+    self.invalidcritical = getattr(self, "invalidcritical", 10)
+    self.tempwarning = getattr(self, "tempwarning", 45)
+    self.tempcritical = getattr(self, "tempcritical", 55)
+    self.testing = getattr(self, "testing", False)
 
     # Initialize object properties (for statistics)
     # Only children that have died are counted here, the others will report statistics themselves
@@ -126,7 +148,7 @@ class X6500Worker(object):
         "rejected": self.rejected + self.miner.calculatefieldsum(childstats, "rejected"), \
         "invalid": self.invalid + self.miner.calculatefieldsum(childstats, "invalid"), \
         "starttime": self.starttime, \
-        "currentpool": "Not applicable", \
+        "currentpool": "", \
       }
     # Return result
     return statistics
@@ -158,19 +180,21 @@ class X6500Worker(object):
   # Main thread entry point
   # This thread is responsible for booting the individual FPGAs and spawning worker threads for them
   def main(self):
+    if self.testing: 
+      atexit.register(self.dumpstatssummary)
 
     try:
-      fpga_list = [FPGA(self.miner, self.name + " FPGA 0", self.device, 0), FPGA(self.miner, self.name + " FPGA 1", self.device, 1)]
+      fpga_list = [FPGA(self.miner, self.name + " FPGA0", self.device, 0), FPGA(self.miner, self.name + " FPGA1", self.device, 1)]
       channelmask = 0
       fpgacount = 0
       
       for id, fpga in enumerate(fpga_list):
         fpga.id = id
         self.miner.log(self.name + ": Discovering FPGA %d...\n" % id)
-        fpga.jtag.detect()
+        fpga.detect()
         #self.miner.log(self.name + ": Found %i device%s\n" % (fpga.jtag.deviceCount, 's' if fpga.jtag.deviceCount != 1 else ''))
         for idcode in fpga.jtag.idcodes:
-          self.miner.log(self.name + ": FPGA %d: %s\n" % (id, JTAG.decodeIdcode(idcode)))
+          self.miner.log(self.name + ": FPGA %d: %s - Firmware: rev %d, build %d\n" % (id, JTAG.decodeIdcode(idcode), fpga.firmware_rev, fpga.firmware_build))
         if fpga.jtag.deviceCount != 1:
           self.miner.log(self.name + ": Warning: This module needs two JTAG buses with one FPGA each!\n", "rB")
           self.dead = True
@@ -187,6 +211,7 @@ class X6500Worker(object):
           return
         self.miner.log(self.name + ": Firmware file details:\n", "B")
         self.miner.log(self.name + ":   Design Name: %s\n" % bitfile.designname)
+        self.miner.log(self.name + ":   Firmware: rev %d, build: %d\n" % (bitfile.rev, bitfile.build))
         self.miner.log(self.name + ":   Part Name: %s\n" % bitfile.part)
         self.miner.log(self.name + ":   Date: %s\n" % bitfile.date)
         self.miner.log(self.name + ":   Time: %s\n" % bitfile.time)
@@ -204,6 +229,12 @@ class X6500Worker(object):
         FPGA.programBitstream(self.miner, self.device, jtag, bitfile.bitstream, self.progresshandler)
         self.miner.log(self.name + ": Programmed FPGAs in %f seconds\n" % (time.time() - start_time))
         bitfile = None  # Free memory
+        # Update the FPGA firmware details:
+        for fpga in fpga_list:
+          fpga.detect()
+      
+      # Update the start time:
+      self.starttime = time.time()
       
       self.children.append(X6500FPGA(self.miner, self, fpga_list[0]))
       self.children.append(X6500FPGA(self.miner, self, fpga_list[1]))
@@ -212,15 +243,39 @@ class X6500Worker(object):
       self.miner.log(self.name + ": Error while booting board: %s\n" % traceback.format_exc(), "rB")
       self.dead = True
     
-    # Read FPGA temperatures every second   
     try:    
+      if self.testing:
+        self.setupstatslog()
       while True:
         time.sleep(3)
+        
+        # Read FPGA temperatures
         (temp0, temp1) = self.device.read_temps()
         self.children[0].temperature = temp0
         self.children[1].temperature = temp1
+        
+        # Log stats every minute if testing
+        if self.testing and time.time() > self.laststatsdump + 60:
+          self.dumpstatslog()
+        
     except Exception as e:
       self.miner.log(self.name + ": Reading FPGA temperatures failed: %s\n" % e, "y")
+      
+  def setupstatslog(self):
+    import datetime
+    datestring = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    self.statslog = open('testing/' + self.name[6:] + '_' + datestring, "w")
+    self.laststatsdump = 0
+  
+  def dumpstatslog(self):
+    stats = self.miner.collectstatistics([self,])
+    stats[0]['time'] = time.time()
+    self.statslog.write(str(stats) + "\n")
+    self.laststatsdump = time.time()
+
+  def dumpstatssummary(self):
+    self.dumpstatslog()
+    self.statslog.close()
         
         
 # FPGA handler main class, child worker of X6500Worker
@@ -236,6 +291,7 @@ class X6500FPGA(object):
     
     # Fetch config information
     self.name = fpga.name
+    self.firmware_rev = fpga.firmware_rev
     self.jobinterval = parent.jobinterval
     self.pollinterval = parent.pollinterval
     self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
@@ -252,7 +308,19 @@ class X6500FPGA(object):
     self.invalid = 0       # Number of invalid shares produced by this worker
     self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
     self.temperature = None
-
+    self.clockspeed = parent.clockspeed
+    self.startingclock = self.clockspeed
+    
+    self.invalidwarning = parent.invalidwarning
+    self.invalidcritical = parent.invalidcritical
+    self.tempwarning = parent.tempwarning
+    self.tempcritical = parent.tempcritical
+    
+    self.recentaccepted = 0
+    self.recentrejected = 0
+    self.recentinvalid = 0
+    self.recentstarttime = time.time()
+    
     # Statistics lock, ensures that the UI can get a consistent statistics state
     # Needs to be acquired during all operations that affect the above values
     self.statlock = threading.RLock()
@@ -285,7 +353,16 @@ class X6500FPGA(object):
         "invalid": self.invalid, \
         "starttime": self.starttime, \
         "temperature": self.temperature, \
+        "clockspeed": self.clockspeed, \
         "currentpool": self.job.pool.name if self.job != None and self.job.pool != None else None, \
+        "invalidwarning": self.invalidwarning, \
+        "invalidcritical": self.invalidcritical, \
+        "tempwarning": self.tempwarning, \
+        "tempcritical": self.tempcritical, \
+        "recentaccepted": self.recentaccepted, \
+        "recentrejected": self.recentrejected, \
+        "recentinvalid": self.recentinvalid, \
+        "recentstarttime": self.recentstarttime, \
       }
     # Return result
     return statistics
@@ -315,7 +392,7 @@ class X6500FPGA(object):
   def main(self):
 
     # Make sure the FPGA is put to sleep when MPBM exits
-    atexit.register(self.fpga.sleep)
+    #atexit.register(self.fpga.sleep)
     
     # Loop forever. If anything fails, restart.
     while True:
@@ -346,6 +423,14 @@ class X6500FPGA(object):
         # Initialize hash rate tracking data
         self.lasttime = None
         self.lastnonce = None
+
+        if self.firmware_rev > 0:
+          self.miner.log(self.name + ": Setting clock speed to %d MHz...\n" % self.clockspeed, "B")
+          self.fpga.setClockSpeed(self.clockspeed)
+          if self.fpga.readClockSpeed() != self.clockspeed:
+            self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
+            # TODO: Raise an exception and shutdown the FPGA
+          self.mhps = self.clockspeed * 1 # this coefficient is the hashes per clock, change this when that increases :)
         
         # Clear FPGA's nonce queue
         self.fpga.clearQueue()
@@ -357,7 +442,15 @@ class X6500FPGA(object):
 
         # Send validation job to device
         self.miner.log(self.name + ": Verifying correct operation...\n", "B")
-        job = common.Job(self.miner, None, None, binascii.unhexlify(b"5517a3f06a2469f73025b60444e018e61ff2c557ea403ccf3b9c5445dd353710"), b"\0" * 64 + binascii.unhexlify(b"42490d634f2c87761a0cd43f"), None, binascii.unhexlify(b"8fa95303"))
+        job = common.Job( \
+          miner = self.miner, \
+          pool = None, \
+          longpollepoch = None, \
+          state = binascii.unhexlify(b"5517a3f06a2469f73025b60444e018e61ff2c557ea403ccf3b9c5445dd353710"), \
+          data = b"\0" * 64 + binascii.unhexlify(b"42490d634f2c87761a0cd43f"), \
+          target = None, \
+          check = binascii.unhexlify(b"8fa95303") \
+        )
         self.sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it
@@ -366,7 +459,11 @@ class X6500FPGA(object):
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 180 seconds should be sufficient for devices
         # down to about 50MH/s, for slower devices this timeout will need to be increased.
-        self.wakeup.wait(180)
+        if self.firmware_rev > 0:
+          interval = (2**32 / 1000000. / self.mhps) * 1.1
+          self.wakeup.wait(interval)
+        else:
+          self.wakeup.wait(180)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
         # We woke up, but the validation job hasn't succeeded in the mean time.
@@ -409,6 +506,10 @@ class X6500FPGA(object):
 
           # Upload the piece of work to the device
           self.sendjob(job)
+          
+          # Go through the safety checks and reduce the clock if necessary
+          self.safetycheck()
+          
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
           # If the job was already caught by a long poll while we were uploading it,
@@ -507,43 +608,53 @@ class X6500FPGA(object):
           raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (binascii.hexlify(nonce).decode("ascii"), binascii.hexlify(self.job.check).decode("ascii")))
         else:
           # The nonce was correct
-          if self.seconditeration == True:
+          if self.firmware_rev > 0:
+            # The FPGA is running overclocker firmware, so we don't need to use this method to calculate the hashrate
+            # In fact, it will not work because the FPGA will go to sleep after working through all possible nonces
             with self.wakeup:
-              # This is the second iteration. We now know the actual nonce rotation time.
-              delta = (now - oldjob.starttime)
-              # Calculate the hash rate based on the nonce rotation time.
-              self.mhps = 2**32 / 1000000. / delta
-              # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+              self.mhps = self.clockspeed
               self.miner.updatehashrate(self)
-              # Update hash rate tracking information
-              self.lasttime = now
-              self.lastnonce = struct.unpack("<I", nonce)[0]
-              # Wake up the main thread
               self.checksuccess = True
               self.wakeup.notify()
           else:
-            with self.wakeup:
-              # This was the first iteration. Wait for another one to figure out nonce rotation time.
-              oldjob.starttime = now
-              self.seconditeration = True
+            if self.seconditeration == True:
+              with self.wakeup:
+                # This is the second iteration. We now know the actual nonce rotation time.
+                delta = (now - oldjob.starttime)
+                # Calculate the hash rate based on the nonce rotation time.
+                self.mhps = 2**32 / 1000000. / delta
+                # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+                self.miner.updatehashrate(self)
+                # Update hash rate tracking information
+                self.lasttime = now
+                self.lastnonce = struct.unpack("<I", nonce)[0]
+                # Wake up the main thread
+                self.checksuccess = True
+                self.wakeup.notify()
+            else:
+              with self.wakeup:
+                # This was the first iteration. Wait for another one to figure out nonce rotation time.
+                oldjob.starttime = now
+                self.seconditeration = True
       else:
-        # Adjust hash rate tracking
-        delta = (now - self.lasttime)
-        nonce = struct.unpack("<I", nonce)[0]
-        estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
-        noncediff = nonce - (estimatednonce & 0xffffffff)
-        if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
-        elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
-        estimatednonce = estimatednonce + noncediff
-        # Calculate the hash rate based on adjusted tracking information
-        currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
-        weight = min(0.5, delta / 100.)
-        self.mhps = (1 - weight) * self.mhps + weight * currentmhps
-        # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-        self.miner.updatehashrate(self)
-        # Update hash rate tracking information
-        self.lasttime = now
-        self.lastnonce = nonce
+        if self.firmware_rev == 0:
+          # Adjust hash rate tracking
+          delta = (now - self.lasttime)
+          nonce = struct.unpack("<I", nonce)[0]
+          estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
+          noncediff = nonce - (estimatednonce & 0xffffffff)
+          if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
+          elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
+          estimatednonce = estimatednonce + noncediff
+          # Calculate the hash rate based on adjusted tracking information
+          currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
+          weight = min(0.5, delta / 100.)
+          self.mhps = (1 - weight) * self.mhps + weight * currentmhps
+          # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+          self.miner.updatehashrate(self)
+          # Update hash rate tracking information
+          self.lasttime = now
+          self.lastnonce = nonce
       
 
   # This function uploads a job to the device
@@ -563,4 +674,73 @@ class X6500FPGA(object):
     self.job = self.nextjob
     self.job.starttime = now
     self.nextjob = None
-        
+  
+  def safetycheck(self):
+    """Check the invalid rate and temperature, and reduce the FPGA clock if these exceed safe values"""
+    
+    warning = False
+    critical = False
+    
+    total = self.recentaccepted + self.recentrejected + self.recentinvalid
+
+    if total != 0:
+      invalid_pct = 100. * self.recentinvalid / total
+      if self.recentinvalid > 3 and invalid_pct > self.invalidwarning:
+        warning = True
+      if self.recentinvalid > 10 and invalid_pct > self.invalidcritical:
+        critical = True
+    
+    if self.temperature is not None and time.time() > self.recentstarttime + 30:
+      if self.temperature > self.tempwarning: 
+        warning = True
+      if self.temperature > self.tempcritical: 
+        critical = True
+    
+    if warning: downclock = 2
+    if critical: downclock = 20
+    
+    if warning or critical:
+      self.miner.log(self.name + ": %s: Detected unsafe condition for the FPGA!\n" % ("CRITICAL" if critical else "WARNING"), "rB")
+      if self.firmware_rev > 0:
+        newclock = max(self.clockspeed - downclock, 4)
+        self.miner.log(self.name + ": Reducing clock speed to %d MHz...\n" % newclock, "rB")
+        self.fpga.setClockSpeed(newclock)
+        if self.fpga.readClockSpeed() != newclock:
+          self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
+          raise Exception("Setting FPGA clock speed failed")
+        self.clockspeed = newclock
+        # Reset stats:
+        with self.statlock:
+          self.mhps = self.clockspeed * 1
+          self.recentaccepted = 0
+          self.recentrejected = 0
+          self.recentinvalid = 0
+          self.recentstarttime = time.time()
+        self.miner.updatehashrate(self)
+      else:
+        self.miner.log(self.name + " is running old firmware, can not automatically reduce clock!\n", "rB")
+        self.miner.log(self.name + ": Please update firmware to a recent revision.\n", "rB")
+        if critical:
+          self.miner.log(self.name + ": Putting FPGA to sleep to protect it!!!\n", "rB")
+          self.fpga.sleep()
+          raise Exception("FPGA critical state")
+    
+    elif total > 100 and time.time() > self.starttime + 600 and invalid_pct < self.invalidwarning and self.temperature < self.tempwarning:
+     # The FPGA is safe, and has been for some time, maybe we should increase the clock?
+     # To be safe, don't increase the clock higher than the speed the user set in the config file
+     newclock = min(self.clockspeed + 2, self.startingclock)
+     if newclock > self.clockspeed:
+       self.miner.log(self.name + ": Increasing clock speed to %d MHz.\n", "B")
+       self.fpga.setClockSpeed(newclock)
+       if self.fpga.readClockSpeed() != newclock:
+         self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
+         raise Exception("Setting FPGA clock speed failed")
+       self.clockspeed = newclock
+       # Reset stats:
+       with self.statlock:
+         self.mhps = self.clockspeed * 1
+         self.recentaccepted = 0
+         self.recentrejected = 0
+         self.recentinvalid = 0
+         self.recentstarttime = time.time()
+       self.miner.updatehashrate(self)
