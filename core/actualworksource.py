@@ -145,8 +145,7 @@ class ActualWorkSource(BaseWorkSource):
       
   def _push_jobs(self, jobs):
     self._handle_success(jobs)
-    with self.core.workqueue.lock:
-      for job in jobs: self.core.workqueue.add_job(job)
+    for job in jobs: self.core.workqueue.add_job(job)
       
       
   def get_job(self):
