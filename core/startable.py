@@ -80,5 +80,13 @@ class Startable(object):
       self.start()
       
       
+  def async_start(self, delay = 0):
+    Thread(None, self.start, self.settings.name + "_start", (delay,)).start()
+
+      
+  def async_stop(self, delay = 0):
+    Thread(None, self.stop, self.settings.name + "_stop", (delay,)).start()
+      
+      
   def async_restart(self, delay = 0):
     Thread(None, self.restart, self.settings.name + "_restart", (delay,)).start()
