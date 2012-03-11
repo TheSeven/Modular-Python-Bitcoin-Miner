@@ -57,6 +57,7 @@ class SimpleRS232Worker(BaseWorker):
     # Initialize wakeup flag for the main thread.
     # This serves as a lock at the same time.
     self.wakeup = Condition()
+
     
   # Validate settings, filling them with default values if neccessary.
   # Called from the constructor and after every settings change.
@@ -82,9 +83,9 @@ class SimpleRS232Worker(BaseWorker):
     self.baudrate = None
 #    # Initialize custom statistics. This is not neccessary for this worker module,
 #    # but might be interesting for other modules, so it is kept here for reference.
-#    stats.field1 = 0
-#    stats.field2 = 0
-#    stats.field3 = 0
+#    self.stats.field1 = 0
+#    self.stats.field2 = 0
+#    self.stats.field3 = 0
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
@@ -97,7 +98,7 @@ class SimpleRS232Worker(BaseWorker):
     # Assume a default job interval to make the core start fetching work for us.
     # The actual hashrate will be measured (and this adjusted to the correct value) later.
     self.jobs_per_second = 1. / self.settings.jobinterval
-    # This module will only ever process one job at once. The work fetcher needs this information
+    # This worker will only ever process one job at once. The work fetcher needs this information
     # to estimate how many jobs might be required at once in the worst case (after a block was found).
     self.parallel_jobs = 1
     # Reset the shutdown flag for our threads
@@ -108,7 +109,7 @@ class SimpleRS232Worker(BaseWorker):
     self.mainthread.start()
   
   
-  # Stut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  # Shut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
     super(SimpleRS232Worker, self)._stop()
@@ -189,7 +190,7 @@ class SimpleRS232Worker(BaseWorker):
         # Set validation success flag to false
         self.checksuccess = False
         # Start device response listener thread
-        self.listenerthread = Thread(None, self.listener, self.settings.name + "_listener")
+        self.listenerthread = Thread(None, self._listener, self.settings.name + "_listener")
         self.listenerthread.daemon = True
         self.listenerthread.start()
 
@@ -307,7 +308,7 @@ class SimpleRS232Worker(BaseWorker):
 
 
   # Device response listener thread
-  def listener(self):
+  def _listener(self):
     # Catch all exceptions and forward them to the main thread
     try:
       # Loop forever unless something goes wrong

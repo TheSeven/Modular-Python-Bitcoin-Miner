@@ -57,6 +57,7 @@ class IcarusWorker(BaseWorker):
     # Initialize wakeup flag for the main thread.
     # This serves as a lock at the same time.
     self.wakeup = Condition()
+
     
   # Validate settings, filling them with default values if neccessary.
   # Called from the constructor and after every settings change.
@@ -82,9 +83,9 @@ class IcarusWorker(BaseWorker):
     self.baudrate = None
 #    # Initialize custom statistics. This is not neccessary for this worker module,
 #    # but might be interesting for other modules, so it is kept here for reference.
-#    stats.field1 = 0
-#    stats.field2 = 0
-#    stats.field3 = 0
+#    self.stats.field1 = 0
+#    self.stats.field2 = 0
+#    self.stats.field3 = 0
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
@@ -97,7 +98,7 @@ class IcarusWorker(BaseWorker):
     # Assume a default job interval to make the core start fetching work for us.
     # The actual hashrate will be measured (and this adjusted to the correct value) later.
     self.jobs_per_second = 1. / self.settings.jobinterval
-    # This module will only ever process one job at once. The work fetcher needs this information
+    # This worker will only ever process one job at once. The work fetcher needs this information
     # to estimate how many jobs might be required at once in the worst case (after a block was found).
     self.parallel_jobs = 1
     # Reset the shutdown flag for our threads
@@ -108,7 +109,7 @@ class IcarusWorker(BaseWorker):
     self.mainthread.start()
   
   
-  # Stut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  # Shut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
     super(IcarusWorker, self)._stop()
@@ -164,11 +165,11 @@ class IcarusWorker(BaseWorker):
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
 
-        # Job that the device is currently working on (found nonces are coming from this one).
+        # Job that the device is currently working on, or that is currently being uploaded.
         # This variable is used by BaseWorker to figure out the current work source for statistics.
         self.job = None
-        # Job that is currently being uploaded to the device but not yet being processed.
-        self.nextjob = None
+        # Job that was previously being procesed. Has been destroyed, but there might be some late nonces.
+        self.oldjob = None
 
         # Open the serial port
         self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, None, False, None)
@@ -178,7 +179,7 @@ class IcarusWorker(BaseWorker):
         # Set validation success flag to false
         self.checksuccess = False
         # Start device response listener thread
-        self.listenerthread = Thread(None, self.listener, self.settings.name + "_listener")
+        self.listenerthread = Thread(None, self._listener, self.settings.name + "_listener")
         self.listenerthread.daemon = True
         self.listenerthread.start()
 
@@ -282,7 +283,7 @@ class IcarusWorker(BaseWorker):
 
 
   # Device response listener thread
-  def listener(self):
+  def _listener(self):
     # Catch all exceptions and forward them to the main thread
     try:
       # Loop forever unless something goes wrong
@@ -296,31 +297,34 @@ class IcarusWorker(BaseWorker):
         if len(nonce) != 4: continue
         nonce = nonce[::-1]
         # Snapshot the current jobs to avoid race conditions
-        oldjob = self.job
-        nextjob = self.nextjob
+        newjob = self.job
+        oldjob = self.oldjob
         # If there is no job, this must be a leftover from somewhere, e.g. previous invocation
         # or reiterating the keyspace because we couldn't provide new work fast enough.
         # In both cases we can't make any use of that nonce, so just discard it.
-        if oldjob == None: continue
+        if not oldjob and not newjob: return
         # Stop time measurement
         now = time.time()
         # Pass the nonce that we found to the work source, if there is one.
         # Do this before calculating the hash rate as it is latency critical.
-        valid = oldjob.nonce_found(nonce, True)
-        if not valid and nextjob: nextjob.nonce_found(nonce, True)
+        job = None
+        if newjob:
+          if newjob.nonce_found(nonce, oldjob): job = newjob
+        if not job and oldjob:
+          if oldjob.nonce_found(nonce): job = oldjob
         # If the nonce is too low, the measurement may be inaccurate.
         nonceval = struct.unpack("<I", nonce)[0] & 0x7fffffff
-        if valid and oldjob.starttime and nonceval >= 0x04000000:
+        if valid and job.starttime and nonceval >= 0x04000000:
           # Calculate actual on-device processing time (not including transfer times) of the job.
-          delta = (now - oldjob.starttime) - 40. / self.baudrate
+          delta = (now - job.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
           # This assumes that the device processes all nonces (starting at zero) sequentially.
           self.stats.mhps = nonceval / 500000. / delta
         # This needs self.stats.mhps to be set.
-        if isinstance(oldjob, ValidationJob):
+        if isinstance(job, ValidationJob):
           # This is a validation job. Validate that the nonce is correct, and complain if not.
-          if oldjob.nonce != nonce:
-            raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(oldjob.nonce).decode("ascii")))
+          if job.nonce != nonce:
+            raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(job.nonce).decode("ascii")))
           else:
             # The nonce was correct. Wake up the main thread.
             with self.wakeup:
@@ -328,7 +332,7 @@ class IcarusWorker(BaseWorker):
               self.wakeup.notify()
         else:
           with self.wakeup:
-            self._jobend()
+            self._jobend(now)
             self.wakeup.notify()
 
     # If an exception is thrown in the listener thread...
@@ -342,15 +346,17 @@ class IcarusWorker(BaseWorker):
 
   # This function uploads a job to the device
   def _sendjob(self, job):
-    # Put it into nextjob. It will be moved to job by the listener
-    # thread as soon as it gets acknowledged by the device.
-    self.nextjob = job
+    # Move previous job to oldjob, and new one to job
+    self.oldjob = self.job
+    self.job.destroy()
+    self.job = job
     # Send it to the device
-    self._jobend()
+    now = time.time()
     self.handle.write(job.midstate[::-1] + b"\0" * 20 + job.data[75:63:-1])
-    self.nextjob.starttime = time.time()
-    self.job = self.nextjob
-    self.nextjob = None
+    self.job.starttime = time.time()
+    # Calculate how long the old job was running
+    if self.oldjob and self.oldjob.starttime:
+      self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
 
     
   # This function needs to be called whenever the device terminates working on a job.
@@ -359,11 +365,10 @@ class IcarusWorker(BaseWorker):
     # Calculate how long the job was actually running and multiply that by the hash
     # rate to get the number of hashes calculated for that job and update statistics.
     if self.job != None:
-      if self.job.starttime != None:
-        hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
-        self.job.hashes_processed(hashes)
-        self.job.starttime = None
+      if self.job.starttime:
+        self.job.hashes_processed((now - self.job.starttime) * self.stats.mhps * 1000000)
       # Destroy the job, which is neccessary to actually account the calculated amount
       # of work to the worker and work source, and to remove the job from cancellation lists.
+      self.oldjob = self.job
       self.job.destroy()
       self.job = None

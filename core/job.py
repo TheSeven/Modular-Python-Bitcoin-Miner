@@ -50,6 +50,7 @@ class Job(object):
     self.canceled = False
     self.destroyed = False
     self.worker = None
+    self.starttime = None
     self.hashes_remaining = 2**32
     
     
