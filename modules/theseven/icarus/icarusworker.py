@@ -314,7 +314,7 @@ class IcarusWorker(BaseWorker):
           if oldjob.nonce_found(nonce): job = oldjob
         # If the nonce is too low, the measurement may be inaccurate.
         nonceval = struct.unpack("<I", nonce)[0] & 0x7fffffff
-        if valid and job.starttime and nonceval >= 0x04000000:
+        if job and job.starttime and nonceval >= 0x04000000:
           # Calculate actual on-device processing time (not including transfer times) of the job.
           delta = (now - job.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
