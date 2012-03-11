@@ -114,7 +114,6 @@ class Job(object):
 
   def cancel(self):
     self.canceled = True
-    self.core.workqueue.remove_job(self)
     if self.worker:
       self.worker.notify_canceled(self)
       with self.worker.stats.lock: self.worker.stats.jobscanceled += 1

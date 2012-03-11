@@ -77,6 +77,7 @@ class WorkQueue(Startable):
       
       
   def flush_all_of_work_source(self, worksource):
+    cancel = []
     with self.lock:
       for list in self.lists:
         for job in list:
@@ -88,7 +89,8 @@ class WorkQueue(Startable):
         for job in list:
           if job.worksource == worksource:
             list.remove(job)
-            job.cancel()
+            cancel.append(job)
+    for job in cancel: job.cancel()
     
     
   def get_job(self, worker, expiry_min_ahead, async = False):
@@ -146,6 +148,7 @@ class WorkQueue(Startable):
   def cleanuploop(self):
     while not self.shutdown:
       now = time.time()
+      cancel = []
       with self.lock:
         keys = sorted(self.lists.keys())
         cutoff = now + 10
@@ -159,7 +162,8 @@ class WorkQueue(Startable):
         keys = sorted(self.takenlists.keys())
         for expiry in keys:
           if expiry <= now:
-            while self.takenlists[expiry]: self.takenlists[expiry].pop(0).cancel()
+            while self.takenlists[expiry]: cancel.append(self.takenlists[expiry].pop(0))
             del self.takenlists[expiry]
       self.core.fetcher.wakeup()
+      for job in cancel: job.cancel()
       time.sleep(1)

@@ -122,6 +122,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
 
   def check_job(self, job):
     if self.currentprevhash == job.prevhash: return True
+    cancel = []
     with self.blocklock:
       now = time.time()
       timeout_expired = now > self.timeoutend
@@ -133,13 +134,14 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
       with self.core.workqueue.lock:
         while self.jobs:
           job = self.jobs.pop(0)
-          if job.worker: job.cancel()
+          if job.worker: cancel.append(job)
           else: job.destroy()
       self.jobs = []
       with self.stats.lock:
         self.stats.blocks += 1
         self.stats.lastblock = now
     self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
+    for job in cancel: job.cancel()
     return True
  
   
@@ -173,6 +175,7 @@ class DummyBlockchain(object):
   
   def check_job(self, job):
     if self.currentprevhash == job.prevhash: return True
+    cancel = []
     with self.blocklock:
       now = time.time()
       timeout_expired = now > self.timeoutend
@@ -184,11 +187,12 @@ class DummyBlockchain(object):
       with self.core.workqueue.lock:
         while self.jobs:
           job = self.jobs.pop(0)
-          if job.worker: job.cancel()
+          if job.worker: cancel.append(job)
           else: job.destroy()
       self.jobs = []
       with self.stats.lock:
         self.stats.blocks += 1
         self.stats.lastblock = now
     self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
+    for job in cancel: job.cancel()
     return True
