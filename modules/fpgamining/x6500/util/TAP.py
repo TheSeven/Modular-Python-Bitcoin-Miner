@@ -65,12 +65,9 @@ class TAP:
     UPDATE_IR: [IDLE, SELECT_DR]
   }
 
-  def __init__(self, miner, name, jtagClock):
-    self.miner = miner
-    self.name = name
+  def __init__(self, jtagClock):
     self.jtagClock = jtagClock
     self.state = None
-    self.debug = 0
   
   def reset(self):
     for i in range(6):
@@ -80,15 +77,10 @@ class TAP:
   
   def clocked(self, tms):
     if self.state is None:
-      if self.debug:
-        self.miner.log(self.name + ": TAP-DEBUG: TMS clocked, but state is Unknown.\n")
       return
     
     state = self.state
     self.state = TAP.TRANSITIONS[self.state][tms]
-
-    if self.debug:
-      self.miner.log(self.name + ": TAP-DEBUG: Transitioned (%i) from %s to %s.\n" % (tms, TAP.STR_TRANSLATE[state], TAP.STR_TRANSLATE[self.state]))
 
   
   # When goto is called, we look at where we want to go and where we are.
@@ -98,8 +90,6 @@ class TAP:
   def goto(self, state):
     # If state is Unknown, reset.
     if self.state is None:
-      if self.debug:
-        self.miner.log(self.name + ": TAP-DEBUG: goto called, but state is Unknown. Resetting.\n")
       self.reset()
     elif state == TAP.TLR:
       self.jtagClock(tms=1)

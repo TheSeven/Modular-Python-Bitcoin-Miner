@@ -86,13 +86,10 @@ class JTAG_PortList:
 
 
 class FT232R:
-  def __init__(self, miner, worker, handle):
+  def __init__(self, handle):
     self.mutex = threading.RLock()
-    self.miner = miner
-    self.worker = worker
     self.handle = handle
     self.serial = handle.serial
-    self.debug = 0
     self.synchronous = None
     self.write_buffer = b""
     self.portlist = FT232R_PortList(7, 6, 5, 4, 3, 2, 1, 0)
@@ -108,25 +105,18 @@ class FT232R:
     self.close()
     return False
   
-  def _log(self, msg, level=1):
-    if level <= self.debug:
-      self.miner.log(self.worker.name + ": FT232R: " + msg + "\n")
-  
   def close(self):
     with self.mutex:
       self.handle.close()
-      self._log("Device closed.")
   
   def setSyncMode(self):
     """Put the FT232R into Synchronous mode."""
-    self._log("Device entering Synchronous mode.")
     self.handle.setBitMode(self.portlist.output_mask(), 0)
     self.handle.setBitMode(self.portlist.output_mask(), 4)
     self.synchronous = True
 
   def setAsyncMode(self):
     """Put the FT232R into Asynchronous mode."""
-    self._log("Device entering Asynchronous mode.")
     self.handle.setBitMode(self.portlist.output_mask(), 0)
     self.handle.setBitMode(self.portlist.output_mask(), 1)
     self.synchronous = False
@@ -178,7 +168,6 @@ class FT232R:
   def read_data(self, num):
     with self.mutex:
       """Read num bytes from the FT232R and return an array of data."""
-      self._log("Reading %d bytes." % num)
       
       if num == 0:
         self.flush()
@@ -190,7 +179,6 @@ class FT232R:
 
       # Write all data that we don't care about.
       if len(self.write_buffer) > 0:
-        self._log("Flushing out " + str(len(self.write_buffer)))
         self.flush()
         self.handle.purgeBuffers()
 
@@ -199,21 +187,15 @@ class FT232R:
       while len(write_buffer) > 0:
         bytes_to_write = min(len(write_buffer), 3072)
         
-        self._log("Writing %d/%d bytes" % (bytes_to_write, len(write_buffer)))
         self.write(write_buffer[:bytes_to_write])
         write_buffer = write_buffer[bytes_to_write:]
-        #self._log("Status: " + str(self.handle.getStatus()))
-        #self._log("QueueStatus: " + str(self.handle.getQueueStatus()))
         
         data = data + self.handle.read(bytes_to_write, 3)
         
-      self._log("Read %d bytes." % len(data))
-      
       return data
 
   def read_temps(self):
     with self.mutex:
-      self._log("Reading temp sensors.")
       
       # clock SC with CS high:
       self._setCBUSBits(0, 1)

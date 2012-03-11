@@ -1,5 +1,5 @@
 # Modular Python Bitcoin Miner
-# Copyright (C) 2011-2012 Michael Sparmann (TheSeven)
+# Copyright (C) 2012 Michael Sparmann (TheSeven)
 #
 #     This program is free software; you can redistribute it and/or
 #     modify it under the terms of the GNU General Public License
@@ -19,397 +19,381 @@
 # want to support further development of the Modular Python Bitcoin Miner.
 
 
+
 ###########################################################
 # FPGA Mining LLC X6500 FPGA Miner Board interface module #
 ###########################################################
 
-# Module configuration options:
-#   name: Display name for this work source (default: "X6500 " device id)
-#   deviceid: Serial number of the device to be used (default: take first available device)
-#   firmware: Path to the firmware file (default: "worker/fpgamining/firmware/x6500.bit")
-#   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
-#   pollinterval: Nonce poll interval in seconds (default: 0.1)
-#   useftd2xx: Use FTDI D2XX driver instead direct access via PyUSB (default: false)
-#   takeover: Forcibly grab control over the USB device (default: false, not supported by D2XX)
-#   uploadfirmware: Upload FPGA firmware during startup (default: false)
-#   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
-#   invalidwarning: if the FPGA invalid rate gets this high (in %), reduce the clock (default: 1)
-#   invalidcritical: if the FPGA invalid rate gets this high (in %), drastically reduce the clock (default: 10)
-#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 45)
-#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 55)
-#   testing: log all worker stats once per minute (default: false)
 
 
-import sys
-import common
-import binascii
-import threading
 import time
-import hashlib
 import struct
-import atexit
-from .util.ft232r import FT232R, FT232R_PyUSB, FT232R_D2XX, FT232R_PortList
-from .util.jtag import JTAG
-from .util.BitstreamReader import BitFile, BitFileReadError
-from .util.fpga import FPGA
-from .util.format import formatNumber, formatTime
+import traceback
+from multiprocessing import Pipe
+from threading import RLock, Condition, Thread
+from binascii import hexlify, unhexlify
+from core.baseworker import BaseWorker
+from core.job import ValidationJob
+from .boardproxy import X6500BoardProxy
+try: from queue import Queue
+except: from Queue import Queue
 
 
-# Worker main class, referenced from config.py
-class X6500Worker(object):
 
-  # Constructor, gets passed a reference to the miner core and the config dict for this worker
-  def __init__(self, miner, dict, hotplug = False):
-
-    # Make config dict entries accessible via self.foo
-    self.__dict__ = dict
-
-    # Store reference to the miner core object
-    self.miner = miner
-
-    # Initialize child array
-    self.children = []
-
-    # Validate arguments, filling them with default values if not present
-    self.hotplug = hotplug
-    self.dead = False
-    nameattr = getattr(self, "name", None)
-    self.name = nameattr
-    self.deviceid = getattr(self, "deviceid", "")
-    if nameattr == None: self.name = "X6500 " + self.deviceid if self.deviceid != "" else "X6500 driver"
-    self.useftd2xx = getattr(self, "useftd2xx", False)
-    self.takeover = getattr(self, "takeover", False)
-    self.uploadfirmware = getattr(self, "uploadfirmware", False)
-    try:
-      if self.useftd2xx: self.device = FT232R(self.miner, self, FT232R_D2XX(self.deviceid))
-      else: self.device = FT232R(self.miner, self, FT232R_PyUSB(self.deviceid, self.takeover))
-    except Exception as e:
-      self.device = None
-      self.miner.log(self.name + ": %s\n" % e, "rB")
-    if self.device != None: self.deviceid = self.device.serial
-    if nameattr == None: self.name = "X6500 " + self.deviceid if self.deviceid != "" else "X6500 driver"
-    if self.device == None:
-      self.name = self.name + " (disconnected)"
-      self.dead = True
-    self.firmware = getattr(self, "firmware", "worker/fpgamining/firmware/x6500.bit")
-    self.jobinterval = getattr(self, "jobinterval", 30)
-    self.pollinterval = getattr(self, "pollinterval", 0.1)
-    self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
-    self.clockspeed = getattr(self, "clockspeed", 150)
-    if self.clockspeed > 300:
-      self.miner.log(self.name + ": ERROR: Clock speed set too high!!! Please be careful with this setting, it could DAMAGE your miner!!!", "rB")
-      self.name = self.name + " (disconnected)"
-      self.device = None
-      self.dead = True
-    if self.clockspeed < 4:
-      self.miner.log(self.name + ": ERROR: Clock speed set too low. Setting clock speed to the minimum (4 MHz).", "rB")
-      self.clockspeed = 4
-    self.startingclock = self.clockspeed # the software 
-    
-    self.invalidwarning = getattr(self, "invalidwarning", 1)
-    self.invalidcritical = getattr(self, "invalidcritical", 10)
-    self.tempwarning = getattr(self, "tempwarning", 45)
-    self.tempcritical = getattr(self, "tempcritical", 55)
-    self.testing = getattr(self, "testing", False)
-
-    # Initialize object properties (for statistics)
-    # Only children that have died are counted here, the others will report statistics themselves
-    self.mhps = 0          # Current MH/s (always zero)
-    self.mhashes = 0       # Total megahashes calculated since startup
-    self.jobsaccepted = 0  # Total jobs accepted
-    self.accepted = 0      # Number of accepted shares produced by this worker * difficulty
-    self.rejected = 0      # Number of rejected shares produced by this worker * difficulty
-    self.invalid = 0       # Number of invalid shares produced by this worker
-    self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
-
-    # Statistics lock, ensures that the UI can get a consistent statistics state
-    # Needs to be acquired during all operations that affect the above values
-    self.statlock = threading.RLock()
-
-    if self.device != None:
-      # Start main thread (boots the board and spawns FPGA manager threads)
-      self.mainthread = threading.Thread(None, self.main, self.name + "_main")
-      self.mainthread.daemon = True
-      self.mainthread.start()
-
-
-  # Report statistics about this worker module and its children.
-  def getstatistics(self, childstats):
-    # Acquire the statistics lock to stop statistics from changing while we deal with them
-    with self.statlock:
-      # Calculate statistics
-      statistics = { \
-        "name": self.name, \
-        "children": childstats, \
-        "mhashes": self.mhashes + self.miner.calculatefieldsum(childstats, "mhashes"), \
-        "mhps": self.miner.calculatefieldsum(childstats, "mhps"), \
-        "jobsaccepted": self.jobsaccepted + self.miner.calculatefieldsum(childstats, "jobsaccepted"), \
-        "accepted": self.accepted + self.miner.calculatefieldsum(childstats, "accepted"), \
-        "rejected": self.rejected + self.miner.calculatefieldsum(childstats, "rejected"), \
-        "invalid": self.invalid + self.miner.calculatefieldsum(childstats, "invalid"), \
-        "starttime": self.starttime, \
-        "currentpool": "", \
-      }
-    # Return result
-    return statistics
-
-    
-  # This function should interrupt processing of the current piece of work if possible.
-  # If you can't, you'll likely get higher stale share rates.
-  # This function is usually called when the work source gets a long poll response.
-  # If we're currently doing work for a different blockchain, we don't need to care.
-  def cancel(self, blockchain):
-    # Check all running children
-    for child in self.children:
-      # Forward the request to the child
-      child.cancel(blockchain)
-
-
-  # Firmware upload progess indicator
-  def progresshandler(self, start_time, now_time, written, total):
-    try: percent_complete = 100. * written / total
-    except ZeroDivisionError: percent_complete = 0
-    try: speed = written / (1000 * (now_time - start_time))
-    except ZeroDivisionError: speed = 0
-    try: remaining_sec = 100 * (now_time - start_time) / percent_complete
-    except ZeroDivisionError: remaining_sec = 0
-    remaining_sec -= now_time - start_time
-    self.miner.log(self.name + ": %.1f%% complete [%sB/s] [%s remaining]\n" % (percent_complete, formatNumber(speed), formatTime(remaining_sec)))
+# Worker main class, referenced from __init__.py
+class X6500Worker(BaseWorker):
   
+  version = "fpgamining.x6500 worker v0.1.0alpha"
+  default_name = "Untitled X6500 worker"
+  settings = dict(BaseWorker.settings, **{
+    "serial": {"title": "Board serial number", "type": "string", "position": 1000},
+    "useftd2xx": {
+      "title": "Driver",
+      "type": "enum",
+      "values": [
+        {"value": False, "title": "PyUSB"},
+        {"value": True, "title": "D2XX"},
+      ],
+      "position": 1100
+    },
+    "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
+    "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
+    "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
+    "tempwarning": {"title": "Warning temperature", "type": "int", "position": 3000},
+    "tempcritical": {"title": "Critical temperature", "type": "int", "position": 3100},
+    "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 3200},
+    "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 3300},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3400},
+    "jobinterval": {"title": "Job interval", "type": "float", "position": 4100},
+    "pollinterval": {"title": "Poll interval", "type": "float", "position": 4200},
+  })
+  
+  
+  # Constructor, gets passed a reference to the miner core and the saved worker state, if present
+  def __init__(self, core, state = None):
+    self.pyusb_available = False
+    try:
+      import usb
+      self.pyusb_available = True
+    except: pass
+    self.d2xx_available = False
+    try:
+      import d2xx
+      self.d2xx_available = True
+    except: pass
 
+    # Let our superclass do some basic initialization and restore the state if neccessary
+    super(X6500Worker, self).__init__(core, state)
+
+    # Initialize proxy access lock and wakeup event
+    self.lock = RLock()
+    self.wakeup = Condition()
+
+    
+  # Validate settings, filling them with default values if neccessary.
+  # Called from the constructor and after every settings change.
+  def apply_settings(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500Worker, self).apply_settings()
+    if not "serial" in self.settings: self.settings.serial = None
+    if not "useftd2xx" in self.settings:
+      self.settings.useftd2xx = self.d2xx_available and not self.pyusb_available
+    if self.settings.useftd2xx.lower() == "false": self.settings.useftd2xx = False
+    if not "takeover" in self.settings: self.settings.takeover = False
+    if not "initialspeed" in self.settings: self.settings.initialspeed = 150
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 200)
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 150
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 200)
+    if not "tempwarning" in self.settings: self.settings.tempwarning = 45
+    self.settings.tempwarning = min(max(self.settings.tempwarning, 0), 60)
+    if not "tempcritical" in self.settings: self.settings.tempcritical = 55
+    self.settings.tempcritical = min(max(self.settings.tempcritical, 0), 80)
+    if not "invalidwarning" in self.settings: self.settings.invalidwarning = 2
+    self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
+    if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
+    self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
+    self.settings.speedupthreshold = min(max(self.settings.invalidcritical, 50), 10000)
+    if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
+    if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
+    # We can't switch the device or driver on the fly, so trigger a restart if they changed.
+    # self.serial/self.useftd2xx are cached copys of self.settings.serial/self.settings.useftd2xx
+    if self.settings.serial != self.serial or self.settings.useftd2xx != self.useftd2xx: self.async_restart()
+    # We need to inform the proxy about a poll interval change
+    if self.started and self.settings.pollinterval != self.pollinterval: self._notify_poll_interval_changed()
+    for child in self.children: child.apply_settings()
+    
+
+  # Reset our state. Called both from the constructor and from self.start().
+  def _reset(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500Worker, self)._reset()
+    # These need to be set here in order to make the equality check in apply_settings() happy,
+    # when it is run before starting the module for the first time. (It is called from the constructor.)
+    self.serial = None
+    self.useftd2xx = None
+    self.pollinterval = None
+
+
+  # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  def _start(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500Worker, self)._start()
+    # Cache the port number and baud rate, as we don't like those to change on the fly
+    self.serial = self.settings.serial
+    self.useftd2xx = self.settings.useftd2xx
+    # Reset the shutdown flag for our threads
+    self.shutdown = False
+    # Start up the main thread, which handles pushing work to the device.
+    self.mainthread = Thread(None, self.main, self.settings.name + "_main")
+    self.mainthread.daemon = True
+    self.mainthread.start()
+  
+  
+  # Stut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  def _stop(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500Worker, self)._stop()
+    # Set the shutdown flag for our threads, making them terminate ASAP.
+    self.shutdown = True
+    # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
+    with self.wakeup: self.wakeup.notify()
+    # Ping the proxy, otherwise the main thread might be blocked and can't wake up.
+    try: self._proxy_message("ping")
+    except: pass
+    # The listener thread will hopefully die because the main thread closes the serial port handle.
+    # Wait for the main thread to terminate, which in turn waits for the listener thread to die.
+    self.mainthread.join(10)
+
+      
   # Main thread entry point
   # This thread is responsible for booting the individual FPGAs and spawning worker threads for them
   def main(self):
-    if self.testing: 
-      atexit.register(self.dumpstatssummary)
+    # If we're currently shutting down, just die. If not, loop forever,
+    # to recover from possible errors caught by the huge try statement inside this loop.
+    # Count how often the except for that try was hit recently. This will be reset if
+    # there was no exception for at least 5 minutes since the last one.
+    tries = 0
+    while not self.shutdown:
+      try:
+        # Record our starting timestamp, in order to back off if we repeatedly die
+        starttime = time.time()
+        
+        # Check if we have a device serial number
+        if not self.serial: raise Exception("Device serial number not set!")
+        
+        # Try to start the board proxy
+        proxy_rxconn, self.txconn = Pipe(False)
+        self.rxconn, proxy_txconn = Pipe(False)
+        self.pollinterval = self.settings.pollinterval
+        self.proxy = X6500BoardProxy(proxy_rxconn, proxy_txconn, self.serial, self.settings.takeover, self.useftd2xx, self.pollinterval)
+        self.proxy.daemon = True
+        self.proxy.start()
+        proxy_txconn.close()
+        self.response = None
+        self.response_queue = Queue()
+        
+        # Tell the board proxy to connect to the board
+        self._proxy_message("connect")
+        
+        while not self.shutdown:
+          data = self.rxconn.recv()
+          if data[0] == "log": self.core.log("%s: Proxy: %s" % (self.settings.name, data[1]), data[2], data[3])
+          elif data[0] == "ping": self._proxy_message("pong")
+          elif data[0] == "pong": pass
+          elif data[0] == "dying": raise Exception("Proxy died!")
+          elif data[0] == "response": self.response_queue.put(data[1:])
+          elif data[0] == "started_up": self._notify_proxy_started_up(data[1:])
+          elif data[0] == "nonce_found": self._notify_nonce_found(data[1:])
+          elif data[0] == "temperature_read": self._notify_temperature_read(data[1:])
+          else: raise Exception("Proxy sent unknown message: %s" % str(data))
+        
+        
+      # If something went wrong...
+      except Exception as e:
+        # ...complain about it!
+        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+      finally:
+        while self.children:
+          try:
+            child = self.children.pop(0)
+            child.stop()
+            child.destroy()
+          except: pass
+        try: self._proxy_message("shutdown")
+        except: pass
+        try: self.proxy.join(4)
+        except: pass
+        if not self.shutdown:
+          tries += 1
+          if time.time() - starttime >= 300: tries = 0
+          with self.wakeup:
+            if tries > 5: self.wakeup.wait(30)
+            else: self.wakeup.wait(1)
+        # Restart (handled by "while not self.shutdown:" loop above)
 
-    try:
-      fpga_list = [FPGA(self.miner, self.name + " FPGA0", self.device, 0), FPGA(self.miner, self.name + " FPGA1", self.device, 1)]
-      channelmask = 0
-      fpgacount = 0
-      
-      for id, fpga in enumerate(fpga_list):
-        fpga.id = id
-        self.miner.log(self.name + ": Discovering FPGA %d...\n" % id)
-        fpga.detect()
-        #self.miner.log(self.name + ": Found %i device%s\n" % (fpga.jtag.deviceCount, 's' if fpga.jtag.deviceCount != 1 else ''))
-        for idcode in fpga.jtag.idcodes:
-          self.miner.log(self.name + ": FPGA %d: %s - Firmware: rev %d, build %d\n" % (id, JTAG.decodeIdcode(idcode), fpga.firmware_rev, fpga.firmware_build))
-        if fpga.jtag.deviceCount != 1:
-          self.miner.log(self.name + ": Warning: This module needs two JTAG buses with one FPGA each!\n", "rB")
-          self.dead = True
-          return
+        
+  def _proxy_message(self, *args):
+    with self.lock:
+      self.txconn.send(args)
 
-      if self.uploadfirmware:
-        self.miner.log(self.name + ": Programming FPGAs...\n")
-        start_time = time.time()
-        try:
-          bitfile = BitFile.read(self.firmware)
-        except BitFileReadError as e:
-          self.miner.log(self.name + ": Error while reading firmware: %s\n" % e, "rB")
-          self.dead = True
-          return
-        self.miner.log(self.name + ": Firmware file details:\n", "B")
-        self.miner.log(self.name + ":   Design Name: %s\n" % bitfile.designname)
-        self.miner.log(self.name + ":   Firmware: rev %d, build: %d\n" % (bitfile.rev, bitfile.build))
-        self.miner.log(self.name + ":   Part Name: %s\n" % bitfile.part)
-        self.miner.log(self.name + ":   Date: %s\n" % bitfile.date)
-        self.miner.log(self.name + ":   Time: %s\n" % bitfile.time)
-        self.miner.log(self.name + ":   Bitstream Length: %d\n" % len(bitfile.bitstream))
-        jtag = JTAG(self.miner, self.name, self.device, 2)
-        jtag.deviceCount = 1
-        jtag.idcodes = [bitfile.idcode]
-        jtag._processIdcodes()
-        for fpga in fpga_list:
-          for idcode in fpga.jtag.idcodes:
-            if idcode & 0x0FFFFFFF != bitfile.idcode:
-              self.miner.log(self.name + ": Device IDCode does not match bitfile IDCode! Was this bitstream built for this FPGA?\n", "r")
-              self.dead = True
-              return
-        FPGA.programBitstream(self.miner, self.device, jtag, bitfile.bitstream, self.progresshandler)
-        self.miner.log(self.name + ": Programmed FPGAs in %f seconds\n" % (time.time() - start_time))
-        bitfile = None  # Free memory
-        # Update the FPGA firmware details:
-        for fpga in fpga_list:
-          fpga.detect()
+
+  def _proxy_transaction(self, *args):
+    with self.lock:
+      self.txconn.send(args)
+      return self.response_queue.get()
       
-      # Update the start time:
-      self.starttime = time.time()
       
-      self.children.append(X6500FPGA(self.miner, self, fpga_list[0]))
-      self.children.append(X6500FPGA(self.miner, self, fpga_list[1]))
-    except Exception as e:
-      import traceback
-      self.miner.log(self.name + ": Error while booting board: %s\n" % traceback.format_exc(), "rB")
-      self.dead = True
+  def _notify_poll_interval_changed(self):
+    self.pollinterval = self.settings.pollinterval
+    try: self._proxy_message("set_pollinterval", self.pollinterval)
+    except: pass
     
-    try:    
-      if self.testing:
-        self.setupstatslog()
-      while True:
-        time.sleep(3)
-        
-        # Read FPGA temperatures
-        (temp0, temp1) = self.device.read_temps()
-        self.children[0].temperature = temp0
-        self.children[1].temperature = temp1
-        
-        # Log stats every minute if testing
-        if self.testing and time.time() > self.laststatsdump + 60:
-          self.dumpstatslog()
-        
-    except Exception as e:
-      self.miner.log(self.name + ": Reading FPGA temperatures failed: %s\n" % e, "y")
-      
-  def setupstatslog(self):
-    import datetime
-    datestring = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-    self.statslog = open('testing/' + self.name[6:] + '_' + datestring, "w")
-    self.laststatsdump = 0
-  
-  def dumpstatslog(self):
-    stats = self.miner.collectstatistics([self,])
-    stats[0]['time'] = time.time()
-    self.statslog.write(str(stats) + "\n")
-    self.laststatsdump = time.time()
+    
+  def _notify_proxy_started_up(self, fpga0version, fpga1version):
+    # The proxy is up and running, start up child workers
+    self.children = [X6500FPGA(self.core, self, 0, fpga0version),
+                     X6500FPGA(self.core, self, 1, fpga1version)]
+    for child in self.children: child.start()
 
-  def dumpstatssummary(self):
-    self.dumpstatslog()
-    self.statslog.close()
-        
-        
+    
+  def _notify_nonce_found(self, fpga, now, nonce):
+    if self.chilren and fpga in self.children:
+      self.children[fpga].notify_nonce_found(now, nonce)
+
+
+  def _notify_temperature_read(self, fpga0, fpga1):
+    if self.children:
+      self.children[0].stats.temperature = fpga0
+      self.children[1].stats.temperature = fpga1
+
+  def send_job(self, fpga, job):
+    return self._proxy_transaction("send_job", fpga, self.job.midstate + self.job.data[64:72])
+
+
+  def shutdown_fpga(self, fpga):
+    self._proxy_message("shutdown_fpga", fpga)
+
+
+  def set_speed(self, fpga, speed):
+    self._proxy_message("set_speed", fpga, speed)
+
+
+  def get_speed(self, fpga):
+    return self._proxy_transaction("get_speed", fpga)[0]
+
+
+
 # FPGA handler main class, child worker of X6500Worker
-class X6500FPGA(object):
+class X6500FPGA(BaseWorker):
 
-  # Constructor, gets passed a reference to the miner core, parent worker, FPGA object
-  def __init__(self, miner, parent, fpga):
+  # Constructor, gets passed a reference to the miner core, the X6500Worker,
+  # its FPGA id, and the bitstream version currently running on that FPGA
+  def __init__(self, core, parent, fpga, bitstreamversion):
 
-    # Store reference to the miner core, parent worker and FPGA objects
-    self.miner = miner
+    # Let our superclass do some basic initialization
+    super(IcarusWorker, self).__init__(core, None)
     self.parent = parent
     self.fpga = fpga
+    self.firmware_rev = bitstreamversion
     
-    # Fetch config information
-    self.name = fpga.name
-    self.firmware_rev = fpga.firmware_rev
-    self.jobinterval = parent.jobinterval
-    self.pollinterval = parent.pollinterval
-    self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
-    
-    # Initialize child array (we won't ever have any)
-    self.children = []
+    # Initialize wakeup flag for the main thread.
+    # This serves as a lock at the same time.
+    self.wakeup = Condition()
 
-    # Initialize object properties (for statistics)
-    self.mhps = 0          # Current MH/s
-    self.mhashes = 0       # Total megahashes calculated since startup
-    self.jobsaccepted = 0  # Total jobs accepted
-    self.accepted = 0      # Number of accepted shares produced by this worker * difficulty
-    self.rejected = 0      # Number of rejected shares produced by this worker * difficulty
-    self.invalid = 0       # Number of invalid shares produced by this worker
-    self.starttime = time.time()  # Start timestamp (to get average MH/s from MHashes)
-    self.temperature = None
-    self.clockspeed = parent.clockspeed
-    self.startingclock = self.clockspeed
-    
-    self.invalidwarning = parent.invalidwarning
-    self.invalidcritical = parent.invalidcritical
-    self.tempwarning = parent.tempwarning
-    self.tempcritical = parent.tempcritical
-    
-    self.recentaccepted = 0
-    self.recentrejected = 0
-    self.recentinvalid = 0
-    self.recentstarttime = time.time()
-    
-    # Statistics lock, ensures that the UI can get a consistent statistics state
-    # Needs to be acquired during all operations that affect the above values
-    self.statlock = threading.RLock()
 
-    # Placeholder for device response listener thread (will be started after synchronization)
-    self.listenerthread = None
+    
+  # Validate settings, mostly coping them from our parent
+  # Called from the constructor and after every settings change on the parent.
+  def apply_settings(self):
+    self.settings.name = "%s FPGA%d" % (self.parent.settings.name, self.fpga)
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500FPGA, self).apply_settings()
+    
 
-    # Initialize wakeup flag for the main thread
-    self.wakeup = threading.Condition()
+  # Reset our state. Called both from the constructor and from self.start().
+  def _reset(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500Worker, self)._reset()
+    self.stats.temperature = None
+    self.stats.speed = None
 
-    # Start main thread (fetches work and pushes it to the device)
-    self.mainthread = threading.Thread(None, self.main, self.name + "_main")
+
+  # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  def _start(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500FPGA, self)._start()
+    # Assume a default job interval to make the core start fetching work for us.
+    # The actual hashrate will be measured (and this adjusted to the correct value) later.
+    self.jobs_per_second = 1. / self.parent.settings.jobinterval
+    # This worker will only ever process one job at once. The work fetcher needs this information
+    # to estimate how many jobs might be required at once in the worst case (after a block was found).
+    self.parallel_jobs = 1
+    # Reset the shutdown flag for our threads
+    self.shutdown = False
+    # Start up the main thread, which handles pushing work to the device.
+    self.mainthread = Thread(None, self.main, self.settings.name + "_main")
     self.mainthread.daemon = True
     self.mainthread.start()
+  
+  
+  # Stut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  def _stop(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500FPGA, self)._stop()
+    # Set the shutdown flag for our threads, making them terminate ASAP.
+    self.shutdown = True
+    # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
+    with self.wakeup: self.wakeup.notify()
+    # Wait for the main thread to terminate.
+    self.mainthread.join(2)
 
-
-  # Report statistics about this worker module and its (non-existant) children.
-  def getstatistics(self, childstats):
-    # Acquire the statistics lock to stop statistics from changing while we deal with them
-    with self.statlock:
-      # Calculate statistics
-      statistics = { \
-        "name": self.name, \
-        "children": childstats, \
-        "mhashes": self.mhashes, \
-        "mhps": self.mhps, \
-        "jobsaccepted": self.jobsaccepted, \
-        "accepted": self.accepted, \
-        "rejected": self.rejected, \
-        "invalid": self.invalid, \
-        "starttime": self.starttime, \
-        "temperature": self.temperature, \
-        "clockspeed": self.clockspeed, \
-        "currentpool": self.job.pool.name if self.job != None and self.job.pool != None else None, \
-        "invalidwarning": self.invalidwarning, \
-        "invalidcritical": self.invalidcritical, \
-        "tempwarning": self.tempwarning, \
-        "tempcritical": self.tempcritical, \
-        "recentaccepted": self.recentaccepted, \
-        "recentrejected": self.recentrejected, \
-        "recentinvalid": self.recentinvalid, \
-        "recentstarttime": self.recentstarttime, \
-      }
-    # Return result
-    return statistics
-
-
-  # This function should interrupt processing of the current piece of work if possible.
-  # If you can't, you'll likely get higher stale share rates.
-  # This function is usually called when the work source gets a long poll response.
-  # If we're currently doing work for a different blockchain, we don't need to care.
-  def cancel(self, blockchain):
-    # Get the wake lock to ensure that nobody else can change job/nextjob while we're checking.
+      
+  # This function should interrupt processing of the specified job if possible.
+  # This is neccesary to avoid producing stale shares after a new block was found,
+  # or if a job expires for some other reason. If we don't know about the job, just ignore it.
+  # Never attempts to fetch a new job in here, always do that asynchronously!
+  # This needs to be very lightweight and fast.
+  def notify_canceled(self, job):
+    # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.wakeup:
-      # Signal the main thread that it should get a new job if we're currently
-      # processing work for the affected blockchain.
-      if self.job != None and self.job.pool != None and self.job.pool.blockchain == blockchain:
-        self.canceled = True
+      # If the currently being processed, or currently being uploaded job are affected,
+      # wake up the main thread so that it can request and upload a new job immediately.
+      if self.job == job or self.nextjob == job:
         self.wakeup.notify()
-      # Check if an affected job is currently being uploaded.
-      # If yes, it will be cancelled immediately after the upload.
-      elif self.nextjob != None and self.nextjob.pool != None and self.nextjob.pool.blockchain == blockchain:
-        self.canceled = True
-        self.wakeup.notify()
+
+        
+  # Report custom statistics.
+  def _get_statistics(self, stats, childstats):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500Worker, self)._get_statistics(stats, childstats)
+    stats.temperature = self.stats.temperature
 
 
   # Main thread entry point
   # This thread is responsible for fetching work and pushing it to the device.
   def main(self):
-
-    # Make sure the FPGA is put to sleep when MPBM exits
-    #atexit.register(self.fpga.sleep)
-    
-    # Loop forever. If anything fails, restart.
-    while True:
+    # If we're currently shutting down, just die. If not, loop forever,
+    # to recover from possible errors caught by the huge try statement inside this loop.
+    # Count how often the except for that try was hit recently. This will be reset if
+    # there was no exception for at least 5 minutes since the last one.
+    tries = 0
+    while not self.shutdown:
       try:
-      
+        # Record our starting timestamp, in order to back off if we repeatedly die
+        starttime = time.time()
         # Exception container: If an exception occurs in the listener thread, the listener thread
         # will store it here and terminate, and the main thread will rethrow it and then restart.
         self.error = None
 
         # Initialize megahashes per second to zero, will be measured later.
-        self.mhps = 0
+        self.stats.mhps = 0
 
-        # Job that the device is currently working on (found nonces are coming from this one).
+        # Job that the device is currently working on, or that is currently being uploaded.
+        # This variable is used by BaseWorker to figure out the current work source for statistics.
         self.job = None
-
-        # Job that is currently being uploaded to the device but not yet being processed.
-        self.nextjob = None
+        # Job that was previously being procesed. Has been destroyed, but there might be some late nonces.
+        self.oldjob = None
 
         # We keep control of the wakeup lock at all times unless we're sleeping
         self.wakeup.acquire()
@@ -417,41 +401,29 @@ class X6500FPGA(object):
         self.checksuccess = False
         # Set validation job second iteration flag to false
         self.seconditeration = False
-        # Initialize job cancellation (long poll) flag to false
-        self.canceled = False
         
         # Initialize hash rate tracking data
         self.lasttime = None
         self.lastnonce = None
 
-        if self.firmware_rev > 0:
-          self.miner.log(self.name + ": Setting clock speed to %d MHz...\n" % self.clockspeed, "B")
-          self.fpga.setClockSpeed(self.clockspeed)
-          if self.fpga.readClockSpeed() != self.clockspeed:
-            self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
-            # TODO: Raise an exception and shutdown the FPGA
-          self.mhps = self.clockspeed * 1 # this coefficient is the hashes per clock, change this when that increases :)
+        # Initialize malfunction tracking data
+        self.recentshares = 0
+        self.recentinvalid = 0
+
+        # Configure core clock, if the bitstream supports that
+        if self.firmware_rev > 0: self._set_speed(self.parent.settings.initialspeed)
         
         # Clear FPGA's nonce queue
         self.fpga.clearQueue()
 
         # Start device response listener thread
-        self.listenerthread = threading.Thread(None, self.listener, self.name + "_listener")
+        self.listenerthread = Thread(None, self._listener, self.settings.name + "_listener")
         self.listenerthread.daemon = True
         self.listenerthread.start()
 
         # Send validation job to device
-        self.miner.log(self.name + ": Verifying correct operation...\n", "B")
-        job = common.Job( \
-          miner = self.miner, \
-          pool = None, \
-          longpollepoch = None, \
-          state = binascii.unhexlify(b"5517a3f06a2469f73025b60444e018e61ff2c557ea403ccf3b9c5445dd353710"), \
-          data = b"\0" * 64 + binascii.unhexlify(b"42490d634f2c87761a0cd43f"), \
-          target = None, \
-          check = binascii.unhexlify(b"8fa95303") \
-        )
-        self.sendjob(job)
+        job = ValidationJob(self.core, unhexlify(b"00000001a452aa4d7c529564e6f489b4ff9fbc5ce1f801d8104de8730000029900000000f3a88a7e15630db38d159e13544632f9c8c4a85e1e61b047cf73335d294f75a44f5b47631a0b350c41ce6404"))
+        self._sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
@@ -459,53 +431,39 @@ class X6500FPGA(object):
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 180 seconds should be sufficient for devices
         # down to about 50MH/s, for slower devices this timeout will need to be increased.
-        if self.firmware_rev > 0:
-          interval = (2**32 / 1000000. / self.mhps) * 1.1
-          self.wakeup.wait(interval)
-        else:
-          self.wakeup.wait(180)
+        if self.stats.speed: self.wakeup.wait((2**32 / 1000000. / self.stats.speed) * 1.1)
+        else: self.wakeup.wait(180)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
+        # Honor shutdown flag
+        if self.shutdown: break
         # We woke up, but the validation job hasn't succeeded in the mean time.
         # This usually means that the wakeup timeout has expired.
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
-        # self.mhps has now been populated by the listener thread
-        self.miner.log(self.name + ": Running at %f MH/s\n" % self.mhps, "B")
-        # Calculate the time that the device will need to process 2**32 nonces.
-        # This is limited at 30 seconds so that new transactions can be included into the block
-        # by the work source. (Requirement of the bitcoin protocol and enforced by most pools.)
-        interval = min(30, 2**32 / 1000000. / self.mhps)
-        # Add some safety margin and take user's interval setting (if present) into account.
-        self.jobinterval = min(self.jobinterval, max(0.5, interval * 0.8 - 1))
-        self.miner.log(self.name + ": Job interval: %f seconds\n" % self.jobinterval, "B")
-        # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-        self.jobspersecond = 1. / self.jobinterval
-        self.miner.updatehashrate(self)
+        # self.stats.mhps has now been populated by the listener thread
+        self.core.log(self.settings.name + ": Running at %f MH/s\n" % self.stats.mhps, 300, "B")
+        self._update_job_interval()
 
-        # Main loop, continues until something goes wrong.
-        while True:
+        # Main loop, continues until something goes wrong or we're shutting down.
+        while not self.shutdown:
 
-          # Fetch a job. Blocks until one is available. Because of this we need to release the
-          # wake lock temporarily in order to avoid possible deadlocks.
-          self.canceled = False;
+          # Fetch a job, add 2 seconds safety margin to the requested minimum expiration time.
+          # Blocks until one is available. Because of this we need to release the
+          # wakeup lock temporarily in order to avoid possible deadlocks.
           self.wakeup.release()
-          job = self.miner.getjob(self)
-          # Doesn't need acquisition of the statlock because we're the only one who modifies this.
-          self.jobsaccepted = self.jobsaccepted + 1
+          job = self.core.get_job(self, self.jobinterval + 2)
           self.wakeup.acquire()
           
-          # If a new block was found while we were fetching that job,
-          # check the long poll epoch to verify that the work that we got isn't stale.
-          # If it is, just discard it and get a new one.
-          if self.canceled == True:
-            if job.longpollepoch != job.pool.blockchain.longpollepoch: continue
-          self.canceled = False;
+          # If a new block was found while we were fetching that job, just discard it and get a new one.
+          if job.canceled:
+            job.destroy()
+            continue
 
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
 
-          # Upload the piece of work to the device
-          self.sendjob(job)
+          # Upload the job to the device
+          self._sendjob(job)
           
           # Go through the safety checks and reduce the clock if necessary
           self.safetycheck()
@@ -516,9 +474,9 @@ class X6500FPGA(object):
           # jump back to the beginning of the main loop in order to immediately fetch new work.
           # Don't check for the canceled flag before the job was accepted by the device,
           # otherwise we might get out of sync.
-          if self.canceled: continue
+          if self.job.canceled: continue
           # Wait while the device is processing the job. If nonces are sent by the device, they
-          # will be processed by the listener thread. If a long poll comes in, we will be woken up.
+          # will be processed by the listener thread. If the job gets canceled, we will be woken up.
           self.wakeup.wait(self.jobinterval)
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
@@ -526,221 +484,176 @@ class X6500FPGA(object):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.miner.log(self.name + ": %s\n" % e, "rB")
+        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
         # Make sure that the listener thread realizes that something went wrong
         self.error = e
-        # We're not doing productive work any more, update stats
-        self.mhps = 0
-        # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
-        try: self.wakeup.release()
-        except: pass
-        if self.parent.hotplug:
-          for child in self.parent.children:
-            child.error = Exception("Sibling FPGA worker died, restarting board")
-          try: self.parent.device.close()
-          except: pass
-        # Wait for the listener thread to terminate.
-        # If it doens't within 10 seconds, continue anyway. We can't do much about that.
-        try: self.listenerthread.join(10)
-        except: pass
-        # Set MH/s to zero again, the listener thread might have overwritten that.
-        self.mhps = 0
-        # Notify the hotplug manager about our death, so that it can respawn as neccessary
-        if self.parent.hotplug:
-          self.parent.dead = True
-          return
-        # Wait for a second to avoid 100% CPU load if something fails reproducibly
-        time.sleep(1)
-        # Restart (handled by "while True:" loop above)
+      finally:
+        # We're not doing productive work any more, update stats and destroy current job
+        self._jobend()
+        self.stats.mhps = 0
+        # If we aren't shutting down, figure out if there have been many errors recently,
+        # and if yes, restart the parent worker as well.
+        if not self.shutdown:
+          tries += 1
+          if time.time() - starttime >= 300: tries = 0
+          with self.wakeup:
+            if tries > 5:
+              self.parent.async_restart()
+              return
+            else: self.wakeup.wait(1)
+        # Restart (handled by "while not self.shutdown:" loop above)
 
 
-  # Device response listener thread (polls for nonces)
-  def listener(self):
-
-    # Catch all exceptions and forward them to the main thread
-    try:
-
-      # Loop forever unless something goes wrong
-      while True:
-      
-        # Wait for a poll interval
-        time.sleep(self.pollinterval)
-
-        # If the main thread has a problem, make sure we die before it restarts
-        if self.error != None: break
-
-        self.checknonces()
-
-    # If an exception is thrown in the listener thread...
-    except Exception as e:
-      # ...put it into the exception container...
-      self.error = e
-      # ...wake up the main thread...
-      with self.wakeup: self.wakeup.notify()
-      # ...and terminate the listener thread.
-
-      
-  def checknonces(self):
-    # Try to read a nonce from the device
-    nonce = self.fpga.readNonce()
-    # If we found a nonce, handle it
-    if nonce is not None:
-      # Snapshot the current jobs to avoid race conditions
-      nextjob = self.nextjob
-      oldjob = self.job
-      # If there is no job, this must be a leftover from somewhere.
-      # In that case, just restart things to clean up the situation.
-      if oldjob == None: raise Exception("Mining device sent a share before even getting a job")
-      # Stop time measurement
-      now = time.time()
-      # Pass the nonce that we found to the work source, if there is one.
-      # Do this before calculating the hash rate as it is latency critical.
-      if oldjob != None:
-        if nextjob != None:
-          data = oldjob.data[:76] + nonce + oldjob.data[80:]
-          hash = hashlib.sha256(hashlib.sha256(struct.pack("<20I", *struct.unpack(">20I", data[:80]))).digest()).digest()
-          if hash[-4:] != b"\0\0\0\0": nextjob.sendresult(nonce, self)
-        else: oldjob.sendresult(nonce, self)
-      else: oldjob.sendresult(nonce, self)
-      if oldjob.check != None:
-        # This is a validation job. Validate that the nonce is correct, and complain if not.
-        if oldjob.check != nonce:
-          raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (binascii.hexlify(nonce).decode("ascii"), binascii.hexlify(self.job.check).decode("ascii")))
+  def notify_nonce_found(self, now, nonce):
+    # Snapshot the current jobs to avoid race conditions
+    oldjob = self.oldjob
+    newjob = self.job
+    # If there is no job, this must be a leftover from somewhere, e.g. previous invocation
+    # or reiterating the keyspace because we couldn't provide new work fast enough.
+    # In both cases we can't make any use of that nonce, so just discard it.
+    if not oldjob and not newjob: return
+    # Pass the nonce that we found to the work source, if there is one.
+    # Do this before calculating the hash rate as it is latency critical.
+    job = None
+    if newjob:
+      if newjob.nonce_found(nonce, oldjob): job = newjob
+    if not job and oldjob:
+      if oldjob.nonce_found(nonce): job = oldjob
+    self.recentshares += 1
+    if not job: self.recentinvalid += 1
+    nonceval = struct.unpack("<I", nonce)[0]
+    if isinstance(job, ValidationJob):
+      # This is a validation job. Validate that the nonce is correct, and complain if not.
+      if job.nonce != nonce:
+        raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(job.nonce).decode("ascii")))
+      else:
+        # The nonce was correct
+        if self.firmware_rev > 0:
+          # The FPGA is running overclocker firmware, so we don't need to use this method to calculate the hashrate.
+          # In fact, it will not work because the FPGA will go to sleep after working through all possible nonces.
+          with self.wakeup:
+            self.checksuccess = True
+            self.wakeup.notify()
         else:
-          # The nonce was correct
-          if self.firmware_rev > 0:
-            # The FPGA is running overclocker firmware, so we don't need to use this method to calculate the hashrate
-            # In fact, it will not work because the FPGA will go to sleep after working through all possible nonces
+          if self.seconditeration == True:
             with self.wakeup:
-              self.mhps = self.clockspeed
-              self.miner.updatehashrate(self)
+              # This is the second iteration. We now know the actual nonce rotation time.
+              delta = (now - job.starttime)
+              # Calculate the hash rate based on the nonce rotation time.
+              self.stats.mhps = 2**32 / 1000000. / delta
+              # Update hash rate tracking information
+              self.lasttime = now
+              self.lastnonce = nonceval
+              # Wake up the main thread
               self.checksuccess = True
               self.wakeup.notify()
           else:
-            if self.seconditeration == True:
-              with self.wakeup:
-                # This is the second iteration. We now know the actual nonce rotation time.
-                delta = (now - oldjob.starttime)
-                # Calculate the hash rate based on the nonce rotation time.
-                self.mhps = 2**32 / 1000000. / delta
-                # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-                self.miner.updatehashrate(self)
-                # Update hash rate tracking information
-                self.lasttime = now
-                self.lastnonce = struct.unpack("<I", nonce)[0]
-                # Wake up the main thread
-                self.checksuccess = True
-                self.wakeup.notify()
-            else:
-              with self.wakeup:
-                # This was the first iteration. Wait for another one to figure out nonce rotation time.
-                oldjob.starttime = now
-                self.seconditeration = True
-      else:
-        if self.firmware_rev == 0:
-          # Adjust hash rate tracking
-          delta = (now - self.lasttime)
-          nonce = struct.unpack("<I", nonce)[0]
-          estimatednonce = int(round(self.lastnonce + self.mhps * 1000000 * delta))
-          noncediff = nonce - (estimatednonce & 0xffffffff)
-          if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
-          elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
-          estimatednonce = estimatednonce + noncediff
-          # Calculate the hash rate based on adjusted tracking information
-          currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
-          weight = min(0.5, delta / 100.)
-          self.mhps = (1 - weight) * self.mhps + weight * currentmhps
-          # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-          self.miner.updatehashrate(self)
-          # Update hash rate tracking information
-          self.lasttime = now
-          self.lastnonce = nonce
+            with self.wakeup:
+              # This was the first iteration. Wait for another one to figure out nonce rotation time.
+              job.starttime = now
+              self.seconditeration = True
+    else:
+      if self.firmware_rev == 0:
+        # Adjust hash rate tracking
+        delta = (now - self.lasttime)
+        estimatednonce = int(round(self.lastnonce + self.stats.mhps * 1000000 * delta))
+        noncediff = nonceval - (estimatednonce & 0xffffffff)
+        if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
+        elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
+        estimatednonce = estimatednonce + noncediff
+        # Calculate the hash rate based on adjusted tracking information
+        currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
+        weight = min(0.5, delta / 100.)
+        self.stats.mhps = (1 - weight) * self.stats.mhps + weight * currentmhps
+        # Update hash rate tracking information
+        self.lasttime = now
+        self.lastnonce = nonceval
       
 
   # This function uploads a job to the device
-  def sendjob(self, job):
-    # Put it into nextjob. It will be moved to job once we know it has reached the FPGA.
-    self.nextjob = job
+  def _sendjob(self, job):
+    # Move previous job to oldjob, and new one to job
+    self.oldjob = self.job
+    self.job.destroy()
+    self.job = job
     # Send it to the FPGA
-    self.fpga.writeJob(job)
-    # Try to grab any leftover nonces from the previous job in time
-    self.checknonces()
+    self.parent.send_job(self.fpga, job)
+    # Calculate how long the old job was running
     now = time.time()
-    if self.job != None and self.job.starttime != None and self.job.pool != None:
-      mhashes = (now - self.job.starttime) * self.mhps
-      self.job.finish(mhashes, self)
-      self.job.starttime = None
-    # Acknowledge the job by moving it from nextjob to job
-    self.job = self.nextjob
+    if self.oldjob and self.oldjob.starttime:
+      self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
     self.job.starttime = now
-    self.nextjob = None
+
+    
+  # This function needs to be called whenever the device terminates working on a job.
+  # It calculates how much work was actually done for the job and destroys it.
+  def _jobend(self, now = time.time()):
+    # Calculate how long the job was actually running and multiply that by the hash
+    # rate to get the number of hashes calculated for that job and update statistics.
+    if self.job != None:
+      if self.job.starttime:
+        self.job.hashes_processed((now - self.job.starttime) * self.stats.mhps * 1000000)
+      # Destroy the job, which is neccessary to actually account the calculated amount
+      # of work to the worker and work source, and to remove the job from cancellation lists.
+      self.oldjob = self.job
+      self.job.destroy()
+      self.job = None
   
+  
+  # Check the invalid rate and temperature, and reduce the FPGA clock if these exceed safe values
   def safetycheck(self):
-    """Check the invalid rate and temperature, and reduce the FPGA clock if these exceed safe values"""
     
     warning = False
     critical = False
-    
-    total = self.recentaccepted + self.recentrejected + self.recentinvalid
+    if self.recentinvalid > self.parent.settings.invalidwarning: warning = True
+    if self.recentinvalid > self.parent.settings.invalidcritical: critical = True
+    if self.stats.temperature and self.stats.temperature > self.tempwarning: warning = True    
+    if self.stats.temperature and self.stats.temperature > self.tempcritical: critical = True    
 
-    if total != 0:
-      invalid_pct = 100. * self.recentinvalid / total
-      if self.recentinvalid > 3 and invalid_pct > self.invalidwarning:
-        warning = True
-      if self.recentinvalid > 10 and invalid_pct > self.invalidcritical:
-        critical = True
+    if warning: self.core.log(self.settings.name + ": Detected overload condition for the FPGA!\n", 200, "y")
+    if critical: self.core.log(self.settings.name + ": Detected CRITICAL condition for the FPGA!\n", 100, "rB")
+
+    if critical: speedstep = -20
+    elif warning: speedstep = -2
+    elif not self.recentinvalid and self.recentshares >= self.parent.settings.speedupthreshold:
+      speedstep = 2
+    else: speedstep = 0    
+
+    if self.firmware_rev > 0:
+      if speedstep: _set_speed(self.stats.speed + speedstep)
+    elif warning or critical:
+      self.miner.log(self.settings.name + ": Firmware too old, can not automatically reduce clock!\n", 200, "yB")
+      if critical:
+        self.miner.log(self.settings.name + ": Shutting down FPGA to protect it!\n", 100, "rB")
+        self.parent.shutdown_fpga(self.fpga)
+        self.async_stop(2)
+
+    if speedstep:
+      self.recentinvalid = 0
+      self.recentshares = 0
     
-    if self.temperature is not None and time.time() > self.recentstarttime + 30:
-      if self.temperature > self.tempwarning: 
-        warning = True
-      if self.temperature > self.tempcritical: 
-        critical = True
-    
-    if warning: downclock = 2
-    if critical: downclock = 20
-    
-    if warning or critical:
-      self.miner.log(self.name + ": %s: Detected unsafe condition for the FPGA!\n" % ("CRITICAL" if critical else "WARNING"), "rB")
-      if self.firmware_rev > 0:
-        newclock = max(self.clockspeed - downclock, 4)
-        self.miner.log(self.name + ": Reducing clock speed to %d MHz...\n" % newclock, "rB")
-        self.fpga.setClockSpeed(newclock)
-        if self.fpga.readClockSpeed() != newclock:
-          self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
-          raise Exception("Setting FPGA clock speed failed")
-        self.clockspeed = newclock
-        # Reset stats:
-        with self.statlock:
-          self.mhps = self.clockspeed * 1
-          self.recentaccepted = 0
-          self.recentrejected = 0
-          self.recentinvalid = 0
-          self.recentstarttime = time.time()
-        self.miner.updatehashrate(self)
-      else:
-        self.miner.log(self.name + " is running old firmware, can not automatically reduce clock!\n", "rB")
-        self.miner.log(self.name + ": Please update firmware to a recent revision.\n", "rB")
-        if critical:
-          self.miner.log(self.name + ": Putting FPGA to sleep to protect it!!!\n", "rB")
-          self.fpga.sleep()
-          raise Exception("FPGA critical state")
-    
-    elif total > 100 and time.time() > self.starttime + 600 and invalid_pct < self.invalidwarning and self.temperature < self.tempwarning:
-     # The FPGA is safe, and has been for some time, maybe we should increase the clock?
-     # To be safe, don't increase the clock higher than the speed the user set in the config file
-     newclock = min(self.clockspeed + 2, self.startingclock)
-     if newclock > self.clockspeed:
-       self.miner.log(self.name + ": Increasing clock speed to %d MHz.\n", "B")
-       self.fpga.setClockSpeed(newclock)
-       if self.fpga.readClockSpeed() != newclock:
-         self.miner.log(self.name + ": ERROR: Setting clock speed failed!\n", "rB")
-         raise Exception("Setting FPGA clock speed failed")
-       self.clockspeed = newclock
-       # Reset stats:
-       with self.statlock:
-         self.mhps = self.clockspeed * 1
-         self.recentaccepted = 0
-         self.recentrejected = 0
-         self.recentinvalid = 0
-         self.recentstarttime = time.time()
-       self.miner.updatehashrate(self)
+   
+  def _set_speed(self, speed):
+    speed = min(max(speed, 4), self.parent.settings.maximumspeed)
+    if self.stats.speed == speed: return
+    self.core.log(self.settings.name + ": Setting clock speed to %d MHz...\n" % speed, 500, "B")
+    self.parent.set_speed(self.fpga, speed)
+    self.stats.speed = self.parent.get_speed(self.fpga)
+    self.stats.mhps = self.stats.speed
+    self._update_job_interval()
+    if self.stats.speed != speed:
+      self.core.log(self.settings.name + ": Setting clock speed failed!\n", 100, "rB")
+   
+   
+  def _update_job_interval(self):
+    # Calculate the time that the device will need to process 2**32 nonces.
+    # This is limited at 60 seconds in order to have some regular communication,
+    # even with very slow devices (and e.g. detect if the device was unplugged).
+    interval = min(60, 2**32 / 1000000. / self.stats.mhps)
+    # Add some safety margin and take user's interval setting (if present) into account.
+    self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
+    self.core.log(self.settings.name + ": Job interval: %f seconds\n" % self.jobinterval, 400, "B")
+    # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+    self.jobs_per_second = 1. / self.jobinterval
+    self.core.notify_speed_changed(self)
+  

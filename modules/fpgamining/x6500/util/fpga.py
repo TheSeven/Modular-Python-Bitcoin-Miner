@@ -65,12 +65,12 @@ def jtagcomm_checksum(bits):
 
 
 class FPGA:
-  def __init__(self, miner, name, ft232r, chain):
-    self.miner = miner
+  def __init__(self, proxy, name, ft232r, chain):
+    self.proxy = proxy
     self.name = name
     self.ft232r = ft232r
     self.chain = chain
-    self.jtag = JTAG(miner, name, ft232r, chain)
+    self.jtag = JTAG(ft232r, chain)
     
     self.asleep = True
 
@@ -253,7 +253,7 @@ class FPGA:
   # TODO: This may not actually clear the queue, but should be correct most of the time.
   def _old_clearQueue(self):
     with self.ft232r.mutex:
-      self.miner.log(self.name + ": FPGA: Clearing queue...\n")
+      self.proxy.log(self.name + ": Clearing queue...\n", 600)
       self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
@@ -264,21 +264,15 @@ class FPGA:
           break
       self.jtag.tap.reset()
     
-    #self.miner.log(self.name + ": FPGA: Queue cleared...\n")
-  
   def _old_writeJob(self, job):
     # We need the 256-bit midstate, and 12 bytes from data.
     # The first 64 bytes of data are already hashed (hence midstate),
     # so we skip that. Of the last 64 bytes, 52 bytes are constant and
     # not needed by the FPGA.
     
-    midstate = job.state[::-1]
-    data = job.data[75:63:-1]
-    data = midstate + data + b"\0"
+    data = job[31::-1] + job[:31:-1] + b"\0"
 
     with self.ft232r.mutex:
-      #self.miner.log(self.name + ": FPGA: Loading job data...\n")
-      
       if self.asleep: self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
@@ -296,8 +290,6 @@ class FPGA:
 
       self.ft232r.flush()
     
-      #self.miner.log(self.name + ": FPGA: Job data loaded\n")
-  
   def _readNonce(self):
     nonce = self._readRegister(0xE)
     if nonce == 0xFFFFFFFF:
@@ -305,13 +297,10 @@ class FPGA:
     return struct.pack("<I", nonce)
   
   def _clearQueue(self):
-      #self.miner.log(self.name + ": FPGA: Clearing queue...\n")
     while True:
       if self._readNonce() is None:
         break
     
-      #self.miner.log(self.name + ": FPGA: Queue cleared\n")
-  
   def _writeJob(self, job):
     # We need the 256-bit midstate, and 12 bytes from data.
     # The first 64 bytes of data are already hashed (hence midstate),
@@ -320,15 +309,10 @@ class FPGA:
     
     #start_time = time.time()
     
-    data = job.state + job.data[64:76]
-    words = struct.unpack("<11I", data)
+    words = struct.unpack("<11I", job)
     if not self._burstWrite(1, words):
-      #self.miner.log(self.name + ": FPGA: ERROR: Loading job data failed; readback failure", "rB")
       return
     
-    #self.logger.reportDebug("%d: Job data loaded in %.3f seconds" % (self.id, time.time() - start_time))
-    #self.miner.log(self.name + ": FPGA: Job data loaded")
-  
   # Read the FPGA's current clock speed, in MHz
   # NOTE: This is currently just what we've written into the clock speed
   # register, so it does NOT take into account hard limits in the firmware.
@@ -369,7 +353,7 @@ class FPGA:
   def sleep(self):
     if self.firmware_rev == 0:
       with self.ft232r.mutex:
-        self.miner.log(self.name + ": Going to sleep...\n")
+        self.proxy.log(self.name + ": Going to sleep...\n", 500)
         self.jtag.tap.reset()
         self.jtag.instruction(JSHUTDOWN)
         self.jtag.shift_ir()
@@ -382,7 +366,7 @@ class FPGA:
   def wake(self):
     if self.firmware_rev == 0:
       with self.ft232r.mutex:
-        self.miner.log(self.name + ": Waking up...\n")
+        self.proxy.log(self.name + ": Waking up...\n", 500)
         self.jtag.tap.reset()
         self.jtag.instruction(JSTART)
         self.jtag.shift_ir()
@@ -400,7 +384,7 @@ class FPGA:
     self.asleep = False
   
   @staticmethod
-  def programBitstream(miner, ft232r, jtag, bitstream, progresscallback = None):
+  def programBitstream(ft232r, jtag, bitstream, progresscallback = None):
     with ft232r.mutex:
       # Select the device
       jtag.reset()

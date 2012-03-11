@@ -51,9 +51,7 @@ irlength_lut = {0x403d093: 6, 0x401d093: 6, 0x4008093: 6, 0x5057093: 16, 0x50590
 name_lut = {0x403d093: 'Spartan 6 LX150T', 0x401d093: 'Spartan 6 LX150', 0x5059093: 'Unknown', 0x5057093: 'Unknown'}
 
 class JTAG:
-  def __init__(self, miner, name, ft232r, chain):
-    self.miner = miner
-    self.name = name
+  def __init__(self, ft232r, chain):
     self.ft232r = ft232r
     self.chain = chain
     self.deviceCount = None
@@ -63,14 +61,9 @@ class JTAG:
     self.current_part = 0
     self._tckcount = 0
     self.portlist = ft232r.portlist.chain_portlist(chain)
-    self.debug = 0
+    self.tap = TAP(self.jtagClock)
+
     
-    self.tap = TAP(self.miner, self.name, self.jtagClock)
-  
-  def _log(self, msg, level=1):
-    if level <= self.debug:
-      self.miner.log(self.name + ": JTAG: " + msg + "\n")
-  
   def detect(self):
     """Detect all devices on the JTAG chain. Call this after open."""
     self.deviceCount = None
@@ -120,7 +113,6 @@ class JTAG:
     total_ir = 100 # TODO: Should be 1000
     if self.irlengths is not None:
       total_ir = sum(self.irlengths)
-      self._log("total_ir = " + str(total_ir), 2)
 
     self.current_instructions = [1] * total_ir
     #self.shift_ir()
@@ -130,8 +122,6 @@ class JTAG:
     self.tap.goto(TAP.SELECT_IR)
     self.tap.goto(TAP.SHIFT_IR)
     
-    self._log("current_instructions = " + str(self.current_instructions), 2)
-
     for bit in self.current_instructions[:-1]:
       self.jtagClock(tdi=bit)
     self.jtagClock(tdi=self.current_instructions[-1], tms=1)
@@ -168,7 +158,6 @@ class JTAG:
   def read_tdo(self, num):
     """Reads num bits from TDO, and returns the bits as an array."""
     data = self.ft232r.read_data(num)
-    self._log("read_tdo(%d): len(data) = %d" % (num, len(data)), 2)
     bits = []
     for n in range(len(data)//3):
       bits.append((struct.unpack("B", data[n*3+2:n*3+3])[0] >> self.portlist.tdo)&1)
@@ -249,30 +238,6 @@ class JTAG:
     self.tap.goto(TAP.IDLE)
     self.ft232r.flush()
   
-  def stressTest(self, testcount=100):
-    """Run a stress test of the JTAG chain to make sure communications will run properly.
-    This amounts to running the readChain function a hundred times.
-    Communication failure will be seen as an exception.
-    """
-    self._log("Stress testing...", 0)
-    
-    self.detect()
-    oldDeviceCount = self.deviceCount
-    
-    for i in range(testcount):
-      self.detect()
-
-      if self.deviceCount != oldDeviceCount:
-        FT232RJTAG_Exception("Stress Test Failed. Device count did not match between iterations.")
-
-      complete = i * 100 / testcount
-      old_complete = (i - 1) * 100 / testcount
-
-      if (i > 0) and (complete > 0) and (complete != old_complete):
-        self._log("%i%% Complete" % complete, 0)
-    
-    self._log("Stress test complete. Everything worked correctly.", 0)
-  
   def _formatJtagClock(self, tms=0, tdi=0):
     return self._formatJtagState(0, tms, tdi) + self._formatJtagState(1, tms, tdi)
   
@@ -308,7 +273,6 @@ class JTAG:
 
     # Fill with 1s to detect chain length
     data = self.read_dr([1]*100)
-    self._log("_readDeviceCount: len(data): " + str(len(data)), 2)
 
     # Now see how many devices there were.
     for i in range(0, len(data)-1):
@@ -330,8 +294,6 @@ class JTAG:
 
     data = self.read_dr([1]*32*self.deviceCount)
     
-    self._log("_readIdcodes: len(data): " + str(len(data)), 2)
-
     for d in range(self.deviceCount):
       idcode = self.parseByte(data[0:8])
       idcode |= self.parseByte(data[8:16]) << 8

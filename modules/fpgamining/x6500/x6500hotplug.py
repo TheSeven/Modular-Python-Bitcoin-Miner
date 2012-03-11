@@ -19,140 +19,95 @@
 # want to support further development of the Modular Python Bitcoin Miner.
 
 
+
 ####################################################################
 # FPGA Mining LLC X6500 FPGA Miner Board hotplug controller module #
 ####################################################################
 
-# Module configuration options:
-#   name: Display name for this work source (default: "X6500 hotplug controller")
-#   firmware: Path to the firmware file (default: "worker/fpgamining/firmware/x6500.bit")
-#   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
-#   pollinterval: Nonce poll interval in seconds (default: 0.1)
-#   useftd2xx: Use FTDI D2XX driver instead direct access via PyUSB (default: false)
-#   takeover: Forcibly grab control over the USB device (default: true, requires PyUSB)
-#   uploadfirmware: Upload FPGA firmware during startup (default: false)
-#   scaninterval: Bus scan interval in seconds (default: 10)
-#   clockspeed: Set the FPGA's clocking speed in MHz [WARNING: Use with Extreme Caution] (default: 150)
-#   errorwarning: if the FPGA error rate gets this high (in %), reduce the clock (default: 1)
-#   errorcritical: if the FPGA error rate gets this high (in %), drastically reduce the clock (default: 4)
-#   tempwarning: if an FPGA reaches this temperature, reduce the clock (default: 35)
-#   tempcritical: if an FPGA reaches this temperature, drastically reduce the clock (default: 45)
-#   testing: log all worker stats once per minute (default: false)
 
 
-import sys
-import time
-import time
-import threading
-import worker.fpgamining.x6500
+import traceback
+from threading import Condition, Thread
+from core.baseworker import BaseWorker
+from .x6500worker import X6500Worker
 
 
-# Worker main class, referenced from config.py
-class X6500HotplugWorker(object):
 
-  # Constructor, gets passed a reference to the miner core and the config dict for this worker
-  def __init__(self, miner, dict):
-
-    # Make config dict entries accessible via self.foo
-    self.__dict__ = dict
-
-    # Store reference to the miner core object
-    self.miner = miner
-
-    # Initialize child array
-    self.children = []
-
-    # Validate arguments, filling them with default values if not present
-    self.name = getattr(self, "name", "X6500 hotplug controller")
-    self.useftd2xx = getattr(self, "useftd2xx", False)
-    self.takeover = getattr(self, "takeover", True)
-    self.uploadfirmware = getattr(self, "uploadfirmware", False)
-    self.firmware = getattr(self, "firmware", "worker/fpgamining/firmware/x6500.bit")
-    self.jobinterval = getattr(self, "jobinterval", 30)
-    self.pollinterval = getattr(self, "pollinterval", 0.1)
-    self.scaninterval = getattr(self, "scaninterval", 10)
-    self.clockspeed = getattr(self, "clockspeed", 150)
-    self.errorwarning = getattr(self, "errorwarning", 1)
-    self.errorcritical = getattr(self, "errorcritical", 4)
-    self.tempwarning = getattr(self, "tempwarning", 35)
-    self.tempcritical = getattr(self, "tempcritical", 45)
-    self.testing = getattr(self, "testing", False)
-    self.jobspersecond = 0  # Used by work buffering algorithm, we don't ever process jobs ourself
-
-    # Initialize object properties (for statistics)
-    # Only children that have died are counted here, the others will report statistics themselves
-    self.mhps = 0          # Current MH/s (always zero)
-    self.mhashes = 0       # Total megahashes calculated since startup
-    self.jobsaccepted = 0  # Total jobs accepted
-    self.accepted = 0      # Number of accepted shares produced by this worker * difficulty
-    self.rejected = 0      # Number of rejected shares produced by this worker * difficulty
-    self.invalid = 0       # Number of invalid shares produced by this worker
-    self.starttime = time.time() # Start timestamp (to get average MH/s from MHashes)
-
-    # Statistics lock, ensures that the UI can get a consistent statistics state
-    # Needs to be acquired during all operations that affect the above values
-    self.statlock = threading.RLock()
-    
-    # Start main thread (looks for boards and spawns X6500 worker modules)
-    self.mainthread = threading.Thread(None, self.main, self.name + "_main")
-    self.mainthread.daemon = True
-    self.mainthread.start()
-
-
-  # Report statistics about this worker module and its children.
-  def getstatistics(self, childstats):
-    # Acquire the statistics lock to stop statistics from changing while we deal with them
-    with self.statlock:
-      # Calculate statistics
-      statistics = { \
-        "name": self.name, \
-        "children": childstats, \
-        "mhashes": self.mhashes + self.miner.calculatefieldsum(childstats, "mhashes"), \
-        "mhps": self.miner.calculatefieldsum(childstats, "mhps"), \
-        "jobsaccepted": self.jobsaccepted + self.miner.calculatefieldsum(childstats, "jobsaccepted"), \
-        "accepted": self.accepted + self.miner.calculatefieldsum(childstats, "accepted"), \
-        "rejected": self.rejected + self.miner.calculatefieldsum(childstats, "rejected"), \
-        "invalid": self.invalid + self.miner.calculatefieldsum(childstats, "invalid"), \
-        "starttime": self.starttime, \
-        "currentpool": "Not applicable", \
-      }
-    # Return result
-    return statistics
-
-    
-  # This function should interrupt processing of the current piece of work if possible.
-  # If you can't, you'll likely get higher stale share rates.
-  # This function is usually called when the work source gets a long poll response.
-  # If we're currently doing work for a different blockchain, we don't need to care.
-  def cancel(self, blockchain):
-    # Check all running children
-    for child in self.children:
-      # Forward the request to the child
-      child.cancel(blockchain)
-
-
-  # Main thread entry point
-  # This thread is responsible for scanning for boards and spawning worker modules for them
-  def main(self):
-
-    if self.useftd2xx: import d2xx
-    if not self.useftd2xx or self.takeover: import usb
-
-    while True:
+# Worker main class, referenced from __init__.py
+class X6500HotplugWorker(BaseWorker):
+  
+  version = "fpgamining.x6500 hotplug manager v0.1.0alpha"
+  default_name = "X6500 hotplug manager"
+  can_autodetect = True
+  settings = dict(BaseWorker.settings, **{
+    "useftd2xx": {
+      "title": "Driver",
+      "type": "enum",
+      "values": [
+        {"value": False, "title": "PyUSB"},
+        {"value": True, "title": "D2XX"},
+      ],
+      "position": 1100
+    },
+    "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
+    "blacklist": {
+      "title": "Board list type",
+      "type": "enum",
+      "values": [
+        {"value": True, "title": "Blacklist"},
+        {"value": False, "title": "Whitelist"},
+      ],
+      "position": 2000
+    },
+    "boards": {
+      "title": "Board list",
+      "type": "list",
+      "element": {"title": "Serial number", "type": "string"},
+      "position": 2100
+    },
+    "scaninterval": {"title": "Bus scan interval", "type": "float", "position": 2200},
+    "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 3000},
+    "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 3100},
+    "tempwarning": {"title": "Warning temperature", "type": "int", "position": 4000},
+    "tempcritical": {"title": "Critical temperature", "type": "int", "position": 4100},
+    "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 4200},
+    "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 4300},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 4400},
+    "jobinterval": {"title": "Job interval", "type": "float", "position": 5100},
+    "pollinterval": {"title": "Poll interval", "type": "float", "position": 5200},
+  })
+  
+  
+  @classmethod
+  def autodetect(self, core):
+    try:
+      found = False
       try:
-        for child in self.children:
-          if child.dead:
-            with self.statlock:
-              stats = child.getstatistics(self.miner.collectstatistics(child.children))
-              self.children.remove(child)
-              self.mhashes = self.mhashes + stats["mhashes"]
-              self.jobsaccepted = self.jobsaccepted + stats["jobsaccepted"]
-              self.accepted = self.accepted + stats["accepted"]
-              self.rejected = self.rejected + stats["rejected"]
-              self.invalid = self.invalid + stats["invalid"]
-            
-        boards = []
-        if self.useftd2xx:
+        import usb
+        for bus in usb.busses():
+          for dev in bus.devices:
+            if dev.idVendor == 0x0403 and dev.idProduct == 0x6001:
+              try:
+                handle = dev.open()
+                manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
+                product = handle.getString(dev.iProduct, 100).decode("latin1")
+                serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
+                if manufacturer == "FTDI" and product == "FT232R USB UART":
+                  try:
+                    configuration = dev.configurations[0]
+                    interface = configuration.interfaces[0][0]
+                    handle.setConfiguration(configuration.value)
+                    handle.claimInterface(interface.interfaceNumber)
+                    handle.releaseInterface()
+                    handle.setConfiguration(0)
+                    available = True
+                  except: available = False
+                  boards[serial] = available
+              except: pass
+      except: pass
+      if not found:
+        try:
+          import d2xx
           devices = d2xx.listDevices()
           for devicenum, serial in enumerate(devices):
             try:
@@ -161,6 +116,140 @@ class X6500HotplugWorker(object):
               available = True
             except: availabale = False
             boards.append((serial, available))
+        except: pass
+      if found: core.add_worker(self(core))
+    except: pass
+    
+    
+  # Constructor, gets passed a reference to the miner core and the saved worker state, if present
+  def __init__(self, core, state = None):
+    # Check if pyusb is installed
+    self.pyusb_available = False
+    try:
+      import usb
+      self.pyusb_available = True
+    except: pass
+    self.d2xx_available = False
+    try:
+      import d2xx
+      self.d2xx_available = True
+    except: pass
+
+    # Initialize bus scanner wakeup event
+    self.wakeup = Condition()
+
+    # Let our superclass do some basic initialization and restore the state if neccessary
+    super(X6500HotplugWorker, self).__init__(core, state)
+
+    
+  # Validate settings, filling them with default values if neccessary.
+  # Called from the constructor and after every settings change.
+  def apply_settings(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500HotplugWorker, self).apply_settings()
+    if not "serial" in self.settings: self.settings.serial = None
+    if not "useftd2xx" in self.settings:
+      self.settings.useftd2xx = self.d2xx_available and not self.pyusb_available
+    if self.settings.useftd2xx.lower() == "false": self.settings.useftd2xx = False
+    if not "takeover" in self.settings: self.settings.takeover = self.pyusb_available
+    if not "blacklist" in self.settings: self.settings.blacklist = True
+    if self.settings.blacklist.lower() == "false": self.settings.blacklist = False
+    if not "boards" in self.settings: self.settings.boards = []
+    if not "initialspeed" in self.settings: self.settings.initialspeed = 150
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 200)
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 150
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 200)
+    if not "tempwarning" in self.settings: self.settings.tempwarning = 45
+    self.settings.tempwarning = min(max(self.settings.tempwarning, 0), 60)
+    if not "tempcritical" in self.settings: self.settings.tempcritical = 55
+    self.settings.tempcritical = min(max(self.settings.tempcritical, 0), 80)
+    if not "invalidwarning" in self.settings: self.settings.invalidwarning = 2
+    self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
+    if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
+    self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
+    self.settings.speedupthreshold = min(max(self.settings.invalidcritical, 50), 10000)
+    if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
+    if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
+    if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval =10
+    # We can't switch the driver on the fly, so trigger a restart if it changed.
+    # self.useftd2xx is a cached copy of self.settings.useftd2xx
+    if self.settings.useftd2xx != self.useftd2xx: self.async_restart()
+    # Push our settings down to our children
+    fields = ["initialspeed", "maximumspeed", "tempwarning", "tempcritical", "invalidwarning",
+              "invalidctitical", "speedupthreshold", "jobinterval", "pollinterval"]
+    for child in self.children:
+      for field in fields: child.settings[field] = self.settings[field]
+      child.apply_settings()
+    # Rescan the bus immediately to apply the new settings
+    with self.wakeup: self.wakeup.notify()
+    
+
+  # Reset our state. Called both from the constructor and from self.start().
+  def _reset(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500HotplugWorker, self)._reset()
+    # These need to be set here in order to make the equality check in apply_settings() happy,
+    # when it is run before starting the module for the first time. (It is called from the constructor.)
+    self.useftd2xx = None
+
+
+  # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  def _start(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500HotplugWorker, self)._start()
+    # Cache the driver, as we don't like that to change on the fly
+    self.useftd2xx = self.settings.useftd2xx
+    # Initialize child map
+    self.childmap = {}
+    # Reset the shutdown flag for our threads
+    self.shutdown = False
+    # Start up the main thread, which handles pushing work to the device.
+    self.mainthread = Thread(None, self.main, self.settings.name + "_main")
+    self.mainthread.daemon = True
+    self.mainthread.start()
+  
+  
+  # Shut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
+  def _stop(self):
+    # Let our superclass handle everything that isn't specific to this worker module
+    super(X6500HotplugWorker, self)._stop()
+    # Set the shutdown flag for our threads, making them terminate ASAP.
+    self.shutdown = True
+    # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
+    with self.wakeup: self.wakeup.notify()
+    # Wait for the main thread to terminate.
+    self.mainthread.join(10)
+    # Shut down child workers
+    while self.children:
+      child = self.children.pop(0)
+      try:
+        self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
+        child.stop()
+      except Exception as e:
+        self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+
+      
+  # Main thread entry point
+  # This thread is responsible for scanning for boards and spawning worker modules for them
+  def main(self):
+    # Loop until we are shut down
+    while not self.shutdown:
+    
+      if self.useftd2xx: import d2xx
+      if not self.useftd2xx or self.settings.takeover: import usb
+
+      try:
+        boards = {}
+        if self.useftd2xx:
+          devices = d2xx.listDevices()
+          for devicenum, serial in enumerate(devices):
+            try:
+              handle = d2xx.open(devicenum)
+              handle.close()
+              available = True
+            except: availabale = False
+            boards[serial] = available
         else:
           for bus in usb.busses():
             for dev in bus.devices:
@@ -180,16 +269,31 @@ class X6500HotplugWorker(object):
                       handle.setConfiguration(0)
                       available = True
                     except: available = False
-                    boards.append((serial, available))
+                    boards[serial] = available
                 except: pass
                 
-        for deviceid, available in boards:
-          found = False
-          for child in self.children:
-            if child.deviceid == deviceid:
-              found = True
-              break
-          if found: continue
+        for serial in boards.keys():
+          if self.settings.blacklist:
+            if serial in self.settings.boards: del boards[serial]
+          else:
+            if serial not in self.settings.board: del boards[serial]
+                
+        for serial, child in self.childmap.items():
+          if not serial in boards:
+            try:
+              self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
+              child.stop()
+            except Exception as e:
+              self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+            childstats = child.get_statistics()
+            fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
+            for field in fields: self.stats[field] += childstats[field]
+            try: self.child.destroy()
+            except: pass
+            del self.childmap[serial]
+                
+        for serial, available in boards.items():
+          if serial in self.childmap: continue
           if not available and self.takeover:
             try:
               for bus in usb.busses():
@@ -200,8 +304,8 @@ class X6500HotplugWorker(object):
                     handle = dev.open()
                     manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
                     product = handle.getString(dev.iProduct, 100).decode("latin1")
-                    serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                    if manufacturer == "FTDI" and product == "FT232R USB UART" and serial == deviceid:
+                    _serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
+                    if manufacturer == "FTDI" and product == "FT232R USB UART" and _serial == serial:
                       handle.reset()
                       configuration = dev.configurations[0]
                       interface = configuration.interfaces[0][0]
@@ -213,22 +317,21 @@ class X6500HotplugWorker(object):
                       available = True
             except: pass
           if available:
-            config = { \
-              "deviceid": deviceid, \
-              "firmware": self.firmware, \
-              "jobinterval": self.jobinterval, \
-              "pollinterval": self.pollinterval, \
-              "useftd2xx": self.useftd2xx, \
-              "takeover": False, \
-              "uploadfirmware": self.uploadfirmware, \
-              "clockspeed": self.clockspeed, \
-              "errorwarning": self.errorwarning, \
-              "errorcritical": self.errorcritical, \
-              "tempwarning": self.tempwarning, \
-              "tempcritical": self.tempcritical, \
-            }
-            self.children.append(worker.fpgamining.x6500.X6500Worker(self.miner, config, True))
+            child = X6500Worker(self.core)
+            child.settings.serial = serial
+            child.settings.takeover = False
+            fields = ["useftd2xx", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
+                      "invalidwarning", "invalidctitical", "speedupthreshold", "jobinterval", "pollinterval"]
+            for field in fields: child.settings[field] = self.settings[field]
+            child.apply_settings()
+            self.childmap[serial] = child
+            self.children.append(child)
+            try:
+              self.core.log("%s: Starting up worker %s...\n" % (self.settings.name, child.settings.name), 800)
+              child.start()
+            except Exception as e:
+              self.core.log("%s: Could not start worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
               
-      except Exception as e:
-        self.miner.log("Caught exception: %s\n" % e, "r")
-      time.sleep(self.scaninterval)
+      except: self.core.log("Caught exception: %s\n" % traceback.format_exc(), 100, "rB")
+          
+      with self.wakeup: self.wakeup.wait(self.settings.scaninterval)
