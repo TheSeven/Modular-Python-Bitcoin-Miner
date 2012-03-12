@@ -106,9 +106,9 @@ class X6500Worker(BaseWorker):
     if not "firmware" in self.settings or not self.settings.firmware:
       self.settings.firmware = "modules/fpgamining/x6500/firmware/x6500.bit"
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
-    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 200)
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
     if not "maximumspeed" in self.settings: self.settings.maximumspeed = 150
-    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 200)
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
     if not "tempwarning" in self.settings: self.settings.tempwarning = 45
     self.settings.tempwarning = min(max(self.settings.tempwarning, 0), 60)
     if not "tempcritical" in self.settings: self.settings.tempcritical = 55
@@ -118,7 +118,7 @@ class X6500Worker(BaseWorker):
     if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
     self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
     if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
-    self.settings.speedupthreshold = min(max(self.settings.invalidcritical, 50), 10000)
+    self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
     # We can't switch the device or driver on the fly, so trigger a restart if they changed.
@@ -433,7 +433,7 @@ class X6500FPGA(BaseWorker):
         self.parent.clear_queue(self.fpga)
 
         # Send validation job to device
-        job = ValidationJob(self.core, unhexlify(b"00000001a452aa4d7c529564e6f489b4ff9fbc5ce1f801d8104de8730000029900000000f3a88a7e15630db38d159e13544632f9c8c4a85e1e61b047cf73335d294f75a44f5b47631a0b350c41ce6404"))
+        job = ValidationJob(self.core, unhexlify(b"000000019f2d6713c23312833d8594896d612680630338c5b46ad7630000050c000000001f1a2e635401e00da4cffc606421d84392b1c93f7e64c94df2bef2beda0acf334f5b59eb1a0b350ce8abc604"))
         self._sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it

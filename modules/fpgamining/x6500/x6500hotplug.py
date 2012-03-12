@@ -161,9 +161,9 @@ class X6500HotplugWorker(BaseWorker):
     if self.settings.blacklist == "false": self.settings.blacklist = False
     if not "boards" in self.settings: self.settings.boards = []
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
-    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 200)
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
     if not "maximumspeed" in self.settings: self.settings.maximumspeed = 150
-    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 200)
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
     if not "tempwarning" in self.settings: self.settings.tempwarning = 45
     self.settings.tempwarning = min(max(self.settings.tempwarning, 0), 60)
     if not "tempcritical" in self.settings: self.settings.tempcritical = 55
@@ -173,10 +173,10 @@ class X6500HotplugWorker(BaseWorker):
     if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
     self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
     if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
-    self.settings.speedupthreshold = min(max(self.settings.invalidcritical, 50), 10000)
+    self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
-    if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval =10
+    if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval = 10
     # We can't switch the driver on the fly, so trigger a restart if it changed.
     # self.useftd2xx is a cached copy of self.settings.useftd2xx
     if self.settings.useftd2xx != self.useftd2xx: self.async_restart()
