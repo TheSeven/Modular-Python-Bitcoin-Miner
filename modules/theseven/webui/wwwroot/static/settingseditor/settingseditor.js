@@ -183,7 +183,7 @@ mod.settingseditor = {
                         var elementsetting = {"spec": setting.spec.element, "value": value};
                         var row = {"element": elementsetting};
                         var tr = document.createElement("tr");
-                        td = document.createElement("td");
+                        var td = document.createElement("td");
                         editor = editors[row.element.spec.type];
                         if (editor) row.element.editor = new editor(td, row.element, null);
                         tr.appendChild(td);
