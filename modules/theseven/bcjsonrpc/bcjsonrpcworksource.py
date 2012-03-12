@@ -56,6 +56,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     "password": {"title": "Password", "type": "password", "position": 1120},
     "useragent": {"title": "User agent string", "type": "string", "position": 1200},
     "longpollconnections": {"title": "Long poll connnections", "type": "int", "position": 1300},
+    "expirymargin": {"title": "Job expiry safety margin", "type": "int", "position": 1400},
   })
   
 
@@ -90,6 +91,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     if self.settings.useragent: self.useragent = self.settings.useragent
     else: self.useragent = "%s (%s)" % (self.core.__class__.version, self.__class__.version)
     if not "longpollconnections" in self.settings: self.settings.longpollconnections = 1
+    if not "expirymargin" in self.settings: self.settings.expirymargin = 5
 
     
   def _reset(self):
@@ -211,5 +213,5 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     prefix = data[:68]
     timebase = struct.unpack(">I", data[68:72])[0]
     suffix = data[72:]
-    return [Job(self.core, self, now + expiry - 2, prefix + struct.pack(">I", timebase + i) + suffix, target, midstate) for i in range(roll_ntime)]
+    return [Job(self.core, self, now + expiry - self.settings.expirymargin, prefix + struct.pack(">I", timebase + i) + suffix, target, midstate) for i in range(roll_ntime)]
   
