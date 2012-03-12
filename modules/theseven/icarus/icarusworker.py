@@ -132,8 +132,7 @@ class IcarusWorker(BaseWorker):
     with self.wakeup:
       # If the currently being processed, or currently being uploaded job are affected,
       # wake up the main thread so that it can request and upload a new job immediately.
-      if self.job == job or self.nextjob == job:
-        self.wakeup.notify()
+      if self.job == job: self.wakeup.notify()
 
         
 #  # Report custom statistics. This is not neccessary for this worker module,
