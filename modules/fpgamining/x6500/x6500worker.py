@@ -166,8 +166,7 @@ class X6500Worker(BaseWorker):
     # Ping the proxy, otherwise the main thread might be blocked and can't wake up.
     try: self._proxy_message("ping")
     except: pass
-    # The listener thread will hopefully die because the main thread closes the serial port handle.
-    # Wait for the main thread to terminate, which in turn waits for the listener thread to die.
+    # Wait for the main thread to terminate, which in turn kills the child workers.
     self.mainthread.join(10)
 
       
@@ -275,7 +274,7 @@ class X6500Worker(BaseWorker):
       self.children[1].stats.temperature = fpga1
 
   def send_job(self, fpga, job):
-    return self._proxy_transaction("send_job", fpga, job.midstate + job.data[64:72])
+    return self._proxy_transaction("send_job", fpga, job.midstate + job.data[64:76])
 
 
   def clear_queue(self, fpga):
