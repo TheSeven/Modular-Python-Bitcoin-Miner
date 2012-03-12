@@ -410,6 +410,8 @@ class X6500FPGA(BaseWorker):
         self.wakeup.acquire()
         # Eat up leftover wakeups
         self.wakeup.wait(0)
+        # Honor shutdown flag (in case it was a real wakeup)
+        if self.shutdown: break
         # Set validation success flag to false
         self.checksuccess = False
         # Set validation job second iteration flag to false
@@ -616,7 +618,7 @@ class X6500FPGA(BaseWorker):
     if self.recentinvalid > self.parent.settings.invalidcritical: critical = True
     if self.stats.temperature:
       if self.stats.temperature > self.parent.settings.tempwarning: warning = True    
-      if self.stats.temperature > self.parent.settings..tempcritical: critical = True    
+      if self.stats.temperature > self.parent.settings.tempcritical: critical = True    
 
     if warning: self.core.log(self.settings.name + ": Detected overload condition for the FPGA!\n", 200, "y")
     if critical: self.core.log(self.settings.name + ": Detected CRITICAL condition for the FPGA!\n", 100, "rB")
@@ -628,7 +630,7 @@ class X6500FPGA(BaseWorker):
     else: speedstep = 0    
 
     if self.firmware_rev > 0:
-      if speedstep: _set_speed(self.stats.speed + speedstep)
+      if speedstep: self._set_speed(self.stats.speed + speedstep)
     elif warning or critical:
       self.miner.log(self.settings.name + ": Firmware too old, can not automatically reduce clock!\n", 200, "yB")
       if critical:
