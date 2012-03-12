@@ -107,7 +107,7 @@ class X6500Worker(BaseWorker):
       self.settings.firmware = "modules/fpgamining/x6500/firmware/x6500.bit"
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
     self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
-    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 150
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 200
     self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
     if not "tempwarning" in self.settings: self.settings.tempwarning = 45
     self.settings.tempwarning = min(max(self.settings.tempwarning, 0), 60)
@@ -531,10 +531,10 @@ class X6500FPGA(BaseWorker):
     self.recentshares += 1
     if not job: self.recentinvalid += 1
     nonceval = struct.unpack("<I", nonce)[0]
-    if isinstance(job, ValidationJob):
+    if isinstance(newjob, ValidationJob):
       # This is a validation job. Validate that the nonce is correct, and complain if not.
-      if job.nonce != nonce:
-        raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(job.nonce).decode("ascii")))
+      if newjob.nonce != nonce:
+        raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(newjob.nonce).decode("ascii")))
       else:
         # The nonce was correct
         if self.firmware_rev > 0:
@@ -547,7 +547,7 @@ class X6500FPGA(BaseWorker):
           if self.seconditeration == True:
             with self.wakeup:
               # This is the second iteration. We now know the actual nonce rotation time.
-              delta = (now - job.starttime)
+              delta = (now - newjob.starttime)
               # Calculate the hash rate based on the nonce rotation time.
               self.stats.mhps = 2**32 / 1000000. / delta
               # Update hash rate tracking information
@@ -559,7 +559,7 @@ class X6500FPGA(BaseWorker):
           else:
             with self.wakeup:
               # This was the first iteration. Wait for another one to figure out nonce rotation time.
-              job.starttime = now
+              newjob.starttime = now
               self.seconditeration = True
     else:
       if self.firmware_rev == 0:

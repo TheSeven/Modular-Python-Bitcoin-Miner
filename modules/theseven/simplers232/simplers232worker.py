@@ -362,10 +362,10 @@ class SimpleRS232Worker(BaseWorker):
             # This assumes that the device processes all nonces (starting at zero) sequentially.
             self.stats.mhps = nonceval / delta / 1000000.
           # This needs self.mhps to be set.
-          if isinstance(self.job, ValidationJob):
+          if isinstance(newjob, ValidationJob):
             # This is a validation job. Validate that the nonce is correct, and complain if not.
-            if self.job.nonce != nonce:
-              raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(self.job.nonce).decode("ascii")))
+            if newjob.nonce != nonce:
+              raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(newjob.nonce).decode("ascii")))
             else:
               # The nonce was correct. Wake up the main thread.
               with self.wakeup:

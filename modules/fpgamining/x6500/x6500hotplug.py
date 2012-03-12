@@ -162,7 +162,7 @@ class X6500HotplugWorker(BaseWorker):
     if not "boards" in self.settings: self.settings.boards = []
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
     self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
-    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 150
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 200
     self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
     if not "tempwarning" in self.settings: self.settings.tempwarning = 45
     self.settings.tempwarning = min(max(self.settings.tempwarning, 0), 60)
