@@ -587,7 +587,7 @@ class X6500FPGA(BaseWorker):
     # Send it to the FPGA
     start, now = self.parent.send_job(self.fpga, job)
     # Calculate how long the old job was running
-    if self.oldjob
+    if self.oldjob:
       if self.oldjob.starttime:
         self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
       self.oldjob.destroy()
