@@ -119,6 +119,30 @@ mod.workereditor = {
                         {
                             var obj = this.obj;
                             var menu = new mod.contextmenu.ContextMenu();
+                            menu.addEntry(nls("Restart worker"), function()
+                            {
+                                var box = mod.layerbox.LayerBox();
+                                box.setTitle(nls("Restart worker"));
+                                var text = nls("Do you really want to restart the worker") + " \"" + obj.name + "\"?";
+                                var buttons = box.multipleChoice(text, [nls("Yes"), nls("No")]);
+                                buttons[0].onclick = function()
+                                {
+                                    if (buttons[0].disabled) return;
+                                    buttons[0].disabled = true;
+                                    buttons[1].disabled = true;
+                                    buttons[0].value = nls("Please wait...");
+                                    mod.csc.request("workereditor", "restartworker", {"id": obj.id}, function(data)
+                                    {
+                                        box.destroy();
+                                        if (data.error) return error(data.error);
+                                        refresh();
+                                    }, {"cache": "none"});
+                                };
+                                buttons[1].onclick = box.destroy;
+                                box.events.push(mod.event.catchKey(13, buttons[0].onclick));
+                                box.events.push(mod.event.catchKey(27, box.destroy));
+                                menu.hide();
+                            });
                             menu.addEntry(nls("Delete worker"), function()
                             {
                                 var box = mod.layerbox.LayerBox();

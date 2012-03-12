@@ -58,3 +58,15 @@ def deleteworker(core, webui, httprequest, path, request, privileges):
     worker.destroy()
     return {}
   except: return {"error": traceback.format_exc()}
+  
+  
+  
+@jsonapi
+def restartworker(core, webui, httprequest, path, request, privileges):
+  if privileges != "admin": return httprequest.send_response(403)
+  try:
+    worker = core.registry.get(request["id"])
+    worker.restart()
+    return {}
+  except: return {"error": traceback.format_exc()}
+  

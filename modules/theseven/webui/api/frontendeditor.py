@@ -58,3 +58,15 @@ def deletefrontend(core, webui, httprequest, path, request, privileges):
     frontend.destroy()
     return {}
   except: return {"error": traceback.format_exc()}
+
+  
+  
+@jsonapi
+def restartfrontend(core, webui, httprequest, path, request, privileges):
+  if privileges != "admin": return httprequest.send_response(403)
+  try:
+    frontend = core.registry.get(request["id"])
+    frontend.restart()
+    return {}
+  except: return {"error": traceback.format_exc()}
+  

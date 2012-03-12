@@ -104,3 +104,14 @@ def setblockchain(core, webui, httprequest, path, request, privileges):
     return {}
   except: return {"error": traceback.format_exc()}
   
+  
+  
+@jsonapi
+def restartworksource(core, webui, httprequest, path, request, privileges):
+  if privileges != "admin": return httprequest.send_response(403)
+  try:
+    worksource = core.registry.get(request["id"])
+    worksource.restart()
+    return {}
+  except: return {"error": traceback.format_exc()}
+  
