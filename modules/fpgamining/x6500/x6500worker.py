@@ -265,7 +265,8 @@ class X6500Worker(BaseWorker):
     
   def _notify_nonce_found(self, fpga, now, nonce):
     if self.children and fpga < len(self.children):
-      self.children[fpga].notify_nonce_found(now, nonce)
+      try: self.children[fpga].notify_nonce_found(now, nonce)
+      except Exception as e: self.children[fpga].error = e
 
 
   def _notify_temperature_read(self, fpga0, fpga1):
@@ -495,8 +496,6 @@ class X6500FPGA(BaseWorker):
       except Exception as e:
         # ...complain about it!
         self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
-        # Make sure that the listener thread realizes that something went wrong
-        self.error = e
       finally:
         # We're not doing productive work any more, update stats and destroy current job
         self._jobend()
