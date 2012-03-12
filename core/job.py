@@ -27,6 +27,7 @@
 
 
 import struct
+import traceback
 from binascii import hexlify
 from threading import Thread
 from .sha256 import SHA256
@@ -115,7 +116,8 @@ class Job(object):
   def cancel(self):
     self.canceled = True
     if self.worker:
-      self.worker.notify_canceled(self)
+      try: self.worker.notify_canceled(self)
+      except: self.core.log("Exception while cancelling job of worker %s: %s" % (self.worker.settings.name, traceback.format_exc()), 100, "r")
       with self.worker.stats.lock: self.worker.stats.jobscanceled += 1
       with self.worksource.stats.lock: self.worksource.stats.jobscanceled += 1
       
