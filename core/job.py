@@ -141,6 +141,7 @@ class ValidationJob(object):
     else: self.midstate = Job.calculate_midstate(data)
     self.nonce = self.data[76:80]
     self.worker = None
+    self.starttime = None
     
     
   def hashes_processed(self, hashes):
