@@ -184,7 +184,7 @@ class IcarusWorker(BaseWorker):
         self.listenerthread.start()
 
         # Send validation job to device
-        job = ValidationJob(self.core, unhexlify(b"00000001a452aa4d7c529564e6f489b4ff9fbc5ce1f801d8104de8730000029900000000f3a88a7e15630db38d159e13544632f9c8c4a85e1e61b047cf73335d294f75a44f5b47631a0b350c41ce6404"))
+        job = ValidationJob(self.core, unhexlify(b"000000016048297b17e431b92d870d579c58f2079e2b839952f2f5950000090b000000006727399a74e8b5fafb1e0afb8ec29a3722f99dda5310a14071372b54daae1ca34f5d6a741a0b350c3a758504"))
         self._sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it
@@ -192,7 +192,7 @@ class IcarusWorker(BaseWorker):
 
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 60 seconds should be sufficient for devices
-        # down to about 2456KH/s, for slower devices this timeout will need to be increased.
+        # down to about 2.6MH/s, for slower devices this timeout will need to be increased.
         self.wakeup.wait(60)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
