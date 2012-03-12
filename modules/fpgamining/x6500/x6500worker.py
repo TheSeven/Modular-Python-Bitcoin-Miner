@@ -580,7 +580,7 @@ class X6500FPGA(BaseWorker):
   def _sendjob(self, job):
     # Move previous job to oldjob, and new one to job
     self.oldjob = self.job
-    self.job.destroy()
+    if self.job: self.job.destroy()
     self.job = job
     # Send it to the FPGA
     self.parent.send_job(self.fpga, job)
