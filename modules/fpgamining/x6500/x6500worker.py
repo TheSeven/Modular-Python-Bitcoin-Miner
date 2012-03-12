@@ -433,7 +433,7 @@ class X6500FPGA(BaseWorker):
         self.parent.clear_queue(self.fpga)
 
         # Send validation job to device
-        job = ValidationJob(self.core, unhexlify(b"000000016048297b17e431b92d870d579c58f2079e2b839952f2f5950000090b000000006727399a74e8b5fafb1e0afb8ec29a3722f99dda5310a14071372b54daae1ca34f5d6a741a0b350c3a758504"))
+        job = ValidationJob(self.core, unhexlify(b"000000019f2d6713c23312833d8594896d612680630338c5b46ad7630000050c000000001f1a2e635401e00da4cffc606421d84392b1c93f7e64c94df2bef2beda0acf334f5b59eb1a0b350ce8abc604"))
         self._sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it
@@ -442,7 +442,7 @@ class X6500FPGA(BaseWorker):
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 180 seconds should be sufficient for devices
         # down to about 50MH/s, for slower devices this timeout will need to be increased.
-        if self.stats.speed: self.wakeup.wait((2**32 / 1000000. / self.stats.speed) * 1.1 + 1)
+        if self.stats.speed: self.wakeup.wait((2**32 / 1000000. / self.stats.speed) * 1.1)
         else: self.wakeup.wait(180)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
@@ -583,13 +583,14 @@ class X6500FPGA(BaseWorker):
   def _sendjob(self, job):
     # Move previous job to oldjob, and new one to job
     self.oldjob = self.job
-    if self.job: self.job.destroy()
     self.job = job
     # Send it to the FPGA
     start, now = self.parent.send_job(self.fpga, job)
     # Calculate how long the old job was running
-    if self.oldjob and self.oldjob.starttime:
-      self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
+    if self.oldjob
+      if self.oldjob.starttime:
+        self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
+      self.oldjob.destroy()
     self.job.starttime = now
 
     
