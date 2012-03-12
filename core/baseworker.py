@@ -43,18 +43,15 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
   })
 
 
-  def __init__(self, core, state = None, parent = None):
+  def __init__(self, core, state = None):
     StatisticsProvider.__init__(self)
     Startable.__init__(self)
     Inflatable.__init__(self, core, state)
 
     self.children = []
-    self.parent = parent
-    if parent: parent.children.add(self)
     
     
   def destroy(self):
-    if self.parent: self.parent.children.remove(self)
     Startable.destroy(self)
     Inflatable.destroy(self)
 
