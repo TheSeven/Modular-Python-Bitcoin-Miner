@@ -408,6 +408,8 @@ class X6500FPGA(BaseWorker):
 
         # We keep control of the wakeup lock at all times unless we're sleeping
         self.wakeup.acquire()
+        # Eat up leftover wakeups
+        self.wakeup.wait(0)
         # Set validation success flag to false
         self.checksuccess = False
         # Set validation job second iteration flag to false
@@ -612,8 +614,9 @@ class X6500FPGA(BaseWorker):
     critical = False
     if self.recentinvalid > self.parent.settings.invalidwarning: warning = True
     if self.recentinvalid > self.parent.settings.invalidcritical: critical = True
-    if self.stats.temperature and self.stats.temperature > self.tempwarning: warning = True    
-    if self.stats.temperature and self.stats.temperature > self.tempcritical: critical = True    
+    if self.stats.temperature:
+      if self.stats.temperature > self.parent.settings.tempwarning: warning = True    
+      if self.stats.temperature > self.parent.settings..tempcritical: critical = True    
 
     if warning: self.core.log(self.settings.name + ": Detected overload condition for the FPGA!\n", 200, "y")
     if critical: self.core.log(self.settings.name + ": Detected CRITICAL condition for the FPGA!\n", 100, "rB")
