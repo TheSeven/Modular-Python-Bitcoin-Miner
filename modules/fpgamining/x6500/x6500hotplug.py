@@ -181,7 +181,7 @@ class X6500HotplugWorker(BaseWorker):
     # self.useftd2xx is a cached copy of self.settings.useftd2xx
     if self.settings.useftd2xx != self.useftd2xx: self.async_restart()
     # Push our settings down to our children
-    fields = ["firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
+    fields = ["uploadfirmware", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
               "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
     for child in self.children:
       for field in fields: child.settings[field] = self.settings[field]
@@ -323,9 +323,10 @@ class X6500HotplugWorker(BaseWorker):
             except: pass
           if available:
             child = X6500Worker(self.core)
+            child.settings.name = "X6500 board " + serial
             child.settings.serial = serial
             child.settings.takeover = False
-            fields = ["useftd2xx", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
+            fields = ["useftd2xx", "uploadfirmware", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
                       "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
             for field in fields: child.settings[field] = self.settings[field]
             child.apply_settings()
