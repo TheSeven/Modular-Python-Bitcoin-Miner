@@ -264,7 +264,7 @@ class X6500Worker(BaseWorker):
 
     
   def _notify_nonce_found(self, fpga, now, nonce):
-    if self.chilren and fpga in self.children:
+    if self.children and fpga < len(self.children):
       self.children[fpga].notify_nonce_found(now, nonce)
 
 
@@ -273,6 +273,7 @@ class X6500Worker(BaseWorker):
       self.children[0].stats.temperature = fpga0
       self.children[1].stats.temperature = fpga1
 
+      
   def send_job(self, fpga, job):
     return self._proxy_transaction("send_job", fpga, job.midstate + job.data[64:76])
 
