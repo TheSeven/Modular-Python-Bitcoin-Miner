@@ -195,7 +195,7 @@ class SimpleRS232Worker(BaseWorker):
         self.listenerthread.start()
 
         # Send validation job to device
-        job = ValidationJob(self.core, unhexlify(b"000000016048297b17e431b92d870d579c58f2079e2b839952f2f5950000090b000000006727399a74e8b5fafb1e0afb8ec29a3722f99dda5310a14071372b54daae1ca34f5d6a741a0b350c3a758504"))
+        job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
         self._sendjob(job)
 
         # Wait for validation job to be accepted by the device

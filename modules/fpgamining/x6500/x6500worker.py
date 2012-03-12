@@ -433,7 +433,7 @@ class X6500FPGA(BaseWorker):
         self.parent.clear_queue(self.fpga)
 
         # Send validation job to device
-        job = ValidationJob(self.core, unhexlify(b"000000019f2d6713c23312833d8594896d612680630338c5b46ad7630000050c000000001f1a2e635401e00da4cffc606421d84392b1c93f7e64c94df2bef2beda0acf334f5b59eb1a0b350ce8abc604"))
+        job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
         self._sendjob(job)
 
         # If an exception occurred in the listener thread, rethrow it
