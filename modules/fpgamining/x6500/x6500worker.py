@@ -209,7 +209,7 @@ class X6500Worker(BaseWorker):
           elif data[0] == "ping": self._proxy_message("pong")
           elif data[0] == "pong": pass
           elif data[0] == "dying": raise Exception("Proxy died!")
-          elif data[0] == "response": self.response_queue.put(*data[1:])
+          elif data[0] == "response": self.response_queue.put(data[1:])
           elif data[0] == "started_up": self._notify_proxy_started_up(*data[1:])
           elif data[0] == "nonce_found": self._notify_nonce_found(*data[1:])
           elif data[0] == "temperature_read": self._notify_temperature_read(*data[1:])
