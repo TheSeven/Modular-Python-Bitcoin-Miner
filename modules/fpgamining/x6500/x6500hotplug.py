@@ -296,6 +296,8 @@ class X6500HotplugWorker(BaseWorker):
             try: self.child.destroy()
             except: pass
             del self.childmap[serial]
+            try: self.children.remove(child)
+            except: pass
                 
         for serial, available in boards.items():
           if serial in self.childmap: continue

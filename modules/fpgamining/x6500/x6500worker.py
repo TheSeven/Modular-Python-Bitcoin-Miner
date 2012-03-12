@@ -224,7 +224,11 @@ class X6500Worker(BaseWorker):
           try:
             child = self.children.pop(0)
             child.stop()
-            child.destroy()
+            childstats = child.get_statistics()
+            fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
+            for field in fields: self.stats[field] += childstats[field]
+            try: self.child.destroy()
+            except: pass
           except: pass
         try: self._proxy_message("shutdown")
         except: pass
