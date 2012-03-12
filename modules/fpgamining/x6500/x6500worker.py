@@ -427,11 +427,6 @@ class X6500FPGA(BaseWorker):
         # Clear FPGA's nonce queue
         self.parent.clear_queue(self.fpga)
 
-        # Start device response listener thread
-        self.listenerthread = Thread(None, self._listener, self.settings.name + "_listener")
-        self.listenerthread.daemon = True
-        self.listenerthread.start()
-
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001a452aa4d7c529564e6f489b4ff9fbc5ce1f801d8104de8730000029900000000f3a88a7e15630db38d159e13544632f9c8c4a85e1e61b047cf73335d294f75a44f5b47631a0b350c41ce6404"))
         self._sendjob(job)
