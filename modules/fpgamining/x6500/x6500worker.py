@@ -275,7 +275,7 @@ class X6500Worker(BaseWorker):
       self.children[1].stats.temperature = fpga1
 
   def send_job(self, fpga, job):
-    return self._proxy_transaction("send_job", fpga, self.job.midstate + self.job.data[64:72])
+    return self._proxy_transaction("send_job", fpga, job.midstate + job.data[64:72])
 
 
   def clear_queue(self, fpga):
