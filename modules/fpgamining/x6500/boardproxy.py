@@ -35,6 +35,7 @@ from .util.ft232r import FT232R, FT232R_PyUSB, FT232R_D2XX, FT232R_PortList
 from .util.jtag import JTAG
 from .util.fpga import FPGA
 from .util.format import formatNumber, formatTime
+from .util.BitstreamReader import BitFile
 
 
 
@@ -76,7 +77,7 @@ class X6500BoardProxy(Process):
       else: self.device = FT232R(FT232R_PyUSB(self.serial, self.takeover))
       self.fpgas = [FPGA(self, "FPGA0", self.device, 0), FPGA(self, "FPGA1", self.device, 1)]
       
-      for id, fpga in self.fpgas.items():
+      for id, fpga in enumerate(self.fpgas):
         fpga.id = id
         self.log("Discovering FPGA %d...\n" % id, 600)
         fpga.detect()

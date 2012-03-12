@@ -182,7 +182,7 @@ class X6500HotplugWorker(BaseWorker):
     if self.settings.useftd2xx != self.useftd2xx: self.async_restart()
     # Push our settings down to our children
     fields = ["firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
-              "invalidwarning", "invalidctitical", "speedupthreshold", "jobinterval", "pollinterval"]
+              "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
     for child in self.children:
       for field in fields: child.settings[field] = self.settings[field]
       child.apply_settings()
@@ -299,7 +299,7 @@ class X6500HotplugWorker(BaseWorker):
                 
         for serial, available in boards.items():
           if serial in self.childmap: continue
-          if not available and self.takeover:
+          if not available and self.settings.takeover:
             try:
               for bus in usb.busses():
                 if available: break
@@ -326,7 +326,7 @@ class X6500HotplugWorker(BaseWorker):
             child.settings.serial = serial
             child.settings.takeover = False
             fields = ["useftd2xx", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
-                      "invalidwarning", "invalidctitical", "speedupthreshold", "jobinterval", "pollinterval"]
+                      "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
             for field in fields: child.settings[field] = self.settings[field]
             child.apply_settings()
             self.childmap[serial] = child

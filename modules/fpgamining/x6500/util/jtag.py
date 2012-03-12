@@ -213,7 +213,7 @@ class JTAG:
     bytetotal = len(bitstream)
     written = 0
     buffer = queue.Queue(16)
-    thread = threading.Thread(None, self.bitstream_preparation_thread, self.name + "_bitstreamprepare", kwargs = {"bitstream": bitstream, "buffer": buffer})
+    thread = threading.Thread(None, self.bitstream_preparation_thread, "bitstreamprepare", kwargs = {"bitstream": bitstream, "buffer": buffer})
     thread.daemon = True
     thread.start()
     
