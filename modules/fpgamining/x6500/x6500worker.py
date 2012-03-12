@@ -632,9 +632,9 @@ class X6500FPGA(BaseWorker):
     if self.firmware_rev > 0:
       if speedstep: self._set_speed(self.stats.speed + speedstep)
     elif warning or critical:
-      self.miner.log(self.settings.name + ": Firmware too old, can not automatically reduce clock!\n", 200, "yB")
+      self.core.log(self.settings.name + ": Firmware too old, can not automatically reduce clock!\n", 200, "yB")
       if critical:
-        self.miner.log(self.settings.name + ": Shutting down FPGA to protect it!\n", 100, "rB")
+        self.core.log(self.settings.name + ": Shutting down FPGA to protect it!\n", 100, "rB")
         self.parent.shutdown_fpga(self.fpga)
         self.async_stop(2)
 
