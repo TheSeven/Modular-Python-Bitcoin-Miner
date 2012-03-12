@@ -278,6 +278,10 @@ class X6500Worker(BaseWorker):
     return self._proxy_transaction("send_job", fpga, self.job.midstate + self.job.data[64:72])
 
 
+  def clear_queue(self, fpga):
+    self._proxy_message("clear_queue", fpga)
+
+
   def shutdown_fpga(self, fpga):
     self._proxy_message("shutdown_fpga", fpga)
 
@@ -421,7 +425,7 @@ class X6500FPGA(BaseWorker):
         if self.firmware_rev > 0: self._set_speed(self.parent.settings.initialspeed)
         
         # Clear FPGA's nonce queue
-        self.fpga.clearQueue()
+        self.parent.clear_queue(self.fpga)
 
         # Start device response listener thread
         self.listenerthread = Thread(None, self._listener, self.settings.name + "_listener")
@@ -658,7 +662,7 @@ class X6500FPGA(BaseWorker):
     # even with very slow devices (and e.g. detect if the device was unplugged).
     interval = min(60, 2**32 / 1000000. / self.stats.mhps)
     # Add some safety margin and take user's interval setting (if present) into account.
-    self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
+    self.jobinterval = min(self.parent.settings.jobinterval, max(0.5, interval * 0.8 - 1))
     self.core.log(self.settings.name + ": Job interval: %f seconds\n" % self.jobinterval, 400, "B")
     # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
     self.jobs_per_second = 1. / self.jobinterval

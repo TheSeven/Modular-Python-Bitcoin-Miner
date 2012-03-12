@@ -143,6 +143,9 @@ class X6500BoardProxy(Process):
         elif data[0] == "shutdown_fpga":
           self.fpgas[data[1]].sleep()
         
+        elif data[0] == "clear_queue":
+          self.fpgas[data[1]].clearQueue()
+        
         elif data[0] == "set_speed":
           self.fpgas[data[1]].setClockSpeed(data[2])
         
