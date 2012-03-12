@@ -57,6 +57,8 @@ class X6500Worker(BaseWorker):
       "position": 1100
     },
     "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
+    "uploadfirmware": {"title": "Upload firmware", "type": "boolean", "position": 1300},
+    "firmware": {"title": "Firmware file location", "type": "string", "position": 1400},
     "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
     "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
     "tempwarning": {"title": "Warning temperature", "type": "int", "position": 3000},
@@ -98,8 +100,11 @@ class X6500Worker(BaseWorker):
     if not "serial" in self.settings: self.settings.serial = None
     if not "useftd2xx" in self.settings:
       self.settings.useftd2xx = self.d2xx_available and not self.pyusb_available
-    if self.settings.useftd2xx.lower() == "false": self.settings.useftd2xx = False
+    if self.settings.useftd2xx == "false": self.settings.useftd2xx = False
     if not "takeover" in self.settings: self.settings.takeover = False
+    if not "uploadfirmware" in self.settings: self.settings.uploadfirmware = True
+    if not "firmware" in self.settings or not self.settings.firmware:
+      self.settings.firmware = "modules/fpgamining/x6500/firmware/x6500.bit"
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
     self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 200)
     if not "maximumspeed" in self.settings: self.settings.maximumspeed = 150
@@ -186,7 +191,9 @@ class X6500Worker(BaseWorker):
         proxy_rxconn, self.txconn = Pipe(False)
         self.rxconn, proxy_txconn = Pipe(False)
         self.pollinterval = self.settings.pollinterval
-        self.proxy = X6500BoardProxy(proxy_rxconn, proxy_txconn, self.serial, self.settings.takeover, self.useftd2xx, self.pollinterval)
+        self.proxy = X6500BoardProxy(proxy_rxconn, proxy_txconn, self.serial, self.useftd2xx,
+                                     self.settings.takeover, self.settings.uploadfirmware,
+                                     self.settings.firmware, self.pollinterval)
         self.proxy.daemon = True
         self.proxy.start()
         proxy_txconn.close()

@@ -34,19 +34,22 @@ from multiprocessing import Process
 from .util.ft232r import FT232R, FT232R_PyUSB, FT232R_D2XX, FT232R_PortList
 from .util.jtag import JTAG
 from .util.fpga import FPGA
+from .util.format import formatNumber, formatTime
 
 
 
 class X6500BoardProxy(Process):
   
 
-  def __init__(self, rxconn, txconn, serial, takeover, useftd2xx, pollinterval):
+  def __init__(self, rxconn, txconn, serial, useftd2xx, takeover, uploadfirmware, firmware, pollinterval):
     super(X6500BoardProxy, self).__init__()
     self.rxconn = rxconn
     self.txconn = txconn
     self.serial = serial
-    self.takeover = takeover
     self.useftd2xx = useftd2xx
+    self.takeover = takeover
+    self.uploadfirmware = uploadfirmware
+    self.firmware = firmware
     self.pollinterval = pollinterval
 
 
@@ -73,13 +76,39 @@ class X6500BoardProxy(Process):
       else: self.device = FT232R(FT232R_PyUSB(self.serial, self.takeover))
       self.fpgas = [FPGA(self, "FPGA0", self.device, 0), FPGA(self, "FPGA1", self.device, 1)]
       
-      for id, fpga in enumerate(self.fpgas):
+      for id, fpga in self.fpgas.items():
         fpga.id = id
         self.log("Discovering FPGA %d...\n" % id, 600)
         fpga.detect()
         for idcode in fpga.jtag.idcodes:
           self.log("FPGA %d: %s - Firmware: rev %d, build %d\n" % (id, JTAG.decodeIdcode(idcode), fpga.firmware_rev, fpga.firmware_build), 500)
         if fpga.jtag.deviceCount != 1: raise Exception("This module needs two JTAG buses with one FPGA each!")
+
+      # Upload firmware if we were asked to
+      if self.uploadfirmware:
+        self.log("Programming FPGAs...\n", 200, "B")
+        start_time = time.time()
+        bitfile = BitFile.read(self.firmware)
+        self.log("Firmware file details:\n", 400, "B")
+        self.log("  Design Name: %s\n" % bitfile.designname, 400)
+        self.log("  Firmware: rev %d, build: %d\n" % (bitfile.rev, bitfile.build), 400)
+        self.log("  Part Name: %s\n" % bitfile.part, 400)
+        self.log("  Date: %s\n" % bitfile.date, 400)
+        self.log("  Time: %s\n" % bitfile.time, 400)
+        self.log("  Bitstream Length: %d\n" % len(bitfile.bitstream), 400)
+        jtag = JTAG(self.device, 2)
+        jtag.deviceCount = 1
+        jtag.idcodes = [bitfile.idcode]
+        jtag._processIdcodes()
+        for fpga in self.fpgas:
+          for idcode in fpga.jtag.idcodes:
+            if idcode & 0x0FFFFFFF != bitfile.idcode:
+              raise Exception("Device IDCode does not match bitfile IDCode! Was this bitstream built for this FPGA?")
+        FPGA.programBitstream(self.device, jtag, bitfile.bitstream, self.progresshandler)
+        self.log("Programmed FPGAs in %f seconds\n" % (time.time() - start_time), 300)
+        bitfile = None  # Free memory
+        # Update the FPGA firmware details:
+        for fpga in self.fpgas: fpga.detect()
 
       # Start polling thread
       self.pollingthread = Thread(None, self.polling_thread, "polling_thread")
@@ -164,3 +193,16 @@ class X6500BoardProxy(Process):
       self.error = e
       # Unblock main thread
       self.send("ping")
+
+      
+  # Firmware upload progess indicator
+  def progresshandler(self, start_time, now_time, written, total):
+    try: percent_complete = 100. * written / total
+    except ZeroDivisionError: percent_complete = 0
+    try: speed = written / (1000 * (now_time - start_time))
+    except ZeroDivisionError: speed = 0
+    try: remaining_sec = 100 * (now_time - start_time) / percent_complete
+    except ZeroDivisionError: remaining_sec = 0
+    remaining_sec -= now_time - start_time
+    self.log("%.1f%% complete [%sB/s] [%s remaining]\n" % (percent_complete, formatNumber(speed), formatTime(remaining_sec)), 500)
+        

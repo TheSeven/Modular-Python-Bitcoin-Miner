@@ -50,6 +50,8 @@ class X6500HotplugWorker(BaseWorker):
       "position": 1100
     },
     "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
+    "uploadfirmware": {"title": "Upload firmware", "type": "boolean", "position": 1300},
+    "firmware": {"title": "Firmware file location", "type": "string", "position": 1400},
     "blacklist": {
       "title": "Board list type",
       "type": "enum",
@@ -150,10 +152,13 @@ class X6500HotplugWorker(BaseWorker):
     if not "serial" in self.settings: self.settings.serial = None
     if not "useftd2xx" in self.settings:
       self.settings.useftd2xx = self.d2xx_available and not self.pyusb_available
-    if self.settings.useftd2xx.lower() == "false": self.settings.useftd2xx = False
+    if self.settings.useftd2xx == "false": self.settings.useftd2xx = False
     if not "takeover" in self.settings: self.settings.takeover = self.pyusb_available
+    if not "uploadfirmware" in self.settings: self.settings.uploadfirmware = True
+    if not "firmware" in self.settings or not self.settings.firmware:
+      self.settings.firmware = "modules/fpgamining/x6500/firmware/x6500.bit"
     if not "blacklist" in self.settings: self.settings.blacklist = True
-    if self.settings.blacklist.lower() == "false": self.settings.blacklist = False
+    if self.settings.blacklist == "false": self.settings.blacklist = False
     if not "boards" in self.settings: self.settings.boards = []
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
     self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 200)
@@ -176,8 +181,8 @@ class X6500HotplugWorker(BaseWorker):
     # self.useftd2xx is a cached copy of self.settings.useftd2xx
     if self.settings.useftd2xx != self.useftd2xx: self.async_restart()
     # Push our settings down to our children
-    fields = ["initialspeed", "maximumspeed", "tempwarning", "tempcritical", "invalidwarning",
-              "invalidctitical", "speedupthreshold", "jobinterval", "pollinterval"]
+    fields = ["firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
+              "invalidwarning", "invalidctitical", "speedupthreshold", "jobinterval", "pollinterval"]
     for child in self.children:
       for field in fields: child.settings[field] = self.settings[field]
       child.apply_settings()
@@ -320,7 +325,7 @@ class X6500HotplugWorker(BaseWorker):
             child = X6500Worker(self.core)
             child.settings.serial = serial
             child.settings.takeover = False
-            fields = ["useftd2xx", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
+            fields = ["useftd2xx", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
                       "invalidwarning", "invalidctitical", "speedupthreshold", "jobinterval", "pollinterval"]
             for field in fields: child.settings[field] = self.settings[field]
             child.apply_settings()
