@@ -348,7 +348,6 @@ class IcarusWorker(BaseWorker):
   def _sendjob(self, job):
     # Move previous job to oldjob, and new one to job
     self.oldjob = self.job
-    if self.job: self.job.destroy()
     self.job = job
     # Send it to the device
     now = time.time()
@@ -356,7 +355,9 @@ class IcarusWorker(BaseWorker):
     self.job.starttime = time.time()
     # Calculate how long the old job was running
     if self.oldjob and self.oldjob.starttime:
-      self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
+      if self.oldjob.starttime:
+        self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
+      self.oldjob.destroy()
 
     
   # This function needs to be called whenever the device terminates working on a job.
