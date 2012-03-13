@@ -111,6 +111,7 @@ class WebUI(BaseFrontend):
   def _stop(self):
     self.httpd.shutdown()
     self.serverthread.join(10)
+    self.httpd.server_close()
     super(WebUI, self)._stop()
 
 
