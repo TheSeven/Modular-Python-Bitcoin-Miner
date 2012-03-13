@@ -73,7 +73,7 @@ class ActualWorkSource(BaseWorkSource):
     stats.job_expiry = self.estimated_expiry
     stats.blockchain = self.blockchain
     stats.blockchain_id = self.blockchain.id
-    stats.blockchain_name = self.blockchain.settings.name
+    stats.blockchain_name = "None" if isinstance(self.blockchain, DummyBlockchain) else self.blockchain.settings.name
 
 
   def destroy(self):
