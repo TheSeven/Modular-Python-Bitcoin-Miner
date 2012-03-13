@@ -155,6 +155,7 @@ class DummyBlockchain(object):
     self.currentprevhash = None
     self.knownprevhashes = []
     self.timeoutend = 0
+    self.blocklock = RLock()
     
     
   def add_job(self, job):
