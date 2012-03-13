@@ -146,10 +146,13 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
  
   
   
-class DummyBlockchain(object):
+class DummyBlockchain(StatisticsProvider):
 
 
   def __init__(self, core):
+    StatisticsProvider.__init__(self)
+    self.core = core
+    
     # Initialize job list (protected by global job queue lock)
     self.jobs = []
     self.currentprevhash = None
