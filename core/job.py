@@ -40,6 +40,7 @@ class Job(object):
   def __init__(self, core, worksource, expiry, data, target, midstate = None):
     self.core = core
     self.worksource = worksource
+    self.blockchain = worksource.blockchain
     self.expiry = expiry
     self.data = data
     self.target = target
@@ -56,14 +57,14 @@ class Job(object):
     
     
   def register(self):
-    self.worksource.blockchain.add_job(self)
+    self.blockchain.add_job(self)
     self.worksource.add_pending_mhashes(-self.hashes_remaining / 1000000.)
     
     
   def destroy(self):
     if self.destroyed: return
     self.destroyed = True
-    self.worksource.blockchain.remove_job(self)
+    self.blockchain.remove_job(self)
     self.core.workqueue.remove_job(self)
     self.worksource.add_pending_mhashes(self.hashes_remaining / 1000000.)
     if self.worker:
