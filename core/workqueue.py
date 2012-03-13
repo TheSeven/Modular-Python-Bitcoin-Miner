@@ -53,7 +53,9 @@ class WorkQueue(Startable):
     
     
   def add_job(self, job):
-    if not job.worksource.blockchain.check_job(job): return
+    if not job.worksource.blockchain.check_job(job):
+      job.worksource.add_pending_mhashes(-job.hashes_remaining / 1000000.)
+      return
     expiry = int(job.expiry)
     with self.lock:
       if not expiry in self.lists: self.lists[expiry] = [job]
