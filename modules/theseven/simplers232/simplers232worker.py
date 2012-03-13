@@ -409,7 +409,9 @@ class SimpleRS232Worker(BaseWorker):
     
   # This function needs to be called whenever the device terminates working on a job.
   # It calculates how much work was actually done for the job and destroys it.
-  def _jobend(self, now = time.time()):
+  def _jobend(self, now = None):
+    # Hack to avoid a python bug, don't integrate this into the line above
+    if not now: now = time.time()
     # Calculate how long the job was actually running and multiply that by the hash
     # rate to get the number of hashes calculated for that job and update statistics.
     if self.job != None:
