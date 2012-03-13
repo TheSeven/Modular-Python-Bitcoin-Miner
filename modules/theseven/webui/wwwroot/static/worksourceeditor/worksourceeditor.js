@@ -76,7 +76,7 @@ mod.worksourceeditor = {
             showLoadingIndicator(worksourceListPanel);
             mod.csc.request("worksourceeditor", "getworksourceclasses", {}, function(data)
             {
-                classes = {};
+                var classes = {};
                 for (var i in data)
                     if (data.hasOwnProperty(i))
                         classes[data[i].id] = data[i];

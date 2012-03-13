@@ -76,7 +76,7 @@ mod.workereditor = {
             showLoadingIndicator(workerListPanel);
             mod.csc.request("workereditor", "getworkerclasses", {}, function(data)
             {
-                classes = {};
+                var classes = {};
                 for (var i in data)
                     if (data.hasOwnProperty(i))
                         classes[data[i].id] = data[i];
