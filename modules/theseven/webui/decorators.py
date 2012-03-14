@@ -35,7 +35,7 @@ class jsonapi(object):
   def __call__(self, core, webui, httprequest, path, privileges):
     try:
       # We only accept JSON. If this is something different => 400 Bad Request
-      if httprequest.headers.get("content-type", None) != "application/json":
+      if httprequest.headers.get("content-type", None) not in ("application/json", "application/json; charset=UTF-8"):
         return httprequest.send_response(400)
       length = int(httprequest.headers.get("content-length"))
       # Read request from the connection
@@ -51,7 +51,7 @@ class jsonapi(object):
       # Send response headers
       httprequest.log_request(200, len(data))
       httprequest.send_response(200)
-      httprequest.send_header("Content-Type", "application/json")
+      httprequest.send_header("Content-Type", "application/json; charset=UTF-8")
       httprequest.send_header("Content-Length", len(data))
       httprequest.end_headers()
       httprequest.wfile.write(data)
