@@ -87,8 +87,9 @@ class X6500Worker(BaseWorker):
     # Let our superclass do some basic initialization and restore the state if neccessary
     super(X6500Worker, self).__init__(core, state)
 
-    # Initialize proxy access lock and wakeup event
+    # Initialize proxy access locks and wakeup event
     self.lock = RLock()
+    self.transactionlock = RLock()
     self.wakeup = Condition()
 
     
@@ -249,8 +250,9 @@ class X6500Worker(BaseWorker):
 
 
   def _proxy_transaction(self, *args):
-    with self.lock:
-      self.txconn.send(args)
+    with self.transactionlock:
+      with self.lock:
+        self.txconn.send(args)
       return self.response_queue.get()
       
       
