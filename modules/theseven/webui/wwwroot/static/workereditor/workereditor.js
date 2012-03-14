@@ -30,7 +30,7 @@ mod.workereditor = {
     "LayerUI": function(config)
     {
         var box = mod.layerbox.LayerBox();
-        box.setTitle(nls("worker editor"));
+        box.setTitle(nls("Worker editor"));
         if (!mod.uiconfig.data.workereditor) mod.uiconfig.data.workereditor = {};
         if (!mod.uiconfig.data.workereditor.height) mod.uiconfig.data.workereditor.height = "500px";
         if (!mod.uiconfig.data.workereditor.width) mod.uiconfig.data.workereditor.width = "700px";
