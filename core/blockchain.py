@@ -78,7 +78,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     
   def _reset(self):    
     Startable._reset(self)
-    self.currentprevhash = None
+    self.currentprevhash = b""#None
     self.knownprevhashes = []
     self.timeoutend = 0
     self.jobs = []
@@ -122,6 +122,8 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
 
   def check_job(self, job):
     if self.currentprevhash == job.prevhash: return True
+    from binascii import hexlify
+    self.core.log("Prevhash mismatch: source=%s, current=%s, checked=%s, data=%s\n" % (job.worksource.settings.name, hexlify(self.currentprevhash), hexlify(job.prevhash), hexlify(job.data)), 100, "yB")
     cancel = []
     with self.blocklock:
       now = time.time()
@@ -130,6 +132,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
       if job.prevhash in self.knownprevhashes: return False
       if timeout_expired: self.knownprevhashes = [self.currentprevhash]
       else: self.knownprevhashes.append(self.currentprevhash)
+      self.core.log("New block detected: source=%s, old=%s, new=%s, data=%s\n" % (job.worksource.settings.name, hexlify(self.currentprevhash), hexlify(job.prevhash), hexlify(job.data)), 100, "yB")
       self.currentprevhash = job.prevhash
       with self.core.workqueue.lock:
         while self.jobs:
@@ -146,11 +149,10 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
  
   
   
-class DummyBlockchain(StatisticsProvider):
+class DummyBlockchain(object):
 
 
   def __init__(self, core):
-    StatisticsProvider.__init__(self)
     self.core = core
     self.id = 0
     
@@ -195,9 +197,6 @@ class DummyBlockchain(StatisticsProvider):
           if job.worker: cancel.append(job)
           else: job.destroy()
       self.jobs = []
-      with self.stats.lock:
-        self.stats.blocks += 1
-        self.stats.lastblock = now
     self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
     for job in cancel: job.cancel()
     return True
