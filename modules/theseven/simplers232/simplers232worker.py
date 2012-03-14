@@ -172,7 +172,7 @@ class SimpleRS232Worker(BaseWorker):
         self.nextjob = None
 
         # Open the serial port
-        self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, None, False, None)
+        self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
 
         # Send enough zero bytes to make sure that the device is not expecting data any more.
         # Command zero is a ping request, which is answered by a zero byte from the device.
@@ -280,6 +280,7 @@ class SimpleRS232Worker(BaseWorker):
         self.error = e
       finally:
         # We're not doing productive work any more, update stats and destroy current job
+        print("calling _jobend from exception handler")
         self._jobend()
         self.stats.mhps = 0
         # Release the wake lock to allow the listener thread to move. Ignore it if that goes wrong.
@@ -324,12 +325,14 @@ class SimpleRS232Worker(BaseWorker):
         result = struct.unpack("B", data)[0]
 
         if result == 1:
+          print("job ack")
           # Got a job acknowledgement message.
           # If we didn't expect one (no job waiting to be accepted in nextjob), throw an exception.
           if self.nextjob == None: raise Exception("Got spurious job ACK from mining device")
           # The job has been uploaded. Start counting time for the new job, and if there was a
           # previous one, calculate for how long that one was running and destroy it.
           now = time.time()
+          print("calling _jobend(now) from job ack handler")
           self._jobend(now)
 
           # Acknowledge the job by moving it from nextjob to job and wake up
@@ -380,6 +383,7 @@ class SimpleRS232Worker(BaseWorker):
           # or that the "found share" message was lost on the communication channel.
           if isinstance(self.job, ValidationJob): raise Exception("Validation job terminated without finding a share")
           # Stop measuring time because the device is doing duplicate work right now
+          print("calling _jobend() from exhausted handler")
           self._jobend()
           # Wake up the main thread to fetch new work ASAP.
           with self.wakeup: self.wakeup.notify()
@@ -417,6 +421,7 @@ class SimpleRS232Worker(BaseWorker):
     if self.job != None:
       if self.job.starttime != None:
         hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
+        print("job: %s, now: %.6f, starttime: %.6f, mhps: %.6f => processed: %.6f" % (self.job, now, self.job.starttime, self.stats.mhps, hashes))
         self.job.hashes_processed(hashes)
         self.job.starttime = None
       # Destroy the job, which is neccessary to actually account the calculated amount

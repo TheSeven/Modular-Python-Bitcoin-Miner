@@ -171,7 +171,7 @@ class IcarusWorker(BaseWorker):
         self.oldjob = None
 
         # Open the serial port
-        self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, None, False, None)
+        self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
 
         # We keep control of the wakeup lock at all times unless we're sleeping
         self.wakeup.acquire()
