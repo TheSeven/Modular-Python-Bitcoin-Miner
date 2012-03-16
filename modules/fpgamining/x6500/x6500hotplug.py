@@ -314,6 +314,7 @@ class X6500HotplugWorker(BaseWorker):
                     _serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
                     if manufacturer == "FTDI" and product == "FT232R USB UART" and _serial == serial:
                       handle.reset()
+                      time.sleep(1)
                       configuration = dev.configurations[0]
                       interface = configuration.interfaces[0][0]
                       handle.setConfiguration(configuration.value)
@@ -321,6 +322,7 @@ class X6500HotplugWorker(BaseWorker):
                       handle.releaseInterface()
                       handle.setConfiguration(0)
                       handle.reset()
+                      time.sleep(1)
                       available = True
             except: pass
           if available:
