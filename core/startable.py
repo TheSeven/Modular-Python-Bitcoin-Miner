@@ -74,8 +74,8 @@ class Startable(object):
         
   def restart(self, delay = 0):
     time.sleep(delay)
-    if not self.started: return
     with self.start_stop_lock:
+      if not self.started: return
       self.stop()
       self.start()
       
