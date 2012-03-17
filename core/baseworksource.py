@@ -72,6 +72,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
   def _reset(self):
     Startable._reset(self)
     self.mhashes_pending = 0
+    self.mhashes_deferred = 0
     self.stats.starttime = time.time()
     self.stats.ghashes = 0
     self.stats.jobrequests = 0
@@ -112,3 +113,8 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
   def add_pending_mhashes(self, mhashes):
     with self.statelock: self.mhashes_pending += mhashes
     if self.parent: self.parent.add_pending_mhashes(mhashes)
+
+    
+  def add_deferred_mhashes(self, mhashes):
+    with self.statelock: self.mhashes_deferred += mhashes
+    if self.parent: self.parent.add_deferred_mhashes(mhashes)

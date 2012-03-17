@@ -145,8 +145,9 @@ class WorkSourceGroup(BaseWorkSource):
         with child.statelock:
           total_priority += child.settings.priority
           mhashes = timestep * child.settings.hashrate
-          child.mhashes_pending += mhashes
+          child.mhashes_pending += mhashes + child.mhashes_deferred * 0.1
           mhashes_remaining -= mhashes
+          child.mhashes_deferred *= 0.9
       if mhashes_remaining > 0:
         unit = mhashes_remaining / total_priority
         for child in self.children:
