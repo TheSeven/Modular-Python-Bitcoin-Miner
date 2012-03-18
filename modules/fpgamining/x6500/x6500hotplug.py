@@ -102,10 +102,10 @@ class X6500HotplugWorker(BaseWorker):
                     handle.claimInterface(interface.interfaceNumber)
                     handle.releaseInterface()
                     handle.setConfiguration(0)
-                    available = True
-                  except: available = False
-                  boards[serial] = available
+                    found = True
+                    break
               except: pass
+          if found: break
       except: pass
       if not found:
         try:
@@ -115,9 +115,9 @@ class X6500HotplugWorker(BaseWorker):
             try:
               handle = d2xx.open(devicenum)
               handle.close()
-              available = True
-            except: availabale = False
-            boards.append((serial, available))
+              found = True
+              break
+            except: pass
         except: pass
       if found: core.add_worker(self(core))
     except: pass
