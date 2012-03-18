@@ -420,6 +420,6 @@ class SimpleRS232Worker(BaseWorker):
         self.job.hashes_processed(hashes)
         self.job.starttime = None
       # Destroy the job, which is neccessary to actually account the calculated amount
-      # of work to the worker and work source, and to remove the job from cancellation lists.
+      # of work to the worker and work source, and to remove the job from cancelation lists.
       self.job.destroy()
       self.job = None

@@ -94,7 +94,7 @@ class X6500HotplugWorker(BaseWorker):
                 manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
                 product = handle.getString(dev.iProduct, 100).decode("latin1")
                 serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                if manufacturer == "FTDI" and product == "FT232R USB UART":
+                if (manufacturer == "FTDI" and product == "FT232R USB UART") or (manufacturer == "FPGA Mining LLC" and product == "X6500 FPGA Miner"):
                   try:
                     configuration = dev.configurations[0]
                     interface = configuration.interfaces[0][0]
@@ -264,7 +264,7 @@ class X6500HotplugWorker(BaseWorker):
                   manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
                   product = handle.getString(dev.iProduct, 100).decode("latin1")
                   serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                  if manufacturer == "FTDI" and product == "FT232R USB UART":
+                  if (manufacturer == "FTDI" and product == "FT232R USB UART") or (manufacturer == "FPGA Mining LLC" and product == "X6500 FPGA Miner"):
                     try:
                       configuration = dev.configurations[0]
                       interface = configuration.interfaces[0][0]
@@ -312,7 +312,7 @@ class X6500HotplugWorker(BaseWorker):
                     manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
                     product = handle.getString(dev.iProduct, 100).decode("latin1")
                     _serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                    if manufacturer == "FTDI" and product == "FT232R USB UART" and _serial == serial:
+                    if ((manufacturer == "FTDI" and product == "FT232R USB UART") or (manufacturer == "FPGA Mining LLC" and product == "X6500 FPGA Miner")) and _serial == serial:
                       handle.reset()
                       time.sleep(1)
                       configuration = dev.configurations[0]
