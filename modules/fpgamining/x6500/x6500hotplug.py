@@ -105,6 +105,7 @@ class X6500HotplugWorker(BaseWorker):
                     found = True
                     break
                   except: pass
+              except: pass
           if found: break
       except: pass
       if not found:
