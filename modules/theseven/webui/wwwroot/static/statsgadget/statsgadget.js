@@ -152,8 +152,9 @@ mod.statsgadget = {
                     "name": {100: {"title": "Worker name"}},
                     "mhps": {200: {"title": "Current MH/s", "renderer": floatRenderer, "rendererconfig": {"precision": 2}}},
                     "temperature": {210: {"title": "Temperature [°C]", "renderer": floatRenderer, "rendererconfig": {"precision": 2}}},
-                    "avgmhps": {220: averageMHpsDefinition},
-                    "ghashes": {230: gHashesTotalDefinition},
+                    "errorrate": {220: {"title": "Error rate", "renderer": percentageRenderer, "rendererconfig": {"percentagePrecision": 2}}},
+                    "avgmhps": {230: averageMHpsDefinition},
+                    "ghashes": {240: gHashesTotalDefinition},
                     "jobsaccepted": {300: acceptedJobsDefinition, 310: makePerHourDefinition("Jobs per hour", 2)},
                     "jobscanceled": {320: canceledJobsDefinition, 330: makePerHourDefinition("Canceled per hour", 2)},
                     "sharesaccepted": {400: acceptedSharesDefinition},
@@ -381,6 +382,15 @@ mod.statsgadget = {
                     if (config.percentagePrecision)
                         percentage = percentage.toFixed(config.percentagePrecision);
                     td.appendChild(document.createTextNode(" (" + percentage + "%)"));
+                }
+                
+                function percentageRenderer(td, stats, value, def, config)
+                {
+                    var percentage = 100 * value
+                    if (!percentage) percentage = 0;
+                    if (config.percentagePrecision)
+                        percentage = percentage.toFixed(config.percentagePrecision);
+                    td.appendChild(document.createTextNode(percentage + "%"));
                 }
                 
                 function booleanRenderer(td, stats, value, def, config)
