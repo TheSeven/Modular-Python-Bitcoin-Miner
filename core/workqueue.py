@@ -29,6 +29,8 @@
 import time
 from threading import Condition, RLock, Thread
 from .startable import Startable
+try: from queue import Queue
+except: from Queue import Queue
 
 
 
@@ -40,6 +42,7 @@ class WorkQueue(Startable):
     self.core = core
     # Initialize global work queue lock and wakeup condition
     self.lock = Condition()
+    self.cancelqueue = Queue()
     
     
   def _reset(self):
@@ -53,18 +56,42 @@ class WorkQueue(Startable):
     
     
   def add_job(self, job):
-    if not job.worksource.blockchain.check_job(job):
-      mhashes = job.hashes_remaining / 1000000.
-      job.worksource.add_pending_mhashes(-mhashes)
-      job.worksource.add_deferred_mhashes(mhashes)
-      return
-    expiry = int(job.expiry)
     with self.lock:
+      if not job.blockchain.check_job(job):
+        mhashes = job.hashes_remaining / 1000000.
+        job.worksource.add_pending_mhashes(-mhashes)
+        job.worksource.add_deferred_mhashes(mhashes)
+        return
+      expiry = int(job.expiry)
       if not expiry in self.lists: self.lists[expiry] = [job]
       else: self.lists[expiry].append(job)
       if expiry > self.expirycutoff: self.count += 1
       job.register()
       self.lock.notify_all()
+    
+    
+  def add_jobs(self, jobs):
+    with self.lock:
+      seen = {}
+      for job in jobs:
+        if not job.blockchain.check_job(job):
+          if not job.worksource in seen:
+            mhashes = 2**32 / 1000000.
+            job.worksource.add_pending_mhashes(-mhashes)
+            job.worksource.add_deferred_mhashes(mhashes)
+            seen[job.worksource] = True
+        else:
+          expiry = int(job.expiry)
+          if not expiry in self.lists: self.lists[expiry] = [job]
+          else: self.lists[expiry].append(job)
+          if expiry > self.expirycutoff: self.count += 1
+          job.register()
+      self.lock.notify_all()
+    
+    
+  def cancel_jobs(self, jobs):
+    if not jobs: return
+    self.cancelqueue.put(jobs)
     
     
   def remove_job(self, job):
@@ -94,7 +121,7 @@ class WorkQueue(Startable):
           if job.worksource == worksource:
             list.remove(job)
             cancel.append(job)
-    for job in cancel: job.cancel()
+    self.cancel_jobs(cancel)
     
     
   def get_job(self, worker, expiry_min_ahead, async = False):
@@ -137,19 +164,24 @@ class WorkQueue(Startable):
   def _start(self):
     super(WorkQueue, self)._start()
     self.shutdown = False
-    self.cleanupthread = Thread(None, self.cleanuploop, "workqueue_cleanup")
+    self.cleanupthread = Thread(None, self._cleanuploop, "workqueue_cleanup")
     self.cleanupthread.daemon = True
     self.cleanupthread.start()
+    self.cancelthread = Thread(None, self._cancelloop, "workqueue_cancelworker")
+    self.cancelthread.daemon = True
+    self.cancelthread.start()
   
   
   def _stop(self):
     self.shutdown = True
-    self.cleanupthread.join(10)
+    self.cleanupthread.join(5)
+    self.cancelqueue.put(None)
+    self.cancelthread.join(5)
     self._reset()
     super(WorkQueue, self)._stop()
 
     
-  def cleanuploop(self):
+  def _cleanuploop(self):
     while not self.shutdown:
       now = time.time()
       cancel = []
@@ -169,5 +201,14 @@ class WorkQueue(Startable):
             while self.takenlists[expiry]: cancel.append(self.takenlists[expiry].pop(0))
             del self.takenlists[expiry]
       self.core.fetcher.wakeup()
-      for job in cancel: job.cancel()
+      self.cancel_jobs(cancel)
       time.sleep(1)
+
+  
+  def _cancelloop(self):
+    while True:
+      jobs = self.cancelqueue.get()
+      if not jobs: return
+      for job in jobs:
+        try: job.cancel()
+        except: self.core.log("Fetcher: Error while canceling job: %s\n" % traceback.format_exc(), 100, "r")

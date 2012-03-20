@@ -107,7 +107,7 @@ class Fetcher(Startable):
   def fetcherthread(self):
     try:
       jobs = self.core.get_root_work_source().get_job()
-      for job in jobs: self.core.workqueue.add_job(job)
+      if jobs: self.core.workqueue.add_jobs(jobs)
     except: self.core.log("Fetcher: Error while fetching job: %s\n" % traceback.format_exc(), 200, "r")
     with self.lock:
       self.threads.remove(current_thread())

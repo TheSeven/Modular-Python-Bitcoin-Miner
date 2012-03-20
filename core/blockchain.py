@@ -142,11 +142,11 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
         self.stats.blocks += 1
         self.stats.lastblock = now
     self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
-    for job in cancel: job.cancel()
+    self.core.workqueue.cancel_jobs(cancel)
     return True
  
-  
-  
+
+ 
 class DummyBlockchain(object):
 
 
@@ -196,5 +196,5 @@ class DummyBlockchain(object):
           else: job.destroy()
       self.jobs = []
     self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
-    for job in cancel: job.cancel()
+    self.core.workqueue.cancel_jobs(cancel)
     return True

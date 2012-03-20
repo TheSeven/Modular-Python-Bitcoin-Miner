@@ -80,7 +80,7 @@ class Job(object):
     
   def set_worker(self, worker):
     self.worker = worker
-    self.core.log("Mining %s:%s on %s\n" % (self.worksource.settings.name, hexlify(self.data[:76]), worker.settings.name), 400)
+    self.core.log("Mining %s:%s on %s\n" % (self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), worker.settings.name), 400)
     with self.worker.stats.lock: self.worker.stats.jobsaccepted += 1
     with self.worksource.stats.lock: self.worksource.stats.jobsaccepted += 1
     
