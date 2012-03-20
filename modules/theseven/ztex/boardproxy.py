@@ -195,7 +195,8 @@ class ZtexBoardProxy(Process):
           
           if counter >= 10:
             counter = 0
-            self.send("error_rate", errorcount[self.multiplier] / errorweight[self.multiplier])
+            try: self.send("error_rate", errorcount[self.multiplier] / errorweight[self.multiplier])
+            except: pass
 
         with self.wakeup: self.wakeup.wait(self.pollinterval)
         
