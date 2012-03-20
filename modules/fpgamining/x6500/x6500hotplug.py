@@ -104,7 +104,7 @@ class X6500HotplugWorker(BaseWorker):
                     handle.setConfiguration(0)
                     found = True
                     break
-              except: pass
+                  except: pass
           if found: break
       except: pass
       if not found:
