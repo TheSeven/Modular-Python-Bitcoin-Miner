@@ -516,7 +516,7 @@ xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE
             if (fadeLoadingState * fadeLoadingDirection == 25) return void clearInterval(fadeLoadingInterval);
             fadeLoadingState += fadeLoadingDirection;
             document.getElementById("loading").style.opacity = .5 + fadeLoadingState / 50;
-			if (/MSIE [4-8]/.test(navigator.userAgent))
+            if (/MSIE [4-8]/.test(navigator.userAgent))
                 document.getElementById("loading").style.filter = "Alpha(opacity=" + (50 + fadeLoadingState * 2)
                                                                 + ",finishopacity=" + (50 + fadeLoadingState * 2) + ",style=2)";
         }

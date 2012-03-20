@@ -23,13 +23,13 @@
 /* XHR loading indicator */
 #loading
 {
-	bottom: 0px;
+    bottom: 0px;
 }
 
 /* Global font */
 body, table
 {
-	font: 12px Arial,Helvetica,sans-serif;
+    font: 12px Arial,Helvetica,sans-serif;
 }
 
 /* Get rid of all those text-select cursors */
@@ -74,162 +74,162 @@ input.box_titlebutton
 /* Minimum widths */
 .windowfiller
 {
-	min-width: 750px;
+    min-width: 750px;
 }
 
 /* Visible tables */
 table.table_visible, .table_visible table, .table_visible th, .table_visible td
 {
-	border: 1px solid #007;
-	vertical-align: middle;
-	text-align: center;
+    border: 1px solid #007;
+    vertical-align: middle;
+    text-align: center;
 }
 
 .table_visible th, .table_visible td
 {
-	padding: 3px;
+    padding: 3px;
 }
 
 /* Invisible tables */
 table.table_invisible, .table_invisible table, .table_invisible th, .table_invisible td
 {
-	border: 0px;
-	padding: 0px;
+    border: 0px;
+    padding: 0px;
 }
 
 /* Table default alignment classes */
 table.table_left, .table_left table, .table_left th, .table_left td
 {
-	text-align: left;
+    text-align: left;
 }
 
 table.table_center, .table_center table, .table_center th, .table_center td
 {
-	text-align: center;
+    text-align: center;
 }
 
 table.table_right, .table_right table, .table_right th, .table_right td
 {
-	text-align: right;
+    text-align: right;
 }
 
 table.table_top, .table_top table, .table_top th, .table_top td
 {
-	vertical-align: top;
+    vertical-align: top;
 }
 
 table.table_middle, .table_middle table, .table_middle th, .table_middle td
 {
-	vertical-align: middle;
+    vertical-align: middle;
 }
 
 table.table_bottom, .table_bottom table, .table_bottom th, .table_bottom td
 {
-	vertical-align: bottom;
+    vertical-align: bottom;
 }
 
 /* Box style */
 .box
 {
-	border-style: solid;
-	border-color: rgb(153, 229, 255) rgb(51, 76, 102) rgb(51, 76, 102) rgb(153, 229, 255);
-	border-width: 1px;
-	background-color: rgb(102, 153, 204);
-	text-align: left;
+    border-style: solid;
+    border-color: rgb(153, 229, 255) rgb(51, 76, 102) rgb(51, 76, 102) rgb(153, 229, 255);
+    border-width: 1px;
+    background-color: rgb(102, 153, 204);
+    text-align: left;
 }
 
 .box_topleft
 {
-	height: 16px;
-	width: 1px;
+    height: 16px;
+    width: 1px;
 }
 
 .box_title
 {
-	height: 16px;
-	vertical-align: middle;
-	color: #fff;
-	font-family: Arial,SunSans-Regular;
-	font-size: 12px;
-	text-decoration: none;
-	font-weight: bold;
-	padding: 1px;
+    height: 16px;
+    vertical-align: middle;
+    color: #fff;
+    font-family: Arial,SunSans-Regular;
+    font-size: 12px;
+    text-decoration: none;
+    font-weight: bold;
+    padding: 1px;
 }
 
 .box_topright
 {
-	height: 16px;
-	width: 1px;
+    height: 16px;
+    width: 1px;
 }
 
 .box_left
 {
-	width: 1px;
+    width: 1px;
 }
 
 .box_content
 {
-	border-style: solid;
-	border-color: rgb(51, 76, 102) rgb(153, 229, 255) rgb(153, 229, 255) rgb(51, 76, 102);
-	border-width: 1px;
-	background-color: #fff;
-	table-layout: fixed;
-	padding: 2px;
+    border-style: solid;
+    border-color: rgb(51, 76, 102) rgb(153, 229, 255) rgb(153, 229, 255) rgb(51, 76, 102);
+    border-width: 1px;
+    background-color: #fff;
+    table-layout: fixed;
+    padding: 2px;
 }
 
 .box_right
 {
-	width: 1px;
+    width: 1px;
 }
 
 .box_bottomleft
 {
-	height: 1px;
-	width: 1px;
+    height: 1px;
+    width: 1px;
 }
 
 .box_bottom
 {
-	height: 2px;
+    height: 2px;
 }
 
 .box_bottomright
 {
-	height: 1px;
-	width: 1px;
+    height: 1px;
+    width: 1px;
 }
 
 .box_close
 {
-	margin: 1px;
-	background: url("images/closebutton.gif") no-repeat;
-	height: 12px;
-	width: 13px;
-	float: right;
+    margin: 1px;
+    background: url("images/closebutton.gif") no-repeat;
+    height: 12px;
+    width: 13px;
+    float: right;
 }
 
 .errorbox
 {
-	border-style: solid;
-	border-width: 1px;
-	text-align: left;
-	border-color: rgb(255, 0, 0) rgb(95, 0, 0) rgb(95, 0, 0) rgb(255, 0, 0);
-	background-color: rgb(191, 0, 0);
+    border-style: solid;
+    border-width: 1px;
+    text-align: left;
+    border-color: rgb(255, 0, 0) rgb(95, 0, 0) rgb(95, 0, 0) rgb(255, 0, 0);
+    background-color: rgb(191, 0, 0);
 }
 
 .errorbox .box_content
 {
-	border-color: rgb(95, 0, 0) rgb(255, 0, 0) rgb(255, 0, 0) rgb(95, 0, 0);
+    border-color: rgb(95, 0, 0) rgb(255, 0, 0) rgb(255, 0, 0) rgb(95, 0, 0);
 }
 
 /* Disconnect error message style */
 .error_disconnect
 {
-	text-align: center;
-	font-weight: bold;
-	font-size: 24px;
-	position: relative;
-	top: 300px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 24px;
+    position: relative;
+    top: 300px;
 }
 
 /* Context menu */
