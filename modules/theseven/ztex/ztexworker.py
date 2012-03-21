@@ -90,6 +90,7 @@ class ZtexWorker(BaseWorker):
     self.serial = None
     self.pollinterval = None
     self.stats.mhps = 0
+    self.stats.errorrate = 0
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
