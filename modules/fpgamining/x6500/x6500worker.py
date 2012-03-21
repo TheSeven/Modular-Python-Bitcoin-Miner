@@ -508,6 +508,8 @@ class X6500FPGA(BaseWorker):
         # We're not doing productive work any more, update stats and destroy current job
         self._jobend()
         self.stats.mhps = 0
+        try: self.wakeup.release()
+        except: pass
         # If we aren't shutting down, figure out if there have been many errors recently,
         # and if yes, restart the parent worker as well.
         if not self.shutdown:

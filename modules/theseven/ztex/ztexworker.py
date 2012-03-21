@@ -340,6 +340,8 @@ class ZtexWorker(BaseWorker):
       self.stats.mhps = 0
       # Make the proxy and its listener thread restart
       self.dead = True
+      try: self.workloopwakeup.release()
+      except: pass
       # Ping the proxy, otherwise the main thread might be blocked and can't wake up.
       try: self._proxy_message("ping")
       except: pass
