@@ -182,6 +182,9 @@ class ZtexWorker(BaseWorker):
         self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
       finally:
         with self.workloopwakeup: self.workloopwakeup.notify()
+        try:
+          for i in range(100): self.response_queue.put(None)
+        except: pass
         try: self.workloopthread.join(2)
         except: pass
         try: self._proxy_message("shutdown")

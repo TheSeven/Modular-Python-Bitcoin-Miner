@@ -221,6 +221,9 @@ class X6500Worker(BaseWorker):
         # ...complain about it!
         self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
       finally:
+        try:
+          for i in range(100): self.response_queue.put(None)
+        except: pass
         while self.children:
           try:
             child = self.children.pop(0)
