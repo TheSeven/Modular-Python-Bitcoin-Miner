@@ -91,7 +91,7 @@ class BFLSingleWorker(BaseWorker):
     self.port = self.settings.port
     # Assume a default job interval to make the core start fetching work for us.
     # The actual hashrate will be measured (and this adjusted to the correct value) later.
-    self.jobinterval = 800000000. / 2**32
+    self.jobinterval = 2**32 / 800000000.
     self.jobs_per_second = 1 / self.jobinterval
     # This worker will only ever process one job at once. The work fetcher needs this information
     # to estimate how many jobs might be required at once in the worst case (after a block was found).
