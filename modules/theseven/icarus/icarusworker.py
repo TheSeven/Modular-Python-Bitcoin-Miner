@@ -81,7 +81,6 @@ class IcarusWorker(BaseWorker):
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.port = None
     self.baudrate = None
-    self.hasheswithoutshare = 0
 #    # Initialize custom statistics. This is not neccessary for this worker module,
 #    # but might be interesting for other modules, so it is kept here for reference.
 #    self.stats.field1 = 0
@@ -161,6 +160,7 @@ class IcarusWorker(BaseWorker):
         # Exception container: If an exception occurs in the listener thread, the listener thread
         # will store it here and terminate, and the main thread will rethrow it and then restart.
         self.error = None
+        self.hasheswithoutshare = 0
 
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
@@ -295,7 +295,7 @@ class IcarusWorker(BaseWorker):
         # assume that PL2303 did it's job (i.e. serial port locked up),
         # and restart the board worker.
         if self.hasheswithoutshare > 16 * 2**32:
-          raise Exception("Watchdog triggered: %.6f MHashes without share" % self.hasheswithoutshare / 1000000.)
+          raise Exception("Watchdog triggered: %.6f MHashes without share" % (self.hasheswithoutshare / 1000000.))
 
         # Try to read a response from the device
         nonce = self.handle.read(4)

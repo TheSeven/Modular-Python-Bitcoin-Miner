@@ -76,11 +76,6 @@ class BFLSingleWorker(BaseWorker):
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.port = None
     self.stats.temperature = 0
-#    # Initialize custom statistics. This is not neccessary for this worker module,
-#    # but might be interesting for other modules, so it is kept here for reference.
-#    self.stats.field1 = 0
-#    self.stats.field2 = 0
-#    self.stats.field3 = 0
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
