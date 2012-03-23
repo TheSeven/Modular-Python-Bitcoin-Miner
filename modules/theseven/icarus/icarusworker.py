@@ -81,6 +81,7 @@ class IcarusWorker(BaseWorker):
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.port = None
     self.baudrate = None
+    self.hasheswithoutshare = 0
 #    # Initialize custom statistics. This is not neccessary for this worker module,
 #    # but might be interesting for other modules, so it is kept here for reference.
 #    self.stats.field1 = 0
@@ -289,6 +290,12 @@ class IcarusWorker(BaseWorker):
       while True:
         # If the main thread has a problem, make sure we die before it restarts
         if self.error != None: break
+        
+        # If there were suspiciously many hashes without even a single share,
+        # assume that PL2303 did it's job (i.e. serial port locked up),
+        # and restart the board worker.
+        if self.hasheswithoutshare > 16 * 2**32:
+          raise Exception("Watchdog triggered: %.6f MHashes without share" % self.hasheswithoutshare / 1000000.)
 
         # Try to read a response from the device
         nonce = self.handle.read(4)
@@ -304,6 +311,7 @@ class IcarusWorker(BaseWorker):
         if not oldjob and not newjob: return
         # Stop time measurement
         now = time.time()
+        self.hasheswithoutshare = 0
         # Pass the nonce that we found to the work source, if there is one.
         # Do this before calculating the hash rate as it is latency critical.
         job = None
@@ -355,7 +363,9 @@ class IcarusWorker(BaseWorker):
     # Calculate how long the old job was running
     if self.oldjob and self.oldjob.starttime:
       if self.oldjob.starttime:
-        self.oldjob.hashes_processed((now - self.oldjob.starttime) * self.stats.mhps * 1000000)
+        hashes = (now - self.oldjob.starttime) * self.stats.mhps * 1000000
+        self.hasheswithoutshare += hashes
+        self.oldjob.hashes_processed(hashes)
       self.oldjob.destroy()
 
     
@@ -368,7 +378,9 @@ class IcarusWorker(BaseWorker):
     # rate to get the number of hashes calculated for that job and update statistics.
     if self.job:
       if self.job.starttime:
-        self.job.hashes_processed((now - self.job.starttime) * self.stats.mhps * 1000000)
+        hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
+        self.hasheswithoutshare += hashes
+        self.job.hashes_processed(hashes)
       # Destroy the job, which is neccessary to actually account the calculated amount
       # of work to the worker and work source, and to remove the job from cancelation lists.
       self.oldjob = self.job
