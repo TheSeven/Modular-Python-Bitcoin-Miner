@@ -359,6 +359,7 @@ class IcarusWorker(BaseWorker):
     # Send it to the device
     now = time.time()
     self.handle.write(job.midstate[::-1] + b"\0" * 20 + job.data[75:63:-1])
+    self.handle.flush()
     self.job.starttime = time.time()
     # Calculate how long the old job was running
     if self.oldjob and self.oldjob.starttime:

@@ -405,6 +405,7 @@ class SimpleRS232Worker(BaseWorker):
     self.nextjob = job
     # Send it to the device
     self.handle.write(struct.pack("B", 1) + job.midstate[::-1] + job.data[75:63:-1])
+    self.handle.flush()
 
     
   # This function needs to be called whenever the device terminates working on a job.
@@ -416,8 +417,7 @@ class SimpleRS232Worker(BaseWorker):
     # rate to get the number of hashes calculated for that job and update statistics.
     if self.job != None:
       if self.job.starttime != None:
-        hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
-        self.job.hashes_processed(hashes)
+        self.job.hashes_processed((now - self.job.starttime) * self.stats.mhps * 1000000)
         self.job.starttime = None
       # Destroy the job, which is neccessary to actually account the calculated amount
       # of work to the worker and work source, and to remove the job from cancelation lists.

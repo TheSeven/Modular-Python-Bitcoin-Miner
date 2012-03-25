@@ -195,23 +195,27 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   def _build_jobs(self, response, now):
     roll_ntime = 1
     expiry = 60
+    isp2pool = False
     headers = response.getheaders()
     for h in headers:
-      if h[0].lower() == "x-roll-ntime" and h[1] and h[1].lower() != "n":
+      if h[0].lower() == "x-is-p2pool" and h[1].lower() == "true": isp2pool = True
+      elif h[0].lower() == "x-roll-ntime" and h[1] and h[1].lower() != "n":
         roll_ntime = 60
         parts = h[1].split("=", 1)
         if parts[0].strip().lower() == "expire":
           try: roll_ntime = int(parts[1])
           except: pass
         expiry = roll_ntime
-        break
+    if isp2pool: expiry = 60
     self.stats.supports_rollntime = roll_ntime > 1
     response = json.loads(response.read().decode("utf_8"))
     data = unhexlify(response["result"]["data"].encode("ascii"))
     target = unhexlify(response["result"]["target"].encode("ascii"))
+    try: identifier = int(response["result"]["identifier"])
+    except: identifier = None
     midstate = Job.calculate_midstate(data)
     prefix = data[:68]
     timebase = struct.unpack(">I", data[68:72])[0]
     suffix = data[72:]
-    return [Job(self.core, self, now + expiry - self.settings.expirymargin, prefix + struct.pack(">I", timebase + i) + suffix, target, midstate) for i in range(roll_ntime)]
+    return [Job(self.core, self, now + expiry - self.settings.expirymargin, prefix + struct.pack(">I", timebase + i) + suffix, target, midstate, identifier) for i in range(roll_ntime)]
   
