@@ -61,7 +61,7 @@ class LogFileLogger(BaseFrontend):
     super(LogFileLogger, self)._start()
     self.filename = self.settings.filename
     self.handle = open(self.filename, "ab")
-    self.handle.write("\n" + "=" * 200 + "\n\n")
+    self.handle.write(("\n" + "=" * 200 + "\n\n").encode("utf_8"))
   
   
   def _stop(self):
@@ -83,6 +83,6 @@ class LogFileLogger(BaseFrontend):
           elif "g" in format: modes += ";32"
           if "B" in format: modes += ";1"
           if modes: line = "\x1b[0%sm%s\x1b[0m" % (modes, line)
-        self.handle.write(prefix + line if newline else line)
+        self.handle.write((prefix + line if newline else line).encode("utf_8"))
         newline = line[-1:] == "\n"
     
