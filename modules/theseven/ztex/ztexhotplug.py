@@ -109,7 +109,7 @@ class ZtexHotplugWorker(BaseWorker):
     if not "serial" in self.settings: self.settings.serial = None
     if not "takeover" in self.settings: self.settings.takeover = True
     if not "firmware" in self.settings or not self.settings.firmware:
-      self.settings.firmware = "modules/fpgamining/x6500/firmware/x6500.bit"
+      self.settings.firmware = "modules/ztex/firmware/"
     if not "blacklist" in self.settings: self.settings.blacklist = True
     if self.settings.blacklist == "false": self.settings.blacklist = False
     if not "boards" in self.settings: self.settings.boards = []
