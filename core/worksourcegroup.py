@@ -35,7 +35,7 @@ from .baseworksource import BaseWorkSource
 
 class WorkSourceGroup(BaseWorkSource):
 
-  version = "core.worksourcegroup v0.1.0alpha"
+  version = "core.worksourcegroup v0.1.0beta"
   default_name = "Untitled work source group"
   is_group = True,
   settings = dict(BaseWorkSource.settings, **{

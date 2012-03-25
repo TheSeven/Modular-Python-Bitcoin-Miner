@@ -39,7 +39,7 @@ from core.baseworker import BaseWorker
 # Worker main class, referenced from __init__.py
 class BFLSingleWorker(BaseWorker):
   
-  version = "theseven.bflsingle worker v0.1.0alpha"
+  version = "theseven.bflsingle worker v0.1.0beta"
   default_name = "Untitled BFL Single worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},

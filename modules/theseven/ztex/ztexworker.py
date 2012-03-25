@@ -40,7 +40,7 @@ except: from Queue import Queue
 # Worker main class, referenced from __init__.py
 class ZtexWorker(BaseWorker):
   
-  version = "theseven.ztex worker v0.1.0alpha"
+  version = "theseven.ztex worker v0.1.0beta"
   default_name = "Untitled ZTEX worker"
   settings = dict(BaseWorker.settings, **{
     "serial": {"title": "Board serial number", "type": "string", "position": 1000},

@@ -34,7 +34,7 @@ from core.basefrontend import BaseFrontend
 
 class StderrLogger(BaseFrontend):
 
-  version = "theseven.basicloggers stderr logger v0.1.0alpha"
+  version = "theseven.basicloggers stderr logger v0.1.0beta"
   default_name = "stderr logger"
   can_log = True
   can_autodetect = True

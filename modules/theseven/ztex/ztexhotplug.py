@@ -36,7 +36,7 @@ from .ztexworker import ZtexWorker
 # Worker main class, referenced from __init__.py
 class ZtexHotplugWorker(BaseWorker):
   
-  version = "theseven.ztex hotplug manager v0.1.0alpha"
+  version = "theseven.ztex hotplug manager v0.1.0beta"
   default_name = "ZTEX hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{

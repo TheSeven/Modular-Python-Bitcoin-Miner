@@ -1,6 +1,6 @@
 Modular Python Bitcoin Miner
 Copyright (C) 2012 Michael Sparmann (TheSeven)
 
-v0.1.0 (alpha)
+v0.1.0 (beta)
 ===================
 - Completely new architecture

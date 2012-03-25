@@ -37,7 +37,7 @@ from .bflsingleworker import BFLSingleWorker
 # Worker main class, referenced from __init__.py
 class BFLSingleHotplugWorker(BaseWorker):
   
-  version = "theseven.bflsingle hotplug manager v0.1.0alpha"
+  version = "theseven.bflsingle hotplug manager v0.1.0beta"
   default_name = "BFL Single hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{

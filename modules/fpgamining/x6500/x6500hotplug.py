@@ -36,7 +36,7 @@ from .x6500worker import X6500Worker
 # Worker main class, referenced from __init__.py
 class X6500HotplugWorker(BaseWorker):
   
-  version = "fpgamining.x6500 hotplug manager v0.1.0alpha"
+  version = "fpgamining.x6500 hotplug manager v0.1.0beta"
   default_name = "X6500 hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{
