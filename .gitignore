@@ -1,7 +1,7 @@
 *~
 *.log
 *.pyc
-config.py
 usb
 __pycache__
 worker/fpgamining/firmware/*
+config/*

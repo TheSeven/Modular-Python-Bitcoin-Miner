@@ -1,0 +1,267 @@
+/*
+  Modular Python Bitcoin Miner WebUI
+  Copyright (C) 2012 Michael Sparmann (TheSeven)
+
+     This program is free software; you can redistribute it and/or
+     modify it under the terms of the GNU General Public License
+     as published by the Free Software Foundation; either version 2
+     of the License, or (at your option) any later version.
+
+     This program is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+     GNU General Public License for more details.
+
+     You should have received a copy of the GNU General Public License
+     along with this program; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+
+  Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh if you
+  want to support further development of the Modular Python Bitcoin Miner.
+*/
+
+/* XHR loading indicator */
+#loading
+{
+    bottom: 0px;
+}
+
+/* Global font */
+body, table
+{
+    font: 12px Arial,Helvetica,sans-serif;
+}
+
+/* Get rid of all those text-select cursors */
+*
+{
+    cursor: default;
+}
+input[type=text], input[type=password], textarea, .autocursor, .autocursor *
+{
+    cursor: auto;
+}
+.textcursor, .textcursor *
+{
+    cursor: text;
+}
+
+/* Link markup */
+.link
+{
+    text-decoration: underline;
+    font-weight: bold;
+    color: #00d;
+    cursor: pointer;
+}
+
+/* Label markup */
+.box_form_label
+{
+    font-weight: bold;
+    text-align: right;
+    vertical-align: middle;
+    padding-right: 5px;
+}
+
+/* Button in the title bar of a box */
+input.box_titlebutton
+{
+    padding: 0px 2px;
+    margin: -2px 0px;
+}
+
+/* Minimum widths */
+.windowfiller
+{
+    min-width: 750px;
+}
+
+/* Visible tables */
+table.table_visible, .table_visible table, .table_visible th, .table_visible td
+{
+    border: 1px solid #007;
+    vertical-align: middle;
+    text-align: center;
+}
+
+.table_visible th, .table_visible td
+{
+    padding: 3px;
+}
+
+/* Invisible tables */
+table.table_invisible, .table_invisible table, .table_invisible th, .table_invisible td
+{
+    border: 0px;
+    padding: 0px;
+}
+
+/* Table default alignment classes */
+table.table_left, .table_left table, .table_left th, .table_left td
+{
+    text-align: left;
+}
+
+table.table_center, .table_center table, .table_center th, .table_center td
+{
+    text-align: center;
+}
+
+table.table_right, .table_right table, .table_right th, .table_right td
+{
+    text-align: right;
+}
+
+table.table_top, .table_top table, .table_top th, .table_top td
+{
+    vertical-align: top;
+}
+
+table.table_middle, .table_middle table, .table_middle th, .table_middle td
+{
+    vertical-align: middle;
+}
+
+table.table_bottom, .table_bottom table, .table_bottom th, .table_bottom td
+{
+    vertical-align: bottom;
+}
+
+/* Box style */
+.box
+{
+    border-style: solid;
+    border-color: rgb(153, 229, 255) rgb(51, 76, 102) rgb(51, 76, 102) rgb(153, 229, 255);
+    border-width: 1px;
+    background-color: rgb(102, 153, 204);
+    text-align: left;
+}
+
+.box_topleft
+{
+    height: 16px;
+    width: 1px;
+}
+
+.box_title
+{
+    height: 16px;
+    vertical-align: middle;
+    color: #fff;
+    font-family: Arial,SunSans-Regular;
+    font-size: 12px;
+    text-decoration: none;
+    font-weight: bold;
+    padding: 1px;
+}
+
+.box_topright
+{
+    height: 16px;
+    width: 1px;
+}
+
+.box_left
+{
+    width: 1px;
+}
+
+.box_content
+{
+    border-style: solid;
+    border-color: rgb(51, 76, 102) rgb(153, 229, 255) rgb(153, 229, 255) rgb(51, 76, 102);
+    border-width: 1px;
+    background-color: #fff;
+    table-layout: fixed;
+    padding: 2px;
+}
+
+.box_right
+{
+    width: 1px;
+}
+
+.box_bottomleft
+{
+    height: 1px;
+    width: 1px;
+}
+
+.box_bottom
+{
+    height: 2px;
+}
+
+.box_bottomright
+{
+    height: 1px;
+    width: 1px;
+}
+
+.box_close
+{
+    margin: 1px;
+    background: url("images/closebutton.gif") no-repeat;
+    height: 12px;
+    width: 13px;
+    float: right;
+}
+
+.errorbox
+{
+    border-style: solid;
+    border-width: 1px;
+    text-align: left;
+    border-color: rgb(255, 0, 0) rgb(95, 0, 0) rgb(95, 0, 0) rgb(255, 0, 0);
+    background-color: rgb(191, 0, 0);
+}
+
+.errorbox .box_content
+{
+    border-color: rgb(95, 0, 0) rgb(255, 0, 0) rgb(255, 0, 0) rgb(95, 0, 0);
+}
+
+/* Disconnect error message style */
+.error_disconnect
+{
+    text-align: center;
+    font-weight: bold;
+    font-size: 24px;
+    position: relative;
+    top: 300px;
+}
+
+/* Context menu */
+
+.contextmenu
+{
+    background-color: #cce;
+    border: 1px outset #cce;
+}
+
+.contextmenu_entry
+{
+    padding: 3px;
+}
+
+.contextmenu_entry:hover
+{
+    background-color: #aaf;
+}
+
+.contextmenu_disabled
+{
+    color: #33f;
+}
+
+.contextmenu_disabled:hover
+{
+    background-color: #cce;
+}
+
+.contextmenu_barrier
+{
+    margin: 5px;
+    border: 1px inset #cce;
+}

@@ -1,0 +1,588 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<!--
+  Modular Python Bitcoin Miner WebUI
+  Copyright (C) 2012 Michael Sparmann (TheSeven)
+
+     This program is free software; you can redistribute it and/or
+     modify it under the terms of the GNU General Public License
+     as published by the Free Software Foundation; either version 2
+     of the License, or (at your option) any later version.
+
+     This program is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+     GNU General Public License for more details.
+
+     You should have received a copy of the GNU General Public License
+     along with this program; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+
+  Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh if you
+  want to support further development of the Modular Python Bitcoin Miner.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemalocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd" xml:lang="de-DE">
+<head>
+
+    <!-- May be changed later by a JS module, but XHTML 1.1 requires us to have at least
+         this dummy page title in the initial document tree -->
+    <title>Modular Python Bitcoin Miner WebUI</title>
+
+    <!-- JS loader and global initialisation -->
+    <script type='text/javascript' defer='defer'>//<![CDATA[
+
+        // Global variables
+        var mod = {};
+        var moduleLoaded = {};
+        var moduleLoaderSemaphore = {};
+        var runningServices = [];
+        var httpCache = {};
+        var httpRunning = 0;
+        var fadeLoadingState = 25;
+        var fadeLoadingDirection = 0;
+        var fadeLoadingInterval = null;
+        var params = {};
+        var longlang = navigator.language ? navigator.language : (navigator.userLanguage ? navigator.userLanguage : "");
+        var lang = longlang.indexOf("-") != -1 ? longlang.substr(0, longlang.indexOf("-")) : longlang;
+        var sublang = longlang.indexOf("-") != -1 ? longlang.substring(lang.length + 1, longlang.length) : null;
+
+        // This fallback error handler should be overridden by JS code by simply changing this variable
+        var error = alertwrapper;
+        var notify = fakenotify;
+
+        // The very first JS code executed
+        function init()
+        {
+            // Disable text selection
+            document.documentElement.onmousedown = selectGovernor;
+            document.documentElement.onselectstart = selectGovernor;  // IE
+            document.documentElement.ondragstart = dragGovernor;  // IE
+            document.documentElement.oncontextmenu = contextGovernor;
+
+            // Parse parameters submitted via the query string
+            var defs = location.search.substring(1, location.search.length).split("&");
+            for (var i in defs)
+            {
+                if (defs.hasOwnProperty(i) && defs[i].length > 0)
+                {
+                    var def = defs[i].split("=");
+                    var key = decodeURIComponent(def.shift())
+                    if (!def.length) params[key] = true;
+                    else params[key] = decodeURIComponent(def.join("="));
+                }
+            }
+
+            // Load all dependencies and finally start core initialisation
+            depend(["csc"], function()
+            {
+                mod.csc.request("init", "init", {
+                    "params": params,
+                    "longlang": longlang,
+                    "lang": lang,
+                    "sublang": sublang
+                }, function(data)
+                {
+                    var modules = [];
+                    var bootservices = [];
+                    var asyncservices = [];
+                    if (params.bootmodules)
+                    {
+                        var mods = params.bootmodules.split(",");
+                        for (var i in mods)
+                            if (mods.hasOwnProperty(i))
+                                modules.push(mods[i]);
+                    }
+                    if (params.bootservices)
+                    {
+                        var mods = params.bootservices.split(",");
+                        for (var i in mods)
+                            if (mods.hasOwnProperty(i))
+                                bootservices.push(mods[i]);
+                    }
+                    if (params.asyncservices)
+                    {
+                        var mods = params.asyncservices.split(",");
+                        for (var i in mods)
+                            if (mods.hasOwnProperty(i))
+                                asyncservices.push(mods[i]);
+                    }
+                    for (var i in data.services[0])
+                        if (data.services[0].hasOwnProperty(i))
+                            asyncservices.push(data.services[0][i]);
+                    for (var i in data.services[1])
+                        if (data.services[1].hasOwnProperty(i))
+                            bootservices.push(data.services[1][i]);
+                    for (var i in bootservices)
+                        if (bootservices.hasOwnProperty(i))
+                            modules.push(bootservices[i]);
+                    for (var i in asyncservices)
+                        if (asyncservices.hasOwnProperty(i))
+                            modules.push(asyncservices[i]);
+                    depend(modules, function()
+                    {
+                        runservices(bootservices, function()
+                        {
+                            delegate(document.getElementById("root"), data.rootmodule, data.rootmoduleparam);
+                            runservices(asyncservices);
+                        });
+                    });
+                });
+            });
+        }
+
+        // Run the specified services in the order they appear in the array
+        function runservices(services, callback)
+        {
+            var service = services.shift();
+            if (service)
+                depend([service], function()
+                {
+                    var modhandle = getmodule(service);
+                    if (!modhandle || !modhandle.Service)
+                        error("runservices: Module \"" + service + "\" does not contain a service!");
+                    else runningServices.push(new modhandle.Service(function()
+                    {
+                        runservices(services, callback);
+                    }));
+                });
+            else if (callback) callback();
+        }
+        
+        // Shows a loading indicator in the specified range
+        function showLoadingIndicator(range)
+        {
+            var image = document.createElement("img");
+            image.src = "static/init/loading.gif";
+            image.alt = "Loading...";
+            image.style.position = "absolute";
+            image.style.zIndex = "100000";
+            range.insertBefore(image, range.firstChild);
+            return image;
+        }
+
+        // Delegate control over a range to another module
+        function delegate(range, module, param)
+        {
+            if (module == "null") return;
+            if (range.owner && range.owner.releaseRange) range.owner.releaseRange();
+            showLoadingIndicator(range);
+            depend([module], function()
+            {
+                var modhandle = getmodule(module);
+                if (!modhandle || !modhandle.InlineUI)
+                    error("delegate: Module \"" + module + "\" does not contain an inline user interface class!");
+                else range.owner = new modhandle.InlineUI(range, param);
+            });
+        }
+
+        // Start asynchronously fetching and initialising a module and call a callback as soon
+        // as the requested module was fetched and initialised
+        function loadmodule(module, callback)
+        {
+            var basepath = "";
+            module = module.split("!");
+            if (module[1]) basepath = module[1];
+            module = module[0];
+            if (!moduleLoaded[module])
+            {
+                if (module == "null") return;
+                if (moduleLoaderSemaphore[module])
+                    moduleLoaderSemaphore[module].push(callback);
+                else
+                {
+                    moduleLoaderSemaphore[module] = [callback];
+                    var modnameparts = module.split("/");
+                    httprequest({
+                        "method": "GET",
+                        "uri": basepath + "static/" + module + "/" + modnameparts[modnameparts.length - 1] + ".js",
+                        "callback": function(data)
+                        {
+                            eval(data);
+                            var modhandle = mod;
+                            for (var i = 0; i < modnameparts.length; i++)
+                            {
+                                if (!modhandle[modnameparts[i]]) modhandle[modnameparts[i]] = [];
+                                modhandle = modhandle[modnameparts[i]];
+                            }
+                            if (!modhandle.init) modhandle.init = callthrough;
+                            modhandle.init(function()
+                            {
+                                moduleLoaded[module] = true;
+                                for (var i in moduleLoaderSemaphore[module])
+                                {
+                                    if (moduleLoaderSemaphore[module].hasOwnProperty(i))
+                                        setTimeout(moduleLoaderSemaphore[module][i], 0);
+                                }
+                                delete moduleLoaderSemaphore[module];
+                            });
+                        }
+                    });
+                }
+            }
+            else callback();
+        }
+
+        // Get a handle to the mod class of the specified module
+        function getmodule(module)
+        {
+            var modnameparts = module.split("!")[0].split("/");
+            var modhandle = mod;
+            for (var i = 0; i < modnameparts.length; i++)
+            {
+                if (!modhandle[modnameparts[i]]) return null;
+                modhandle = modhandle[modnameparts[i]];
+            }
+            return modhandle;
+        }
+
+        // Ensure that all specified modules are loaded and initialised before calling the callback
+        function depend(modules, callback)
+        {
+            var satisfied = false;
+            function internalCallback()
+            {
+                if (satisfied) return;
+                for (var i in modules)
+                {
+                    if (modules.hasOwnProperty(i))
+                        if (!moduleLoaded[modules[i].split("!")[0]]) return;
+                }
+                satisfied = true;
+                if (callback) callback();
+            }
+            for (var i in modules)
+            {
+                if (modules.hasOwnProperty(i))
+                    loadmodule(modules[i], internalCallback);
+            }
+            internalCallback();
+        }
+
+        // Issue an HTTP request and call a callback as soon as all data was received
+        function httprequest(request)
+        {
+            if (!request) return void error("httprequest: Request is not an object!");
+            if (!request.error) request.error = error;
+            if (!request.commerror) request.commerror = commerror;
+            if (!request.method) return void request.error("httprequest: No method given!");
+            if (!request.uri) return void request.error("httprequest: No URI given!");
+            if (!request.data) request.data = "";
+            if (!request.cache) request.cache = "";
+            var useclientcache = !params.noxhrcache;
+            var usebrowsercache = !params.noxhrbrowsercache;
+            var storeincache = !params.noxhrcache;
+            var cache = request.cache.split(",");
+            for (var i = 0; i < cache.length; i++)
+            {
+                if (cache[i] == "noclient")
+                {
+                    useclientcache = false;
+                    storeincache = false;
+                }
+                else if (cache[i] == "nobrowser") usebrowsercache = false;
+                else if (cache[i] == "none")
+                {
+                    useclientcache = false;
+                    usebrowsercache = false;
+                    storeincache = false;
+                }
+                else if (cache[i] == "nostore") storeincache = false;
+                else if (cache[i] == "store") storeincache = true;
+            }
+            if (useclientcache && httpCache[request.uri] && httpCache[request.uri][request.method]
+                && httpCache[request.uri][request.method][request.data])
+                return void request.callback(httpCache[request.uri][request.method][request.data]);
+            var requestObj = new XMLHttpRequest();
+            var lastpos = 0;
+            requestObj.onreadystatechange = function()
+            {
+                if (request.stream && requestObj.responseText.length != lastpos)
+                {
+                    var data = requestObj.responseText;
+                    var newdata = data.substring(lastpos, data.length);
+                    lastpos = data.length;
+                    if (request.streamcallback) request.streamcallback(newdata, requestObj);
+                }
+                if (requestObj.readyState == 4)
+                {
+                    if (!request.noindicator)
+                    {
+                        httpRunning--;
+                        if (httpRunning == 0)
+                        {
+                            fadeLoadingDirection = -1;
+                            if (fadeLoadingInterval) clearInterval(fadeLoadingInterval);
+                            fadeLoadingInterval = setInterval("fadeLoading();", 50);
+                        }
+                    }
+                    if (requestObj.status == 200)
+                    {
+                        var data = requestObj.responseText;
+                        var retry = data.search(/;RETRY:\/\//);
+                        var errstr = data.search(/;ERROR:\/\//);
+                        if (retry != -1) httprequest(request);
+                        else if (errstr != -1) request.error(data.substring(errstr + 9, data.length));
+                        else
+                        {
+                            if (storeincache)
+                            {
+                                if (!httpCache[request.uri]) httpCache[request.uri] = {};
+                                if (!httpCache[request.uri][request.method])
+                                    httpCache[request.uri][request.method] = {};
+                                httpCache[request.uri][request.method][request.data] = data;
+                            }
+                            if (request.callback) request.callback(data, requestObj);
+                        }
+                    }
+                    else
+                    {
+                        var error = request.error;
+                        if (requestObj.status == 0 || requestObj.status > 999) error = request.commerror;
+                        error("httprequest: Error " + requestObj.status + " occurred during HTTP transaction "
+                              + "(\"" + request.uri + "\":\"" + request.method + "\":\"" + request.data + "\")!");
+                    }
+                }
+            };
+            requestObj.open(request.method, request.uri, true);
+            if (request.header)
+            {
+                for (var header in request.header)
+                {
+                    if (request.header.hasOwnProperty(header))
+                        requestObj.setRequestHeader(header, request.header[header]);
+                }
+            }
+            if (!usebrowsercache)
+                requestObj.setRequestHeader("If-Modified-Since", "Sat, 1 Jan 2000 00:00:00 GMT");
+            if (!request.noindicator)
+            {
+                httpRunning++;
+                if (httpRunning == 1)
+                {
+                    fadeLoadingDirection = 1;
+                    if (fadeLoadingInterval) clearInterval(fadeLoadingInterval);
+                    fadeLoadingInterval = setInterval("fadeLoading();", 50);
+                }
+            }
+            requestObj.send(request.data);
+            return requestObj;
+        }
+
+        // Alert with callback
+        function alertwrapper(data, callback)
+        {
+            log(data);
+            alert(data);
+            if (callback) callback();
+        }
+
+        // Dummy notify handler, only logs notifications to the firebug console
+        function fakenotify(title, data)
+        {
+            loginfo(title + "\n" + data);
+        }
+
+        // Dummy NLS translator, will be replaced as soon as a proper one is loaded
+        function nls(message)
+        {
+            return message;
+        }
+
+        // Log an error to the firebug console, if it is connected
+        function log(error)
+        {
+            logwarn(error);
+        }
+
+        // Log an error to the firebug console, if it is connected
+        function loginfo(error)
+        {
+            if (window.console && console.info) console.info(error);
+        }
+
+        // Log an error to the firebug console, if it is connected
+        function logwarn(error)
+        {
+            if (window.console && console.warn) console.warn(error);
+        }
+
+        // Log an error to the firebug console, if it is connected
+        function logerror(error)
+        {
+            if (window.console && console.error) console.error(error);
+        }
+
+        // Log an error to the firebug console, if it is connected
+        function logdebug(error)
+        {
+            if (window.console && console.debug) console.debug(error);
+        }
+
+        // Die because of a communication error
+        function commerror(e)
+        {
+            log(e);
+            document.getElementsByTagName("body")[0].innerHTML = "<div class='error_disconnect'>"
+                                                               + nls("Disconnected") + "</div>";
+        }
+
+        // Text selection governor
+        function selectGovernor(e)
+        {
+            if (!e) e = window.event;  // IE
+            if (window.onmousedown) window.onmousedown(e);
+            var obj = e.target;
+            if (!obj) obj = e.srcElement;
+            while (obj)
+            {
+                if (obj.allowSelect || obj.allowSelect == false) return obj.allowSelect == false ? killEvent(e) : true;
+                if (obj.nodeType == 1 && (obj.nodeName.toUpperCase() == "INPUT" || obj.nodeName.toUpperCase() == "SELECT"
+                                       || obj.nodeName.toUpperCase() == "TEXTAREA")) return true;
+                obj = obj.parentNode;
+            }
+            return killEvent(e);
+        }
+
+        // IE DND governor
+        function dragGovernor(e)
+        {
+            if (!e) e = window.event;  // IE
+            var obj = e.target;
+            if (!obj) obj = e.srcElement;
+            while (obj)
+            {
+                if (obj.allowDrag || obj.allowDrag == false) return obj.allowDrag == false ? killEvent(e) : true;
+                obj = obj.parentNode;
+            }
+            return killEvent(e);
+        }
+
+        // Context menu governor
+        function contextGovernor(e)
+        {
+            if (!e) e = window.event;  // IE
+            var obj = e.target;
+            if (!obj) obj = e.srcElement;
+            while (obj)
+            {
+                if (obj.customContextMenu) return obj.customContextMenu(e);
+                if (obj.allowContextMenu || obj.allowContextMenu == false) return obj.allowContextMenu == false ? killEvent(e) : true;
+                if (obj.nodeType == 1 && (obj.nodeName.toUpperCase() == "INPUT" || obj.nodeName.toUpperCase() == "SELECT"
+                                       || obj.nodeName.toUpperCase() == "TEXTAREA")) return true;
+                obj = obj.parentNode;
+            }
+            return killEvent(e);
+        }
+
+        // Brutally murders every JS/DOM event it can get it's fingers on
+        function killEvent(e)
+        {
+            if (!e) e = window.event;
+            if (!e) return false;
+            e.cancel = true;
+            e.returnValue = false;
+            e.cancelBubble = true;
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.preventDefault) e.preventDefault();
+            return false;
+        }
+
+        // Dummy callback that does nothing
+        function nullfunc()
+        {
+        }
+
+        // Dummy callback that returns true
+        function truefunc()
+        {
+            return true;
+        }
+
+        // Dummy callback that returns false
+        function falsefunc()
+        {
+            return false;
+        }
+
+        // Dummy function that only calls a callback provided as an argument
+        function callthrough(callback)
+        {
+            callback();
+        }
+
+        function fadeLoading()
+        {
+            if (fadeLoadingState * fadeLoadingDirection == 25) return void clearInterval(fadeLoadingInterval);
+            fadeLoadingState += fadeLoadingDirection;
+            document.getElementById("loading").style.opacity = .5 + fadeLoadingState / 50;
+            if (/MSIE [4-8]/.test(navigator.userAgent))
+                document.getElementById("loading").style.filter = "Alpha(opacity=" + (50 + fadeLoadingState * 2)
+                                                                + ",finishopacity=" + (50 + fadeLoadingState * 2) + ",style=2)";
+        }
+
+        /*@cc_on @if (@_win32 && @_jscript_version >= 5) if (!window.XMLHttpRequest)
+            window.XMLHttpRequest = function() { return new ActiveXObject('Microsoft.XMLHTTP') };
+        @end @*/
+
+    //]]></script>
+
+    <!-- This CSS bit is required to be able to set up objects to fill the whole screen -->
+    <style type='text/css'>/*<![CDATA[*/
+        
+        /* This makes all .windowfiller elements have the same size as the viewport or page, whatever is bigger */
+        .windowfiller
+        {
+            position: absolute;
+            top: 0px;
+            bottom: 0px;
+            left: 0px;
+            right: 0px;
+        }
+        
+        /* This makes all .parentfiller elements have the same size as their parent nodes */
+        .parentfiller
+        {
+            height: 100%;
+            width: 100%;
+            position: relative;
+        }
+        
+        /* We use tables mainly for positioning purposes, so get rid of all this spacing */
+        table
+        {
+            border-collapse: collapse;
+        }
+        td
+        {
+            padding: 0px;
+            vertical-align: top;
+        }
+        
+        /* Hack to get something like white-space=pre-wrap in non-css2.1-browsers */
+        .pre
+        {
+            white-space: pre;
+            white-space: pre-wrap;
+        }
+
+    /*]]>*/</style>
+    
+</head>
+
+<!-- The onLoad timer is used to wait for the browser to finish setting up the document
+     tree before starting the JS core initialisation. -->
+<body onload='setTimeout(init,0);'>
+    <div style='position: absolute; z-index: 100000;' id='loading'>
+        <img src='static/init/loading.gif' alt='Loading...' />
+    </div>
+    <noscript>
+        Sorry, this web application heavily relies on Javascript, which is either
+        disabled or not supported by your browser. Please enable the execution
+        of Javascript in your browser's security settings.
+    </noscript>
+    <div class='windowfiller' id='container'>
+        <div class='parentfiller' id='root' />
+    </div>
+</body>
+</html>
