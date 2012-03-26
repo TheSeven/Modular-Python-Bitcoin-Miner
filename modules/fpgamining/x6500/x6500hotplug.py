@@ -154,12 +154,14 @@ class X6500HotplugWorker(BaseWorker):
     if not "useftd2xx" in self.settings:
       self.settings.useftd2xx = self.d2xx_available and not self.pyusb_available
     if self.settings.useftd2xx == "false": self.settings.useftd2xx = False
+    else: self.settings.useftd2xx = not not self.settings.useftd2xx
     if not "takeover" in self.settings: self.settings.takeover = self.pyusb_available
     if not "uploadfirmware" in self.settings: self.settings.uploadfirmware = True
     if not "firmware" in self.settings or not self.settings.firmware:
       self.settings.firmware = "modules/fpgamining/x6500/firmware/x6500.bit"
     if not "blacklist" in self.settings: self.settings.blacklist = True
     if self.settings.blacklist == "false": self.settings.blacklist = False
+    else: self.settings.blacklist = not not self.settings.blacklist
     if not "boards" in self.settings: self.settings.boards = []
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
     self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
