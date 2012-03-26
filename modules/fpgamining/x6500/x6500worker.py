@@ -102,6 +102,7 @@ class X6500Worker(BaseWorker):
     if not "useftd2xx" in self.settings:
       self.settings.useftd2xx = self.d2xx_available and not self.pyusb_available
     if self.settings.useftd2xx == "false": self.settings.useftd2xx = False
+    else: self.settings.useftd2xx = not not self.settings.useftd2xx
     if not "takeover" in self.settings: self.settings.takeover = False
     if not "uploadfirmware" in self.settings: self.settings.uploadfirmware = True
     if not "firmware" in self.settings or not self.settings.firmware:

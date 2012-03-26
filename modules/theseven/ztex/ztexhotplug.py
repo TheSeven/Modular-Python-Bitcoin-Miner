@@ -112,6 +112,7 @@ class ZtexHotplugWorker(BaseWorker):
       self.settings.firmware = "modules/ztex/firmware/"
     if not "blacklist" in self.settings: self.settings.blacklist = True
     if self.settings.blacklist == "false": self.settings.blacklist = False
+    else: self.settings.blacklist = not not self.settings.blacklist
     if not "boards" in self.settings: self.settings.boards = []
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
