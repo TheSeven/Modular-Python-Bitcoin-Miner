@@ -23,6 +23,7 @@
 import time
 import struct
 import threading
+from array import array
 from .jtag import JTAG
 
 class DeviceNotOpened(Exception): pass
@@ -382,7 +383,7 @@ class FT232R_PyUSB:
   def getBitMode(self):
     if self.handle is None:
       raise DeviceNotOpened()
-    return self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index)[0]
+    return array("B", self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index)[0])
     
   def write(self, data):
     if self.handle is None:
@@ -401,7 +402,7 @@ class FT232R_PyUSB:
     data = b""
     offset = 0
     while offset < size and time.time() < timeout:
-      ret = self.handle.bulkRead(self.inep, min(64, size - offset + 2))
+      ret = array("B", self.handle.bulkRead(self.inep, min(64, size - offset + 2)))
       data = data + struct.pack("%dB" % (len(ret) - 2), *ret[2:])
       offset = offset + len(ret) - 2
     return data
