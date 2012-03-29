@@ -194,7 +194,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       if self.runcycle > runcycle: return
       try:
         if not conn: conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
-        else: conn.sock.settimeout(self.settings.longpolltimeout)
+        elif conn.sock: conn.sock.settimeout(self.settings.longpolltimeout)
         headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions, "Connection": "Keep-Alive"}
         if self.auth != None: headers["Authorization"] = self.auth
         conn.request("GET", path, None, headers)
