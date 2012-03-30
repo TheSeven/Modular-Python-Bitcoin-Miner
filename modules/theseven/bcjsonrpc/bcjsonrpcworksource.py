@@ -130,7 +130,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         self.conn.sock.settimeout(self.settings.getworktimeout)
         response = self.conn.getresponse()
         data = response.read()
-      except: self.conn = None
+      except:
+        self.conn = None
+        raise
     with self.statelock:
       if not self.settings.longpollconnections: self.signals_new_block = False
       else:
@@ -179,7 +181,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         self.uploadconn.request("POST", self.settings.path, req, headers)
         response = self.uploadconn.getresponse()
         rdata = response.read()
-      except: self.uploadconn = None
+      except:
+        self.uploadconn = None
+        raise
     rdata = json.loads(rdata.decode("utf_8"))
     if rdata["result"] == True: return True
     if rdata["error"] != None: return rdata["error"]
