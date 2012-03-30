@@ -30,7 +30,6 @@ import time
 import usb
 import struct
 import traceback
-from array import array
 from threading import RLock
 
 
@@ -76,7 +75,7 @@ class ZtexDevice(object):
         raise Exception("Can not open the specified device, possibly due to insufficient permissions")
       raise Exception("Can not open the specified device")
 
-    descriptor = array("B", self.handle.controlMsg(0xc0, 0x22, 40, 0, 0, 100))
+    descriptor = bytes(bytearray(self.handle.controlMsg(0xc0, 0x22, 40, 0, 0, 100)))
     if len(descriptor) != 40: raise Exception("Bad ZTEX descriptor length: %d" % len(descriptor))
     size, version, magic = struct.unpack("<2BI", descriptor[:6])
     product = struct.unpack("4B", descriptor[6:10])
@@ -94,7 +93,7 @@ class ZtexDevice(object):
     self.hs_supported = ifcaps[0] & 32
     self.proxy.log("MCU firmware: %d.%d.%d.%d, version %d, serial number %s, high speed programming%s supported\n" % (product + (fwversion, sn, "" if self.hs_supported else " NOT")), 400, "B")
     
-    descriptor = array("B", self.handle.controlMsg(0xc0, 0x82, 64, 0, 0, 100))
+    descriptor = bytes(bytearray(self.handle.controlMsg(0xc0, 0x82, 64, 0, 0, 100)))
     if len(descriptor) != 64: raise Exception("Bad BTCMiner descriptor length: %d" % len(descriptor))
     version, numnonces, offset, basefreq, defaultmultiplier, maxmultiplier, hashesperclock = struct.unpack("<BBHHBBH", descriptor[:10])
     firmware = struct.unpack("54s", descriptor[10:])[0].split(b"\0", 1)[0].decode("ascii")
@@ -110,7 +109,7 @@ class ZtexDevice(object):
     maxspeed = self.base_frequency * self.maximum_multiplier * self.hashes_per_clock / 1000000
     self.proxy.log("FPGA firmware: %s, default speed: %f MH/s, maximum speed: %f MH/s\n" % (self.firmware_name, defaultspeed, maxspeed), 400, "B")
     
-    unconfigured, checksum, bytestransferred, initb, result, bitswap = struct.unpack("<BBIBBB", array("B", self.handle.controlMsg(0xc0, 0x30, 9, 0, 0, 100)))
+    unconfigured, checksum, bytestransferred, initb, result, bitswap = struct.unpack("<BBIBBB", bytes(bytearray(self.handle.controlMsg(0xc0, 0x30, 9, 0, 0, 100))))
     if unconfigured:
       self.proxy.log("Programming FPGA with firmware %s...\n" % self.firmware_name, 300, "B")
       firmwarepath = "%s/%s.bit" % (self.firmware, self.firmwarename)
@@ -124,7 +123,7 @@ class ZtexDevice(object):
       if sig2 < 0 or (sig1 >= 0 and sig1 < sig2): raise Exception("Signature not found in bitstream, wrong bit order?")
       self.handle.controlMsg(0x40, 0x31, b"", 0, 0, 100)
       if self.hs_supported:
-        ep, interface = struct.unpack("<BB", array("B", self.handle.controlMsg(0xc0, 0x33, 2, 0, 0, 100)))
+        ep, interface = struct.unpack("<BB", bytes(bytearray(self.handle.controlMsg(0xc0, 0x33, 2, 0, 0, 100))))
         self.handle.controlMsg(0x40, 0x34, b"", 0, 0, 100)
         pos = 0
         while pos < len(bitstream): pos += self.handle.bulkWrite(ep, bitstream[pos : pos + 65536], 500)
@@ -132,7 +131,7 @@ class ZtexDevice(object):
       else:
         pos = 0
         while pos < len(bitstream): pos += self.handle.controlMsg(0x40, 0x32, bitstream[pos : pos + 2048], 0, 0, 500)
-      unconfigured, checksum, bytestransferred, initb, result, bitswap = struct.unpack("<BBIBBB", array("B", self.handle.controlMsg(0xc0, 0x30, 9, 0, 0, 100)))
+      unconfigured, checksum, bytestransferred, initb, result, bitswap = struct.unpack("<BBIBBB", bytes(bytearray(self.handle.controlMsg(0xc0, 0x30, 9, 0, 0, 100))))
       if unconfigured: raise Exception("FPGA configuration failed: FPGA did not assert DONE")
       
   
@@ -148,7 +147,7 @@ class ZtexDevice(object):
   
   def read_nonces(self):
     with self.lock:
-      data = array("B", self.handle.controlMsg(0xc0, 0x81, 12 * self.num_nonces, 0, 0, 100))
+      data = bytes(bytearray(self.handle.controlMsg(0xc0, 0x81, 12 * self.num_nonces, 0, 0, 100)))
     nonces = []
     for i in range(self.num_nonces):
       values = struct.unpack("<III", data[12 * i : 12 * (i + 1)])
