@@ -124,11 +124,13 @@ class BCJSONRPCWorkSource(ActualWorkSource):
                "Content-type": "application/json", "Content-Length": len(req), "Connection": "Keep-Alive"}
     if self.auth != None: headers["Authorization"] = self.auth
     with self.connlock:
-      if not self.conn: self.conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
-      self.conn.request("POST", self.settings.path, req, headers)
-      self.conn.sock.settimeout(self.settings.getworktimeout)
-      response = self.conn.getresponse()
-      data = response.read()
+      try:
+        if not self.conn: self.conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
+        self.conn.request("POST", self.settings.path, req, headers)
+        self.conn.sock.settimeout(self.settings.getworktimeout)
+        response = self.conn.getresponse()
+        data = response.read()
+      except: self.conn = None
     with self.statelock:
       if not self.settings.longpollconnections: self.signals_new_block = False
       else:
@@ -172,10 +174,12 @@ class BCJSONRPCWorkSource(ActualWorkSource):
                "Content-type": "application/json", "Content-Length": len(req)}
     if self.auth != None: headers["Authorization"] = self.auth
     with self.uploadconnlock:
-      if not self.uploadconn: self.uploadconn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
-      self.uploadconn.request("POST", self.settings.path, req, headers)
-      response = self.uploadconn.getresponse()
-      rdata = response.read()
+      try:
+        if not self.uploadconn: self.uploadconn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
+        self.uploadconn.request("POST", self.settings.path, req, headers)
+        response = self.uploadconn.getresponse()
+        rdata = response.read()
+      except: self.uploadconn = None
     rdata = json.loads(rdata.decode("utf_8"))
     if rdata["result"] == True: return True
     if rdata["error"] != None: return rdata["error"]
