@@ -402,6 +402,6 @@ class FT232R_PyUSB:
     offset = 0
     while offset < size and time.time() < timeout:
       ret = bytes(bytearray(self.handle.bulkRead(self.inep, min(64, size - offset + 2))))
-      data = data + struct.pack("%dB" % (len(ret) - 2), *ret[2:])
+      data = data + ret[2:]
       offset = offset + len(ret) - 2
     return data
