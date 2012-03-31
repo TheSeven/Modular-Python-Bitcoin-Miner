@@ -382,7 +382,7 @@ class FT232R_PyUSB:
   def getBitMode(self):
     if self.handle is None:
       raise DeviceNotOpened()
-    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index))))
+    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index))))[0]
     
   def write(self, data):
     if self.handle is None:
