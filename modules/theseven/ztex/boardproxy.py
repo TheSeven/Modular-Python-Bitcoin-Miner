@@ -201,6 +201,7 @@ class ZtexBoardProxy(Process):
         with self.wakeup: self.wakeup.wait(self.pollinterval)
         
     except Exception as e:
+      self.log("Exception caught: %s" % traceback.format_exc(), 100, "r")
       self.error = e
       # Unblock main thread
       self.send("ping")

@@ -403,9 +403,6 @@ class X6500FPGA(BaseWorker):
       try:
         # Record our starting timestamp, in order to back off if we repeatedly die
         starttime = time.time()
-        # Exception container: If an exception occurs in the listener thread, the listener thread
-        # will store it here and terminate, and the main thread will rethrow it and then restart.
-        self.error = None
 
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
@@ -445,16 +442,11 @@ class X6500FPGA(BaseWorker):
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
         self._sendjob(job)
 
-        # If an exception occurred in the listener thread, rethrow it
-        if self.error != None: raise self.error
-
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 180 seconds should be sufficient for devices
         # down to about 50MH/s, for slower devices this timeout will need to be increased.
         if self.stats.speed: self.wakeup.wait((2**32 / 1000000. / self.stats.speed) * 1.1)
         else: self.wakeup.wait(180)
-        # If an exception occurred in the listener thread, rethrow it
-        if self.error != None: raise self.error
         # Honor shutdown flag
         if self.shutdown: break
         # We woke up, but the validation job hasn't succeeded in the mean time.
@@ -479,17 +471,12 @@ class X6500FPGA(BaseWorker):
             job.destroy()
             continue
 
-          # If an exception occurred in the listener thread, rethrow it
-          if self.error != None: raise self.error
-
           # Upload the job to the device
           self._sendjob(job)
           
           # Go through the safety checks and reduce the clock if necessary
           self.safetycheck()
           
-          # If an exception occurred in the listener thread, rethrow it
-          if self.error != None: raise self.error
           # If the job was already caught by a long poll while we were uploading it,
           # jump back to the beginning of the main loop in order to immediately fetch new work.
           # Don't check for the canceled flag before the job was accepted by the device,
@@ -498,8 +485,6 @@ class X6500FPGA(BaseWorker):
           # Wait while the device is processing the job. If nonces are sent by the device, they
           # will be processed by the listener thread. If the job gets canceled, we will be woken up.
           self.wakeup.wait(self.jobinterval)
-          # If an exception occurred in the listener thread, rethrow it
-          if self.error != None: raise self.error
 
       # If something went wrong...
       except Exception as e:
