@@ -147,7 +147,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.shutdown = True
     with self.fetcherlock: self.fetcherlock.notify_all()
     for thread in self.fetcherthreads: thread.join(1)
-    for i in range(self.uploaderthreads): self.uploadqueue.put(None)
+    for i in self.uploaderthreads: self.uploadqueue.put(None)
     for thread in self.uploaderthreads: thread.join(1)
     super(BCJSONRPCWorkSource, self)._stop()
     
