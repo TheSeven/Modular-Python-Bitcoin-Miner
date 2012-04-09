@@ -228,6 +228,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               self.runcycle += 1
               self.signals_new_block = False
         jobs = self._build_jobs(response, data, now)
+      except:
+        self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
+        self._handle_error()
       finally:
         with self.fetcherlock: self.fetchersrunning -= 1
       if jobs:
