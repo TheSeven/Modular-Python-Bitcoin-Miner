@@ -181,7 +181,7 @@ class ActualWorkSource(BaseWorkSource):
       thread = Thread(None, self.nonce_found_thread, self.settings.name + "_nonce_found_" + hexlify(nonce).decode("ascii"), (job, data, nonce, noncediff))
       thread.daemon = True
       thread.start()
-    else: self.none_found_thread(job, data, nonce, noncediff)
+    else: self.nonce_found_thread(job, data, nonce, noncediff)
 
     
   def nonce_found_thread(self, job, data, nonce, noncediff):

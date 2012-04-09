@@ -35,6 +35,8 @@ from binascii import hexlify, unhexlify
 from threading import Thread, RLock, Condition
 from core.actualworksource import ActualWorkSource
 from core.job import Job
+try: from queue import Queue
+except: from Queue import Queue
 try: import http.client as http_client
 except ImportError: import httplib as http_client
 
@@ -56,8 +58,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     "password": {"title": "Password", "type": "password", "position": 1120},
     "useragent": {"title": "User agent string", "type": "string", "position": 1200},
     "getworkconnections": {"title": "Job fetching connnections", "type": "int", "position": 1300},
-    "longpollconnections": {"title": "Long poll connnections", "type": "int", "position": 1400},
-    "expirymargin": {"title": "Job expiry safety margin", "type": "int", "position": 1500},
+    "uploadconnections": {"title": "Share upload connnections", "type": "int", "position": 1400},
+    "longpollconnections": {"title": "Long poll connnections", "type": "int", "position": 1500},
+    "expirymargin": {"title": "Job expiry safety margin", "type": "int", "position": 1600},
   })
   
 
@@ -66,8 +69,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.fetcherthreads = []
     self.fetchersrunning = 0
     self.fetcherspending = 0
-    self.uploadconnlock = RLock()
-    self.uploadconn = None
+    self.uploadqueue = Queue()
+    self.uploaderthreads = []
     super(BCJSONRPCWorkSource, self).__init__(core, state)
     self.extensions = "longpoll midstate rollntime"
     self.runcycle = 0
@@ -100,6 +103,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     else: self.useragent = "%s (%s)" % (self.core.__class__.version, self.__class__.version)
     if not "getworkconnections" in self.settings: self.settings.getworkconnections = 1
     if self.started and self.settings.getworkconnections != self.getworkconnections: self.async_restart()
+    if not "uploadconnections" in self.settings: self.settings.uploadconnections = 1
+    if self.started and self.settings.uploadconnections != self.uploadconnections: self.async_restart()
     if not "longpollconnections" in self.settings: self.settings.longpollconnections = 1
     if self.started and self.settings.longpollconnections != self.longpollconnections: self.async_restart()
     if not "expirymargin" in self.settings: self.settings.expirymargin = 5
@@ -112,6 +117,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.fetchersrunning = 0
     self.fetcherspending = 0
     self.fetcherthreads = []
+    self.uploadqueue = Queue()
+    self.uploaderthreads = []
     
     
   def _start(self):
@@ -119,6 +126,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.host = self.settings.host
     self.port = self.settings.port
     self.getworkconnections = self.settings.getworkconnections
+    self.uploadconnections = self.settings.uploadconnections
     self.longpollconnections = self.settings.longpollconnections
     if not self.settings.host or not self.settings.port: return
     self.shutdown = False
@@ -127,6 +135,11 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       thread.daemon = True
       thread.start()
       self.fetcherthreads.append(thread)
+    for i in range(self.uploadconnections):
+      thread = Thread(None, self.uploader, "%s_uploader_%d" % (self.settings.name, i))
+      thread.daemon = True
+      thread.start()
+      self.uploaderthreads.append(thread)
     
     
   def _stop(self):
@@ -134,6 +147,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.shutdown = True
     with self.fetcherlock: self.fetcherlock.notify_all()
     for thread in self.fetcherthreads: thread.join(1)
+    for i in range(self.uploaderthreads): self.uploadqueue.put(None)
+    for thread in self.uploaderthreads: thread.join(1)
     super(BCJSONRPCWorkSource, self)._stop()
     
     
@@ -218,29 +233,51 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       if jobs:
         self._push_jobs(jobs)
         self.core.log("%s: Got %d jobs from getwork response\n" % (self.settings.name, len(jobs)), 500)
+        
+        
+  def nonce_found(self, job, data, nonce, noncediff):
+    self.uploadqueue.put((job, data, nonce, noncediff))
       
       
-  def _nonce_found(self, job, data, nonce, noncediff):
-    req = json.dumps({"method": "getwork", "params": [hexlify(data).decode("ascii")], "id": 0}).encode("utf_8")
-    headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
-               "Content-type": "application/json", "Content-Length": len(req)}
-    if self.auth != None: headers["Authorization"] = self.auth
-    with self.uploadconnlock:
-      try:
-        if not self.uploadconn: self.uploadconn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
-        self.uploadconn.request("POST", self.settings.path, req, headers)
-        response = self.uploadconn.getresponse()
-        rdata = response.read()
-      except:
-        self.uploadconn = None
-        raise
-    rdata = json.loads(rdata.decode("utf_8"))
-    if rdata["result"] == True: return True
-    if rdata["error"] != None: return rdata["error"]
-    headers = response.getheaders()
-    for h in headers:
-      if h[0].lower() == "x-reject-reason":
-        return h[1]
+  def uploader(self):
+    conn = None
+    while not self.shutdown:
+      share = self.uploadqueue.get()
+      if not share: continue
+      job, data, nonce, noncediff = share
+      tries = 0
+      while True:
+        try:
+          req = json.dumps({"method": "getwork", "params": [hexlify(data).decode("ascii")], "id": 0}).encode("utf_8")
+          headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
+                     "Content-type": "application/json", "Content-Length": len(req)}
+          if self.auth != None: headers["Authorization"] = self.auth
+          try:
+            if not conn: conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
+            conn.request("POST", self.settings.path, req, headers)
+            response = conn.getresponse()
+            rdata = response.read()
+          except:
+            conn = None
+            raise
+          rdata = json.loads(rdata.decode("utf_8"))
+          result = False
+          if rdata["result"] == True: result = True
+          elif rdata["error"] != None: result =  rdata["error"]
+          else:
+            headers = response.getheaders()
+            for h in headers:
+              if h[0].lower() == "x-reject-reason":
+                result = h[1]
+                break
+          self._handle_success()
+          job.nonce_handled_callback(nonce, noncediff, result)
+          break
+        except:
+          self.core.log("Error while sending share %s (difficulty %.5f) to %s: %s\n" % (hexlify(nonce).decode("ascii"), noncediff, self.settings.name, traceback.format_exc()), 200, "y")
+          tries += 1
+          self._handle_error(True)
+          time.sleep(min(30, tries))
 
 
   def _longpollingworker(self, host, port, path):
