@@ -47,19 +47,12 @@ class StatisticsList(list):
     
     
   def calculatefieldsum(self, field):
-    sum = 0
-    for element in self: sum = sum + element[field]
-    return sum
+    return sum(element[field] for element in self)
 
     
   def calculatefieldavg(self, field):
     if len(self) == 0: return 0
-    sum = 0
-    count = 0
-    for element in self:
-      sum = sum + element[field]
-      count = count + 1
-    return 1. * sum / count
+    return 1. * sum(element[field] in self) / len(self)
     
     
     

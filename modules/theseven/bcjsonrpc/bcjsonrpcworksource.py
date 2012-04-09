@@ -32,7 +32,7 @@ import struct
 import base64
 import traceback
 from binascii import hexlify, unhexlify
-from threading import Thread, RLock
+from threading import Thread, RLock, Condition
 from core.actualworksource import ActualWorkSource
 from core.job import Job
 try: import http.client as http_client
@@ -55,14 +55,17 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     "username": {"title": "User name", "type": "string", "position": 1100},
     "password": {"title": "Password", "type": "password", "position": 1120},
     "useragent": {"title": "User agent string", "type": "string", "position": 1200},
-    "longpollconnections": {"title": "Long poll connnections", "type": "int", "position": 1300},
-    "expirymargin": {"title": "Job expiry safety margin", "type": "int", "position": 1400},
+    "getworkconnections": {"title": "Job fetching connnections", "type": "int", "position": 1300},
+    "longpollconnections": {"title": "Long poll connnections", "type": "int", "position": 1400},
+    "expirymargin": {"title": "Job expiry safety margin", "type": "int", "position": 1500},
   })
   
 
   def __init__(self, core, state = None):
-    self.connlock = RLock()
-    self.conn = None
+    self.fetcherlock = Condition()
+    self.fetcherthreads = []
+    self.fetchersrunning = 0
+    self.fetcherspending = 0
     self.uploadconnlock = RLock()
     self.uploadconn = None
     super(BCJSONRPCWorkSource, self).__init__(core, state)
@@ -81,8 +84,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     if not "longpollresponsetimeout" in self.settings or not self.settings.longpollresponsetimeout:
       self.settings.longpollresponsetimeout = 1800
     if not "host" in self.settings: self.settings.host = ""
-    if not "port" in self.settings or not self.settings.port:
-      self.settings.port = 8332
+    if self.started and self.settings.host != self.host: self.async_restart()
+    if not "port" in self.settings or not self.settings.port: self.settings.port = 8332
+    if self.started and self.settings.port != self.port: self.async_restart()
     if not "path" in self.settings or not self.settings.path:
       self.settings.path = "/"
     if not "username" in self.settings: self.settings.username = ""
@@ -94,20 +98,42 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     if not "useragent" in self.settings: self.settings.useragent = ""
     if self.settings.useragent: self.useragent = self.settings.useragent
     else: self.useragent = "%s (%s)" % (self.core.__class__.version, self.__class__.version)
+    if not "getworkconnections" in self.settings: self.settings.getworkconnections = 1
+    if self.started and self.settings.getworkconnections != self.getworkconnections: self.async_restart()
     if not "longpollconnections" in self.settings: self.settings.longpollconnections = 1
+    if self.started and self.settings.longpollconnections != self.longpollconnections: self.async_restart()
     if not "expirymargin" in self.settings: self.settings.expirymargin = 5
-    with self.connlock: self.conn = None
-    with self.uploadconnlock: self.uploadconn = None
 
     
   def _reset(self):
     super(BCJSONRPCWorkSource, self)._reset()
     self.stats.supports_rollntime = None
     self.longpollurl = None
+    self.fetchersrunning = 0
+    self.fetcherspending = 0
+    self.fetcherthreads = []
+    
+    
+  def _start(self):
+    super(BCJSONRPCWorkSource, self)._start()
+    self.host = self.settings.host
+    self.port = self.settings.port
+    self.getworkconnections = self.settings.getworkconnections
+    self.longpollconnections = self.settings.longpollconnections
+    if not self.settings.host or not self.settings.port: return
+    self.shutdown = False
+    for i in range(self.getworkconnections):
+      thread = Thread(None, self.fetcher, "%s_fetcher_%d" % (self.settings.name, i))
+      thread.daemon = True
+      thread.start()
+      self.fetcherthreads.append(thread)
     
     
   def _stop(self):
     self.runcycle += 1
+    self.shutdown = True
+    self.fetcherlock.notify_all()
+    for thread in self.fetcherthreads: thread.join(1)
     super(BCJSONRPCWorkSource, self)._stop()
     
     
@@ -115,59 +141,84 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     super(BCJSONRPCWorkSource, self)._get_statistics(stats, childstats)
     stats.supports_rollntime = self.stats.supports_rollntime
     
+  
+  def _get_running_fetcher_count(self):
+    return self.fetchersrunning
+  
+  
+  def _start_fetcher(self):
+    count = len(self.fetcherthreads)
+    if not count: return False
+    with self.fetcherlock:
+      if self.fetchersrunning >= count: return 0
+      self.fetchersrunning += 1
+      self.fetcherspending += 1
+      self.fetcherlock.notify()
+    return 1
 
-  def _get_job(self):
-    if not self.settings.host: return []
-    now = time.time()
-    req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
-    headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
-               "Content-type": "application/json", "Content-Length": len(req), "Connection": "Keep-Alive"}
-    if self.auth != None: headers["Authorization"] = self.auth
-    with self.connlock:
+  def fetcher(self):
+    conn = None
+    while not self.shutdown:
+      with self.fetcherlock:
+        self.fetcherlock.wait()
+        if not self.fetcherspending: continue
+        self.fetcherspending -= 1
+      jobs = None
       try:
-        if not self.conn: self.conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
-        self.conn.request("POST", self.settings.path, req, headers)
-        self.conn.sock.settimeout(self.settings.getworktimeout)
-        response = self.conn.getresponse()
-        data = response.read()
-      except:
-        self.conn = None
-        raise
-    with self.statelock:
-      if not self.settings.longpollconnections: self.signals_new_block = False
-      else:
-        lpfound = False
-        headers = response.getheaders()
-        for h in headers:
-          if h[0].lower() == "x-long-polling":
-            lpfound = True
-            url = h[1]
-            if url == self.longpollurl: break
-            self.longpollurl = url
-            try:
-              if url[0] == "/": url = "http://" + self.settings.host + ":" + str(self.settings.port) + url
-              if url[:7] != "http://": raise Exception("Long poll URL isn't HTTP!")
-              parts = url[7:].split("/", 1)
-              if len(parts) == 2: path = "/" + parts[1]
-              else: path = "/"
-              parts = parts[0].split(":")
-              if len(parts) != 2: raise Exception("Long poll URL contains host but no port!")
-              host = parts[0]
-              port = int(parts[1])
-              self.core.log("Found long polling URL for %s: %s\n" % (self.settings.name, url), 500, "g")
-              self.signals_new_block = True
+        req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
+        headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
+                   "Content-type": "application/json", "Content-Length": len(req), "Connection": "Keep-Alive"}
+        if self.auth != None: headers["Authorization"] = self.auth
+        try:
+          if not conn: conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
+          now = time.time()
+          conn.request("POST", self.settings.path, req, headers)
+          conn.sock.settimeout(self.settings.getworktimeout)
+          response = conn.getresponse()
+          data = response.read()
+        except:
+          conn = None
+          raise
+        with self.statelock:
+          if not self.settings.longpollconnections: self.signals_new_block = False
+          else:
+            lpfound = False
+            headers = response.getheaders()
+            for h in headers:
+              if h[0].lower() == "x-long-polling":
+                lpfound = True
+                url = h[1]
+                if url == self.longpollurl: break
+                self.longpollurl = url
+                try:
+                  if url[0] == "/": url = "http://" + self.settings.host + ":" + str(self.settings.port) + url
+                  if url[:7] != "http://": raise Exception("Long poll URL isn't HTTP!")
+                  parts = url[7:].split("/", 1)
+                  if len(parts) == 2: path = "/" + parts[1]
+                  else: path = "/"
+                  parts = parts[0].split(":")
+                  if len(parts) != 2: raise Exception("Long poll URL contains host but no port!")
+                  host = parts[0]
+                  port = int(parts[1])
+                  self.core.log("Found long polling URL for %s: %s\n" % (self.settings.name, url), 500, "g")
+                  self.signals_new_block = True
+                  self.runcycle += 1
+                  for i in range(self.settings.longpollconnections):
+                    thread = Thread(None, self._longpollingworker, "%s_longpolling_%d" % (self.settings.name, i), (host, port, path))
+                    thread.daemon = True
+                    thread.start()
+                except Exception as e:
+                  self.core.log("Invalid long polling URL for %s: %s (%s)\n" % (self.settings.name, url, str(e)), 200, "y")
+                break
+            if self.signals_new_block and not lpfound:
               self.runcycle += 1
-              for i in range(self.settings.longpollconnections):
-                thread = Thread(None, self._longpollingworker, "%s_longpolling_%d" % (self.settings.name, i), (host, port, path))
-                thread.daemon = True
-                thread.start()
-            except Exception as e:
-              self.core.log("Invalid long polling URL for %s: %s (%s)\n" % (self.settings.name, url, str(e)), 200, "y")
-            break
-        if self.signals_new_block and not lpfound:
-          self.runcycle += 1
-          self.signals_new_block = False
-    return self._build_jobs(response, data, now)
+              self.signals_new_block = False
+        jobs = self._build_jobs(response, data, now)
+      finally:
+        with self.fetcherlock: self.fetchersrunning -= 1
+      if jobs:
+        self._push_jobs(jobs)
+        self.core.log("%s: Got %d jobs from getwork response\n" % (self.settings.name, len(jobs)), 500)
       
       
   def _nonce_found(self, job, data, nonce, noncediff):

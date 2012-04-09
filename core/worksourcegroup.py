@@ -166,10 +166,11 @@ class WorkSourceGroup(BaseWorkSource):
       return self.last_index
       
       
-  def _get_job_round(self, force = False):
+  def _start_fetcher(self, force = False):
     with self.childlock:
       children = [child for child in self.children]
       startindex = self._get_start_index()
+    best = False
     found = False
     while not found:
       index = startindex
@@ -179,28 +180,32 @@ class WorkSourceGroup(BaseWorkSource):
         mhashes = 0
         if not worksource.is_group: mhashes = 2**32 / 1000000.
         if force or worksource.mhashes_pending >= mhashes:
-          if mhashes: worksource.add_pending_mhashes(-mhashes)
-          job = worksource.get_job()
-          if job:
-            if mhashes: worksource.add_pending_mhashes(mhashes)
-            return job
-          self.add_pending_mhashes(mhashes)
           found = True
+          if mhashes: worksource.add_pending_mhashes(-mhashes)
+          result = worksource.start_fetchers(1)
+          if result is not False:
+            if mhashes: worksource.add_pending_mhashes(mhashes)
+            if result: return result
+            best = result
         index += 1
         if index >= len(children): index = 0
         first = False
       if not found: self._distribute_mhashes()
-    return []
+    return best
+    
+    
+  def get_running_fetcher_count(self):
+    return sum(child.get_running_fetcher_count() for child in self.children)
 
     
-  def get_job(self):
-    if not self.started or not self.settings.enabled or not self.children: return []
-    job = self._get_job_round()
-    if job: return job
-    job = self._get_job_round(True)
-    if job: return job
-    if self.parent:
-      mhashes = 2**32 / 1000000.
-      self.add_pending_mhashes(-mhashes)
-      self.parent.add_pending_mhashes(mhashes)
-    return []
+  def start_fetchers(self, count):
+    if not self.started or not self.settings.enabled or not self.children or not count: return False
+    started = 0
+    result = False
+    while started < count:
+      result = self._start_fetcher()
+      if not result: result = self._start_fetcher(True)
+      if not result: break
+      started += result
+    if started: return started
+    return result
