@@ -160,8 +160,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     conn = None
     while not self.shutdown:
       with self.fetcherlock:
-        self.fetcherlock.wait()
-        if not self.fetcherspending: continue
+        while not self.fetcherspending: self.fetcherlock.wait()
         self.fetcherspending -= 1
       jobs = None
       try:
