@@ -132,7 +132,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   def _stop(self):
     self.runcycle += 1
     self.shutdown = True
-    self.fetcherlock.notify_all()
+    with self.fetcherlock: self.fetcherlock.notify_all()
     for thread in self.fetcherthreads: thread.join(1)
     super(BCJSONRPCWorkSource, self)._stop()
     
