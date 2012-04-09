@@ -110,8 +110,8 @@ class WorkQueue(Startable):
   def flush_all_of_work_source(self, worksource):
     cancel = []
     with self.lock:
-      for list in self.lists:
-        for job in list:
+      for expiry in self.lists:
+        for job in self.lists[expiry]:
           if job.worksource == worksource:
             list.remove(job)
             if int(job.expiry) > self.expirycutoff: self.count -= 1
