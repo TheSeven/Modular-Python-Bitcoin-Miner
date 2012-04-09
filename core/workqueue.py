@@ -116,8 +116,8 @@ class WorkQueue(Startable):
             list.remove(job)
             if int(job.expiry) > self.expirycutoff: self.count -= 1
             job.destroy()
-      for list in self.takenlists:
-        for job in list:
+      for expiry in self.takenlists:
+        for job in self.takenlists[expiry]:
           if job.worksource == worksource:
             list.remove(job)
             cancel.append(job)
