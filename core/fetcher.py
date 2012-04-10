@@ -49,8 +49,6 @@ class Fetcher(Startable):
     super(Fetcher, self)._reset()
     self.speedchanged = True
     self.queuetarget = 5
-    self.fetchercount = 0
-    self.threads = []
     
 
   def _start(self):
@@ -65,7 +63,6 @@ class Fetcher(Startable):
     self.shutdown = True
     self.wakeup()
     self.controllerthread.join(10)
-    for thread in self.threads: thread.join(10)
     super(Fetcher, self)._stop()
       
       
@@ -90,25 +87,16 @@ class Fetcher(Startable):
             for worker in self.core.workers:
               jobspersecond += worker.get_jobs_per_second()
               paralleljobs += worker.get_parallel_jobs()
-          self.queuetarget = max(2, paralleljobs, jobspersecond * 30)
-        while self.core.workqueue.count + self.fetchercount < self.queuetarget:
-          try:
-            thread = Thread(None, self.fetcherthread, "fetcher_worker")
-            thread.daemon = True
-            thread.start()
-            self.threads.append(thread)
-            self.fetchercount += 1
-          except:
-            self.core.log("Fetcher: Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
-            time.sleep(1)
-        self.lock.wait()
-
+          self.queuetarget = max(2, paralleljobs, jobspersecond * 20)
         
-  def fetcherthread(self):
-    try:
-      jobs = self.core.get_root_work_source().get_job()
-      if jobs: self.core.workqueue.add_jobs(jobs)
-    except: self.core.log("Fetcher: Error while fetching job: %s\n" % traceback.format_exc(), 200, "r")
-    with self.lock:
-      self.threads.remove(current_thread())
-      self.fetchercount -= 1
+        worksource = self.core.get_root_work_source()
+        queuecount = self.core.workqueue.count
+        fetchercount = worksource.get_running_fetcher_count()
+        startfetchers = self.queuetarget - queuecount - fetchercount
+        if startfetchers <= 0: self.lock.wait()
+        try:
+          started = worksource.start_fetchers(startfetchers)
+          if not started: self.lock.wait(0.1)
+        except:
+          self.core.log("Fetcher: Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
+          time.sleep(1)

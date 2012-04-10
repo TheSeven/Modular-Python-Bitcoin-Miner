@@ -63,6 +63,11 @@ class ActualWorkSource(BaseWorkSource):
     self.estimated_expiry = 60
     
       
+  def _stop(self):
+    self.core.workqueue.flush_all_of_work_source(self)
+    super(ActualWorkSource, self)._stop()
+    
+    
   def _get_statistics(self, stats, childstats):
     super(ActualWorkSource, self)._get_statistics(stats, childstats)
     stats.signals_new_block = self.signals_new_block
@@ -148,28 +153,35 @@ class ActualWorkSource(BaseWorkSource):
     if jobs: self.core.workqueue.add_jobs(jobs)
       
       
-  def get_job(self):
-    if not self.started or not self.settings.enabled or self._is_locked_out(): return []
+  def get_running_fetcher_count(self):
+    if not self.started: return 0
+    return self._get_running_fetcher_count()
+
+    
+  def start_fetchers(self, count):
+    if not self.started or not self.settings.enabled or self._is_locked_out() or not count: return False
+    started = 0
     try:
-      with self.stats.lock: self.stats.jobrequests += 1
-      jobs = self._get_job()
-      if jobs:
-        self._handle_success(jobs)
-        self.core.log("%s: Got %d jobs\n" % (self.settings.name, len(jobs)), 500)
-      else: self._handle_error()
-      return jobs
+      while started < count:
+        result = self._start_fetcher()
+        if not result:
+          if started: return started
+          return result
+        started += result
+        with self.stats.lock: self.stats.jobrequests += 1
     except:
       self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
       self._handle_error()
-      return []
-  
+    if started: return started
+    return False
+
 
   def nonce_found(self, job, data, nonce, noncediff):
     if self.nonce_found_async:
       thread = Thread(None, self.nonce_found_thread, self.settings.name + "_nonce_found_" + hexlify(nonce).decode("ascii"), (job, data, nonce, noncediff))
       thread.daemon = True
       thread.start()
-    else: self.none_found_thread(job, data, nonce, noncediff)
+    else: self.nonce_found_thread(job, data, nonce, noncediff)
 
     
   def nonce_found_thread(self, job, data, nonce, noncediff):
