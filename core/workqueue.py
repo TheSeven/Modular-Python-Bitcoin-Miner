@@ -111,15 +111,17 @@ class WorkQueue(Startable):
     cancel = []
     with self.lock:
       for expiry in self.lists:
-        for job in self.lists[expiry]:
+        listcopy = [element for element in self.lists[expiry]]
+        for job in listcopy:
           if job.worksource == worksource:
-            list.remove(job)
+            self.lists[expiry].remove(job)
             if int(job.expiry) > self.expirycutoff: self.count -= 1
             job.destroy()
       for expiry in self.takenlists:
-        for job in self.takenlists[expiry]:
+        listcopy = [element for element in self.takenlists[expiry]]
+        for job in listcopy:
           if job.worksource == worksource:
-            list.remove(job)
+            self.takenlists[expiry].remove(job)
             cancel.append(job)
     self.cancel_jobs(cancel)
     
