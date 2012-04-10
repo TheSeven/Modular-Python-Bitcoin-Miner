@@ -29,7 +29,9 @@
 
 
 
+import sys
 import time
+import signal
 from optparse import OptionParser
 from core.core import Core
 
@@ -126,9 +128,12 @@ if __name__ == "__main__":
     worksource.apply_settings()
     examplesources.add_work_source(worksource)
     
+  def stop(signum, frame):
+    core.stop()
+    sys.exit(0)
+    
+  signal.signal(signal.SIGINT, stop)
+  signal.signal(signal.SIGTERM, stop)
   core.start()
   
-  try:
-    while True: time.sleep(100)
-  except KeyboardInterrupt:
-    core.stop()
+  while True: time.sleep(100)

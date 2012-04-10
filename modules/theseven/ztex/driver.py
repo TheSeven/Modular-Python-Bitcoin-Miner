@@ -113,7 +113,7 @@ class ZtexDevice(object):
     unconfigured, checksum, bytestransferred, initb, result, bitswap = struct.unpack("<BBIBBB", array("B", self.handle.controlMsg(0xc0, 0x30, 9, 0, 0, 100)))
     if unconfigured:
       self.proxy.log("Programming FPGA with firmware %s...\n" % self.firmware_name, 300, "B")
-      firmwarepath = "%s/%s.bit" % (self.firmware, self.firmwarename)
+      firmwarepath = "%s/%s.bit" % (self.firmware, self.firmware_name)
       try:
         fwfile = open(firmwarepath, "rb")
         bitstream = fwfile.read()

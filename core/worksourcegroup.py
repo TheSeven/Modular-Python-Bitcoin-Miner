@@ -142,19 +142,21 @@ class WorkSourceGroup(BaseWorkSource):
       mhashes_remaining = 2**32 / 1000000. * self.settings.distribution_granularity
       total_priority = 0
       for child in self.children:
-        with child.statelock:
-          total_priority += child.settings.priority
-          mhashes = timestep * child.settings.hashrate
-          child.mhashes_pending += mhashes + child.mhashes_deferred * 0.1
-          mhashes_remaining -= mhashes
-          child.mhashes_deferred *= 0.9
-      if mhashes_remaining > 0:
+        if child.settings.enabled:
+          with child.statelock:
+            total_priority += child.settings.priority
+            mhashes = timestep * child.settings.hashrate
+            child.mhashes_pending += mhashes + child.mhashes_deferred * 0.1
+            mhashes_remaining -= mhashes
+            child.mhashes_deferred *= 0.9
+      if mhashes_remaining > 0 and total_priority > 0:
         unit = mhashes_remaining / total_priority
         for child in self.children:
-          with child.statelock:
-            mhashes = unit * child.settings.priority
-            child.mhashes_pending += mhashes
-            mhashes_remaining -= mhashes
+          if child.settings.enabled:
+            with child.statelock:
+              mhashes = unit * child.settings.priority
+              child.mhashes_pending += mhashes
+              mhashes_remaining -= mhashes
 
 
   def _get_start_index(self):

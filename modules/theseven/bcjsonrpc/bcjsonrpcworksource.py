@@ -32,7 +32,7 @@ import struct
 import base64
 import traceback
 from binascii import hexlify, unhexlify
-from threading import Thread
+from threading import Thread, RLock
 from core.actualworksource import ActualWorkSource
 from core.job import Job
 try: import http.client as http_client
@@ -61,6 +61,10 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   
 
   def __init__(self, core, state = None):
+    self.connlock = RLock()
+    self.conn = None
+    self.uploadconnlock = RLock()
+    self.uploadconn = None
     super(BCJSONRPCWorkSource, self).__init__(core, state)
     self.extensions = "longpoll midstate rollntime"
     self.runcycle = 0
@@ -92,11 +96,14 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     else: self.useragent = "%s (%s)" % (self.core.__class__.version, self.__class__.version)
     if not "longpollconnections" in self.settings: self.settings.longpollconnections = 1
     if not "expirymargin" in self.settings: self.settings.expirymargin = 5
+    with self.connlock: self.conn = None
+    with self.uploadconnlock: self.uploadconn = None
 
     
   def _reset(self):
     super(BCJSONRPCWorkSource, self)._reset()
     self.stats.supports_rollntime = None
+    self.longpollurl = None
     
     
   def _stop(self):
@@ -112,21 +119,31 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   def _get_job(self):
     if not self.settings.host: return []
     now = time.time()
-    conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
     req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
     headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
-               "Content-type": "application/json", "Content-Length": len(req)}
+               "Content-type": "application/json", "Content-Length": len(req), "Connection": "Keep-Alive"}
     if self.auth != None: headers["Authorization"] = self.auth
-    conn.request("POST", self.settings.path, req, headers)
-    conn.sock.settimeout(self.settings.getworktimeout)
-    response = conn.getresponse()
+    with self.connlock:
+      try:
+        if not self.conn: self.conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
+        self.conn.request("POST", self.settings.path, req, headers)
+        self.conn.sock.settimeout(self.settings.getworktimeout)
+        response = self.conn.getresponse()
+        data = response.read()
+      except:
+        self.conn = None
+        raise
     with self.statelock:
-      if not self.signals_new_block:
-        self.signals_new_block = False
+      if not self.settings.longpollconnections: self.signals_new_block = False
+      else:
+        lpfound = False
         headers = response.getheaders()
         for h in headers:
-          if h[0].lower() == "x-long-polling" and self.settings.longpollconnections:
+          if h[0].lower() == "x-long-polling":
+            lpfound = True
             url = h[1]
+            if url == self.longpollurl: break
+            self.longpollurl = url
             try:
               if url[0] == "/": url = "http://" + self.settings.host + ":" + str(self.settings.port) + url
               if url[:7] != "http://": raise Exception("Long poll URL isn't HTTP!")
@@ -139,6 +156,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               port = int(parts[1])
               self.core.log("Found long polling URL for %s: %s\n" % (self.settings.name, url), 500, "g")
               self.signals_new_block = True
+              self.runcycle += 1
               for i in range(self.settings.longpollconnections):
                 thread = Thread(None, self._longpollingworker, "%s_longpolling_%d" % (self.settings.name, i), (host, port, path))
                 thread.daemon = True
@@ -146,18 +164,27 @@ class BCJSONRPCWorkSource(ActualWorkSource):
             except Exception as e:
               self.core.log("Invalid long polling URL for %s: %s (%s)\n" % (self.settings.name, url, str(e)), 200, "y")
             break
-    return self._build_jobs(response, now)
+        if self.signals_new_block and not lpfound:
+          self.runcycle += 1
+          self.signals_new_block = False
+    return self._build_jobs(response, data, now)
       
       
   def _nonce_found(self, job, data, nonce, noncediff):
-    conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
     req = json.dumps({"method": "getwork", "params": [hexlify(data).decode("ascii")], "id": 0}).encode("utf_8")
     headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
                "Content-type": "application/json", "Content-Length": len(req)}
     if self.auth != None: headers["Authorization"] = self.auth
-    conn.request("POST", self.settings.path, req, headers)
-    response = conn.getresponse()
-    rdata = json.loads(response.read().decode("utf_8"))
+    with self.uploadconnlock:
+      try:
+        if not self.uploadconn: self.uploadconn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
+        self.uploadconn.request("POST", self.settings.path, req, headers)
+        response = self.uploadconn.getresponse()
+        rdata = response.read()
+      except:
+        self.uploadconn = None
+        raise
+    rdata = json.loads(rdata.decode("utf_8"))
     if rdata["result"] == True: return True
     if rdata["error"] != None: return rdata["error"]
     headers = response.getheaders()
@@ -170,20 +197,27 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     runcycle = self.runcycle
     tries = 0
     starttime = time.time()
+    conn = None
     while True:
       if self.runcycle > runcycle: return
       try:
-        conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
-        headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions}
+        if not conn: conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
+        elif conn.sock: conn.sock.settimeout(self.settings.longpolltimeout)
+        headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions, "Connection": "Keep-Alive"}
         if self.auth != None: headers["Authorization"] = self.auth
         conn.request("GET", path, None, headers)
         conn.sock.settimeout(self.settings.longpollresponsetimeout)
         response = conn.getresponse()
         if self.runcycle > runcycle: return
-        jobs = self._build_jobs(response, time.time() - 1)
+        data = response.read()
+        jobs = self._build_jobs(response, data, time.time() - 1, True)
+        if not jobs:
+          self.core.log("%s: Got empty long poll response\n" % self.settings.name, 500)
+          continue
         self._push_jobs(jobs)
         self.core.log("%s: Got %d jobs from long poll response\n" % (self.settings.name, len(jobs)), 500)
       except:
+        conn = None
         self.core.log("%s long poll failed: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
         tries += 1
         if time.time() - starttime >= 60: tries = 0
@@ -192,7 +226,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         starttime = time.time()
         
         
-  def _build_jobs(self, response, now):
+  def _build_jobs(self, response, data, now, ignoreempty = False):
     roll_ntime = 1
     expiry = 60
     isp2pool = False
@@ -208,7 +242,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         expiry = roll_ntime
     if isp2pool: expiry = 60
     self.stats.supports_rollntime = roll_ntime > 1
-    response = json.loads(response.read().decode("utf_8"))
+    response = data.decode("utf_8")
+    if len(response) == 0 and ignoreempty: return
+    response = json.loads(response)
     data = unhexlify(response["result"]["data"].encode("ascii"))
     target = unhexlify(response["result"]["target"].encode("ascii"))
     try: identifier = int(response["result"]["identifier"])
