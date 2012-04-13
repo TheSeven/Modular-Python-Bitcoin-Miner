@@ -181,7 +181,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       try:
         req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
         headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
-                   "Content-type": "application/json", "Content-Length": len(req), "Connection": "Keep-Alive"}
+                   "Content-Type": "application/json", "Content-Length": len(req), "Connection": "Keep-Alive"}
         if self.auth != None: headers["Authorization"] = self.auth
         try:
           if not conn: conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
@@ -253,7 +253,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         try:
           req = json.dumps({"method": "getwork", "params": [hexlify(data).decode("ascii")], "id": 0}).encode("utf_8")
           headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions,
-                     "Content-type": "application/json", "Content-Length": len(req)}
+                     "Content-Type": "application/json", "Content-Length": len(req)}
           if self.auth != None: headers["Authorization"] = self.auth
           try:
             if not conn: conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
