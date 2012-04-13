@@ -118,6 +118,8 @@ class Job(object):
 
   def cancel(self):
     self.canceled = True
+    self.blockchain.remove_job(self)
+    self.core.workqueue.remove_job(self)
     if self.worker:
       try: self.worker.notify_canceled(self)
       except: self.core.log("Exception while canceling job of worker %s: %s" % (self.worker.settings.name, traceback.format_exc()), 100, "r")

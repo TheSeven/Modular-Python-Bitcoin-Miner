@@ -109,20 +109,17 @@ class WorkQueue(Startable):
       
   def flush_all_of_work_source(self, worksource):
     cancel = []
+    destroy = []
     with self.lock:
       for expiry in self.lists:
-        listcopy = [element for element in self.lists[expiry]]
-        for job in listcopy:
+        for job in self.lists[expiry]:
           if job.worksource == worksource:
-            self.lists[expiry].remove(job)
-            if int(job.expiry) > self.expirycutoff: self.count -= 1
-            job.destroy()
+            destroy.append(job)
       for expiry in self.takenlists:
-        listcopy = [element for element in self.takenlists[expiry]]
-        for job in listcopy:
+        for job in self.takenlists[expiry]:
           if job.worksource == worksource:
-            self.takenlists[expiry].remove(job)
             cancel.append(job)
+      for job in destroy: job.destroy()
     self.cancel_jobs(cancel)
     
     
