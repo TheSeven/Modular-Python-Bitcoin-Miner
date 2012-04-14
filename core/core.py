@@ -183,10 +183,19 @@ class Core(Startable):
       self.log("Core: Could not save instance configuration: %s\n" % traceback.format_exc(), 100, "rB")
     
     
+  def _reset(self):
+    super(Core, self)._reset()
+    
+    # Reset total calculated hashes and uptime
+    self.stats = Bunch()
+    self.stats.starttime = time.time()
+    self.stats.ghashes = 0
+
+
   def _start(self):
     self.log("Core: Starting up...\n", 100, "B")
     super(Core, self)._start()
-    
+
     # Start up frontends
     self.log("Core: Starting up frontends...\n", 700)
     have_logger = False
@@ -243,7 +252,7 @@ class Core(Startable):
     self.log("Core: Starting up work fetcher...\n", 700)
     try: self.fetcher.start()
     except Exception as e: self.log("Core: Could not start work fetcher: %s\n" % traceback.format_exc(), 100, "rB")
-
+    
     # Start up workers
     self.log("Core: Starting up workers...\n", 700)
     for worker in self.workers:

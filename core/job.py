@@ -70,10 +70,12 @@ class Job(object):
     self.core.workqueue.remove_job(self)
     self.worksource.add_pending_mhashes(self.hashes_remaining / 1000000.)
     if self.worker:
+      ghashes = (2**32 - self.hashes_remaining) / 1000000000.
+      self.core.stats.ghashes += ghashes
       with self.worksource.stats.lock:
-        self.worksource.stats.ghashes += (2**32 - self.hashes_remaining) / 1000000000.
+        self.worksource.stats.ghashes += ghashes
       with self.worker.stats.lock:
-        self.worker.stats.ghashes += (2**32 - self.hashes_remaining) / 1000000000.
+        self.worker.stats.ghashes += ghashes
     
     
   def hashes_processed(self, hashes):

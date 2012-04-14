@@ -81,7 +81,7 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
     StatisticsProvider._get_statistics(self, stats, childstats)
     stats.starttime = self.stats.starttime
     stats.ghashes = self.stats.ghashes + childstats.calculatefieldsum("ghashes")
-    stats.avgmhps = 1000. * self.stats.ghashes / (time.time() - stats.starttime) + childstats.calculatefieldsum("avgmhps")
+    stats.avgmhps = 1000. * stats.ghashes / (time.time() - stats.starttime)
     stats.mhps = self.stats.mhps + childstats.calculatefieldsum("mhps")
     stats.jobsaccepted = self.stats.jobsaccepted + childstats.calculatefieldsum("jobsaccepted")
     stats.jobscanceled = self.stats.jobscanceled + childstats.calculatefieldsum("jobscanceled")
