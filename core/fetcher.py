@@ -95,7 +95,7 @@ class Fetcher(Startable):
         startfetchers = (self.queuetarget - queuecount) // 2 - fetchercount
         if startfetchers <= 0: self.lock.wait()
         try:
-          started = worksource.start_fetchers(startfetchers)
+          started = worksource.start_fetchers(startfetchers if self.core.workqueue.count * 4 < self.queuetarget else 1)
           if not started: started = 0
           lockout = time.time() + 4 * self.core.workqueue.count / self.queuetarget - 1
           while time.time() < lockout and self.core.workqueue.count > self.queuetarget / 4: self.lock.wait(0.1)
