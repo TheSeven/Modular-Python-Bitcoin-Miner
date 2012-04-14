@@ -347,7 +347,7 @@ class FT232R_PyUSB:
       if permissionproblem:
         raise Exception("Can not open the specified device, possibly due to insufficient permissions")
       raise Exception("Can not open the specified device")
-    self.handle.controlMsg(0x40, 3, None, 0, 0)
+    self.handle.controlMsg(0x40, 3, None, 0, 0, 1000)
     
   def __enter__(self): 
     return self
