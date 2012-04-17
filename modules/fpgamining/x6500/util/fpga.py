@@ -178,7 +178,7 @@ class FPGA:
   # TODO: use that at the end of the burst write.
   def _burstWrite(self, address, data):
     with self.ft232r.mutex:
-      self.wake()
+      if self.asleep: self.wake()
       self.jtag.tap.reset()
       self.jtag.instruction(USER_INSTRUCTION)
       self.jtag.shift_ir()
