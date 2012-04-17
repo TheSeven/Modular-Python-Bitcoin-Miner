@@ -200,7 +200,7 @@ class ZtexHotplugWorker(BaseWorker):
           if self.settings.blacklist:
             if serial in self.settings.boards: del boards[serial]
           else:
-            if serial not in self.settings.board: del boards[serial]
+            if serial not in self.settings.boards: del boards[serial]
                 
         for serial, child in self.childmap.items():
           if not serial in boards:
