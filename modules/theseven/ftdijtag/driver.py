@@ -440,23 +440,24 @@ class FTDIJTAGDevice(object):
     for i in range(devicecount, max_devices):
       if not data[i]: raise Exception("%s: Failed to detect JTAG chain device count!" % bus)
     self.proxy.log("%s: Detected %d devices\n" % (bus, devicecount), 500)
-    self._write(script["tap_reset"] + script["shift_dr"])
-    data = self._shift(bus, self._tmstail(bus, clock * devicecount * 32))
-    self._write(script["leave_shift"])
     devices = []
-    totalirlength = 0
-    for i in range(devicecount):
-      if not data[0]: raise Exception("%s: Device %d does not support IDCODE!" % (bus, i))
-      idcode = bits2int(data[:32])
-      data = data[32:]
-      if not idcode & 0xfffffff in idcodemap:
-        raise Exception("%s Device %d: Unknown IDCODE 0x%08X!" % (bus, i, idcode))
-      if not "handler" in idcodemap[idcode & 0xfffffff]:
-        idcodemap[idcode & 0xfffffff]["handler"] = UnknownJTAGDevice
-      device = idcodemap[idcode & 0xfffffff]["handler"](self.proxy, self, bus, i, idcode)
-      self.proxy.log("%s: %s\n" % (device.name, device.typename), 500)
-      totalirlength += device.irlength
-      devices.append(device)
+    if devicecount:
+      self._write(script["tap_reset"] + script["shift_dr"])
+      data = self._shift(bus, self._tmstail(bus, clock * devicecount * 32))
+      self._write(script["leave_shift"])
+      totalirlength = 0
+      for i in range(devicecount):
+        if not data[0]: raise Exception("%s: Device %d does not support IDCODE!" % (bus, i))
+        idcode = bits2int(data[:32])
+        data = data[32:]
+        if not idcode & 0xfffffff in idcodemap:
+          raise Exception("%s Device %d: Unknown IDCODE 0x%08X!" % (bus, i, idcode))
+        if not "handler" in idcodemap[idcode & 0xfffffff]:
+          idcodemap[idcode & 0xfffffff]["handler"] = UnknownJTAGDevice
+        device = idcodemap[idcode & 0xfffffff]["handler"](self.proxy, self, bus, i, idcode)
+        self.proxy.log("%s: %s\n" % (device.name, device.typename), 500)
+        totalirlength += device.irlength
+        devices.append(device)
     self.busdevices[bus] = devices
     irpos = 0
     for device in devices:
