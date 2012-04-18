@@ -254,7 +254,7 @@ class FTDIJTAGWorker(BaseWorker):
   def _notify_temperatures_read(self, temperatures):
     if self.children:
       for fpga in temperatures:
-        if len(self.children) >= fpga:
+        if len(self.children) > fpga:
           self.children[fpga].stats.temperature = temperatures[fpga]
 
       

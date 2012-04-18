@@ -55,41 +55,41 @@ jtagscript_mmq["Bus 0"]["s6_usercode"] = unhexlify(b"000400040004010500040004")
 jtagscript_mmq["Bus 0"]["s6_jshutdown"] = unhexlify(b"010500040105010500040004")
 jtagscript_x6500 = {}
 jtagscript_x6500["Bus 1"] = {}
-jtagscript_x6500["Bus 1"]["s6_user1"] = unhexlify(b"0008020a0008000800080008")
-jtagscript_x6500["Bus 1"]["leave_shift"] = unhexlify(b"040c")
-jtagscript_x6500["Bus 1"]["tdi"] = unhexlify(b"02")
-jtagscript_x6500["Bus 1"]["tms"] = unhexlify(b"04")
+jtagscript_x6500["Bus 1"]["s6_user1"] = unhexlify(b"c0c8c2cac0c8c0c8c0c8c0c8")
+jtagscript_x6500["Bus 1"]["leave_shift"] = unhexlify(b"c4cc")
+jtagscript_x6500["Bus 1"]["tdi"] = unhexlify(b"c2")
+jtagscript_x6500["Bus 1"]["tms"] = unhexlify(b"c4")
 jtagscript_x6500["Bus 1"]["tdo"] = unhexlify(b"01")
-jtagscript_x6500["Bus 1"]["shift_dr"] = unhexlify(b"040c00080008")
-jtagscript_x6500["Bus 1"]["highclock"] = unhexlify(b"020a")
-jtagscript_x6500["Bus 1"]["clock"] = unhexlify(b"0008")
-jtagscript_x6500["Bus 1"]["tap_reset"] = unhexlify(b"040c040c040c040c040c0008")
-jtagscript_x6500["Bus 1"]["s6_cfg_in"] = unhexlify(b"020a0008020a000800080008")
-jtagscript_x6500["Bus 1"]["shift_ir"] = unhexlify(b"040c040c00080008")
-jtagscript_x6500["Bus 1"]["s6_jprogram"] = unhexlify(b"020a020a0008020a00080008")
-jtagscript_x6500["Bus 1"]["tck"] = unhexlify(b"08")
-jtagscript_x6500["Bus 1"]["s6_jstart"] = unhexlify(b"00080008020a020a00080008")
-jtagscript_x6500["Bus 1"]["fm_getnonce"] = unhexlify(b"0008020a020a020a00080008")
-jtagscript_x6500["Bus 1"]["s6_usercode"] = unhexlify(b"000800080008020a00080008")
-jtagscript_x6500["Bus 1"]["s6_jshutdown"] = unhexlify(b"020a0008020a020a00080008")
+jtagscript_x6500["Bus 1"]["shift_dr"] = unhexlify(b"c4ccc0c8c0c8")
+jtagscript_x6500["Bus 1"]["highclock"] = unhexlify(b"c2ca")
+jtagscript_x6500["Bus 1"]["clock"] = unhexlify(b"c0c8")
+jtagscript_x6500["Bus 1"]["tap_reset"] = unhexlify(b"c4ccc4ccc4ccc4ccc4ccc0c8")
+jtagscript_x6500["Bus 1"]["s6_cfg_in"] = unhexlify(b"c2cac0c8c2cac0c8c0c8c0c8")
+jtagscript_x6500["Bus 1"]["shift_ir"] = unhexlify(b"c4ccc4ccc0c8c0c8")
+jtagscript_x6500["Bus 1"]["s6_jprogram"] = unhexlify(b"c2cac2cac0c8c2cac0c8c0c8")
+jtagscript_x6500["Bus 1"]["tck"] = unhexlify(b"c8")
+jtagscript_x6500["Bus 1"]["s6_jstart"] = unhexlify(b"c0c8c0c8c2cac2cac0c8c0c8")
+jtagscript_x6500["Bus 1"]["fm_getnonce"] = unhexlify(b"c0c8c2cac2cac2cac0c8c0c8")
+jtagscript_x6500["Bus 1"]["s6_usercode"] = unhexlify(b"c0c8c0c8c0c8c2cac0c8c0c8")
+jtagscript_x6500["Bus 1"]["s6_jshutdown"] = unhexlify(b"c2cac0c8c2cac2cac0c8c0c8")
 jtagscript_x6500["Bus 0"] = {}
-jtagscript_x6500["Bus 0"]["s6_user1"] = unhexlify(b"008020a00080008000800080")
-jtagscript_x6500["Bus 0"]["leave_shift"] = unhexlify(b"40c0")
-jtagscript_x6500["Bus 0"]["tdi"] = unhexlify(b"20")
-jtagscript_x6500["Bus 0"]["tms"] = unhexlify(b"40")
+jtagscript_x6500["Bus 0"]["s6_user1"] = unhexlify(b"0c8c2cac0c8c0c8c0c8c0c8c")
+jtagscript_x6500["Bus 0"]["leave_shift"] = unhexlify(b"4ccc")
+jtagscript_x6500["Bus 0"]["tdi"] = unhexlify(b"2c")
+jtagscript_x6500["Bus 0"]["tms"] = unhexlify(b"4c")
 jtagscript_x6500["Bus 0"]["tdo"] = unhexlify(b"10")
-jtagscript_x6500["Bus 0"]["shift_dr"] = unhexlify(b"40c000800080")
-jtagscript_x6500["Bus 0"]["highclock"] = unhexlify(b"20a0")
-jtagscript_x6500["Bus 0"]["clock"] = unhexlify(b"0080")
-jtagscript_x6500["Bus 0"]["tap_reset"] = unhexlify(b"40c040c040c040c040c00080")
-jtagscript_x6500["Bus 0"]["s6_cfg_in"] = unhexlify(b"20a0008020a0008000800080")
-jtagscript_x6500["Bus 0"]["shift_ir"] = unhexlify(b"40c040c000800080")
-jtagscript_x6500["Bus 0"]["s6_jprogram"] = unhexlify(b"20a020a0008020a000800080")
-jtagscript_x6500["Bus 0"]["tck"] = unhexlify(b"80")
-jtagscript_x6500["Bus 0"]["s6_jstart"] = unhexlify(b"0080008020a020a000800080")
-jtagscript_x6500["Bus 0"]["fm_getnonce"] = unhexlify(b"008020a020a020a000800080")
-jtagscript_x6500["Bus 0"]["s6_usercode"] = unhexlify(b"00800080008020a000800080")
-jtagscript_x6500["Bus 0"]["s6_jshutdown"] = unhexlify(b"20a0008020a020a000800080")
+jtagscript_x6500["Bus 0"]["shift_dr"] = unhexlify(b"4ccc0c8c0c8c")
+jtagscript_x6500["Bus 0"]["highclock"] = unhexlify(b"2cac")
+jtagscript_x6500["Bus 0"]["clock"] = unhexlify(b"0c8c")
+jtagscript_x6500["Bus 0"]["tap_reset"] = unhexlify(b"4ccc4ccc4ccc4ccc4ccc0c8c")
+jtagscript_x6500["Bus 0"]["s6_cfg_in"] = unhexlify(b"2cac0c8c2cac0c8c0c8c0c8c")
+jtagscript_x6500["Bus 0"]["shift_ir"] = unhexlify(b"4ccc4ccc0c8c0c8c")
+jtagscript_x6500["Bus 0"]["s6_jprogram"] = unhexlify(b"2cac2cac0c8c2cac0c8c0c8c")
+jtagscript_x6500["Bus 0"]["tck"] = unhexlify(b"8c")
+jtagscript_x6500["Bus 0"]["s6_jstart"] = unhexlify(b"0c8c0c8c2cac2cac0c8c0c8c")
+jtagscript_x6500["Bus 0"]["fm_getnonce"] = unhexlify(b"0c8c2cac2cac2cac0c8c0c8c")
+jtagscript_x6500["Bus 0"]["s6_usercode"] = unhexlify(b"0c8c0c8c0c8c2cac0c8c0c8c")
+jtagscript_x6500["Bus 0"]["s6_jshutdown"] = unhexlify(b"2cac0c8c2cac2cac0c8c0c8c")
 
 
 def byte2int(byte):
@@ -160,8 +160,7 @@ class Spartan6FPGA(object):
     self.proxy.log("%s: Firmware version %d, build %d\n" % (self.name, self.firmware_rev, self.firmware_build), 500)
     clock = script["clock"]
     hc = script["highclock"]
-    self.selectscript = script["tap_reset"] \
-                      + script["shift_ir"] \
+    self.selectscript = script["shift_ir"] \
                       + self.driver._tmstail(self.bus, hc * self.irhead + script["s6_user1"] + hc * self.irtail) \
                       + script["ir_to_dr"]
     self.unselectscript = script["leave_shift"]
@@ -405,7 +404,6 @@ class FTDIJTAGDevice(object):
     for bus in self.jtagscript:
       script = self.jtagscript[bus]
       script["clocklen"] = len(script["clock"])
-      script["clockval"] = [byte2int(byte) for byte in script["clock"]]
       script["tckmask"] = byte2int(script["tck"])
       script["tmsmask"] = byte2int(script["tms"])
       script["tdimask"] = byte2int(script["tdi"])
@@ -480,8 +478,7 @@ class FTDIJTAGDevice(object):
         readnonce_ir += hc * device.irlength
         readnonce_push_dr += clock
         readnonce_pull_len += 1
-    script["readnonce_head"] = script["tap_reset"] \
-                             + script["shift_ir"] \
+    script["readnonce_head"] = script["shift_ir"] \
                              + self._tmstail(bus, readnonce_ir) \
                              + script["ir_to_dr"] \
                              + self._tmstail(bus, readnonce_push_dr) \
@@ -527,12 +524,10 @@ class FTDIJTAGDevice(object):
     
   def format_dr(self, bus, bits):
     script = self.jtagscript[bus]
-    clockval = script["clockval"]
-    tdimask = script["tdimask"]
+    clock = script["clock"]
+    hc = script["highclock"]
     result = b""
-    for bit in bits:
-      tdi = tdimask if bit else 0
-      for byte in clockval: result += int2byte(byte | tdi) 
+    for bit in bits: result += hc if bit else clock
     return result
     
     
@@ -677,11 +672,12 @@ class FTDIJTAGDevice(object):
         self._set_cbus_bits(0xc, 0x4)
         self._set_cbus_bits(0xc, 0xc)
         self._set_cbus_bits(0xc, 0x4)
-        if data0 != 0xffff and data0 != 0:
-          if ((data0 >> 15) & 1) == 1: data0 -= (1 << 16)
-          temps[0] = (data0 >> 2) * 0.03125
-        if data1 != 0xffff and data1 != 0:
-          if ((data1 >> 15) & 1) == 1: data1 -= (1 << 16)
-          temps[1] = (data1 >> 2) * 0.03125
+        self._switch_async()
+      if data0 != 0xffff and data0 != 0:
+        if ((data0 >> 15) & 1) == 1: data0 -= (1 << 16)
+        temps[0] = (data0 >> 2) * 0.03125
+      if data1 != 0xffff and data1 != 0:
+        if ((data1 >> 15) & 1) == 1: data1 -= (1 << 16)
+        temps[1] = (data1 >> 2) * 0.03125
           
     return temps
