@@ -184,11 +184,21 @@ class BCJSONRPCWorkSource(ActualWorkSource):
                    "Content-Type": "application/json", "Content-Length": len(req), "Connection": "Keep-Alive"}
         if self.auth != None: headers["Authorization"] = self.auth
         try:
-          if not conn: conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
-          now = time.time()
-          conn.request("POST", self.settings.path, req, headers)
-          conn.sock.settimeout(self.settings.getworktimeout)
-          response = conn.getresponse()
+          if conn:
+            try:
+              now = time.time()
+              conn.request("POST", self.settings.path, req, headers)
+              conn.sock.settimeout(self.settings.getworktimeout)
+              response = conn.getresponse()
+            except:
+              conn = None
+              self.core.log("%s: Keep-alive job fetching connection died\n" % (self.settings.name), 500)
+          if not conn:
+            conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
+            now = time.time()
+            conn.request("POST", self.settings.path, req, headers)
+            conn.sock.settimeout(self.settings.getworktimeout)
+            response = conn.getresponse()
           data = response.read()
         except:
           conn = None
@@ -256,9 +266,17 @@ class BCJSONRPCWorkSource(ActualWorkSource):
                      "Content-Type": "application/json", "Content-Length": len(req)}
           if self.auth != None: headers["Authorization"] = self.auth
           try:
-            if not conn: conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
-            conn.request("POST", self.settings.path, req, headers)
-            response = conn.getresponse()
+            if conn:
+              try:
+                conn.request("POST", self.settings.path, req, headers)
+                response = conn.getresponse()
+              except:
+                conn = None
+                self.core.log("%s: Keep-alive share upload connection died\n" % (self.settings.name), 500)
+            if not conn:
+              conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
+              conn.request("POST", self.settings.path, req, headers)
+              response = conn.getresponse()
             rdata = response.read()
           except:
             conn = None
@@ -291,13 +309,22 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     while True:
       if self.runcycle > runcycle: return
       try:
-        if not conn: conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
-        elif conn.sock: conn.sock.settimeout(self.settings.longpolltimeout)
         headers = {"User-Agent": self.useragent, "X-Mining-Extensions": self.extensions, "Connection": "Keep-Alive"}
         if self.auth != None: headers["Authorization"] = self.auth
-        conn.request("GET", path, None, headers)
-        conn.sock.settimeout(self.settings.longpollresponsetimeout)
-        response = conn.getresponse()
+        if conn:
+          try:
+            if conn.sock: conn.sock.settimeout(self.settings.longpolltimeout)
+            conn.request("GET", path, None, headers)
+            conn.sock.settimeout(self.settings.longpollresponsetimeout)
+            response = conn.getresponse()
+          except:
+            conn = None
+            self.core.log("%s: Keep-alive long poll connection died\n" % (self.settings.name), 500)
+        if not conn:
+          conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
+          conn.request("GET", path, None, headers)
+          conn.sock.settimeout(self.settings.longpollresponsetimeout)
+          response = conn.getresponse()
         if self.runcycle > runcycle: return
         data = response.read()
         jobs = self._build_jobs(response, data, time.time() - 1, True)
