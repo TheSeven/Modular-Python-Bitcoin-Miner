@@ -202,22 +202,26 @@ class ZtexHotplugWorker(BaseWorker):
           else:
             if serial not in self.settings.boards: del boards[serial]
                 
+        kill = []
         for serial, child in self.childmap.items():
           if not serial in boards:
-            try:
-              self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
-              child.stop()
-            except Exception as e:
-              self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
-            childstats = child.get_statistics()
-            fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
-            for field in fields: self.stats[field] += childstats[field]
-            try: self.child.destroy()
-            except: pass
-            del self.childmap[serial]
-            try: self.children.remove(child)
-            except: pass
-                
+            kill.append((serial, child))
+            
+        for serial, child in kill:
+          try:
+            self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
+            child.stop()
+          except Exception as e:
+            self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+          childstats = child.get_statistics()
+          fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
+          for field in fields: self.stats[field] += childstats[field]
+          try: self.child.destroy()
+          except: pass
+          del self.childmap[serial]
+          try: self.children.remove(child)
+          except: pass
+              
         for serial, available in boards.items():
           if serial in self.childmap: continue
           if not available and self.settings.takeover:

@@ -93,6 +93,7 @@ jtagscript_x6500["Bus 0"]["s6_jshutdown"] = unhexlify(b"2cac0c8c2cac2cac0c8c0c8c
 
 
 def byte2int(byte):
+  if type(byte) is int: return byte
   return struct.unpack("B", byte)[0]
 
 
@@ -269,7 +270,7 @@ class Spartan6FPGA(object):
           chunk = file.read(chunksize)
           data = b""
           for byte in chunk:
-            byte = struct.unpack("B", byte)[0]
+            if type(byte) is not int: byte = struct.unpack("B", byte)[0]
             data += (hc if byte & 0x80 else clock) \
                   + (hc if byte & 0x40 else clock) \
                   + (hc if byte & 0x20 else clock) \
@@ -410,7 +411,7 @@ class FTDIJTAGDevice(object):
       script["tdomask"] = byte2int(script["tdo"])
       script["ir_to_dr"] = script["leave_shift"] + script["shift_dr"]
       self.outmask |= script["tckmask"] | script["tmsmask"] | script["tdimask"]
-    self.handle.controlMsg(0x40, 3, None, 0, 0)
+    self.handle.controlMsg(0x40, 3, None, 0, 0, 1000)
     self._switch_async()
     self.busdevices = {}
     self.devices = []
@@ -541,16 +542,16 @@ class FTDIJTAGDevice(object):
     
     
   def _purge_buffers(self):
-    self.handle.controlMsg(0x40, 0, None, 1, self.index)
-    self.handle.controlMsg(0x40, 0, None, 2, self.index)
+    self.handle.controlMsg(0x40, 0, None, 1, self.index, 1000)
+    self.handle.controlMsg(0x40, 0, None, 2, self.index, 1000)
     
     
   def _set_bit_mode(self, mask, mode):
-    self.handle.controlMsg(0x40, 0xb, None, (mode << 8) | mask, self.index)
+    self.handle.controlMsg(0x40, 0xb, None, (mode << 8) | mask, self.index, 1000)
   
   
   def _get_bit_mode(self):
-    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index))))[0]
+    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index, 1000))))[0]
     
   
   def _switch_async(self):
@@ -568,7 +569,7 @@ class FTDIJTAGDevice(object):
     offset = 0
     while offset < size:
       write_size = min(4096, size - offset)
-      ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size])
+      ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size], 1000)
       offset = offset + ret
     
     
@@ -577,7 +578,7 @@ class FTDIJTAGDevice(object):
     data = b""
     offset = 0
     while offset < size and time.time() < timeout:
-      ret = bytes(bytearray(self.handle.bulkRead(self.inep, min(64, size - offset + 2))))
+      ret = bytes(bytearray(self.handle.bulkRead(self.inep, min(64, size - offset + 2), 1000)))
       data += ret[2:]
       offset += len(ret) - 2
     return data
@@ -601,7 +602,7 @@ class FTDIJTAGDevice(object):
     script = self.jtagscript[bus]
     tdomask = script["tdomask"]
     clocklen = script["clocklen"]
-    data = self._bidi(data + data[-1], timeout)
+    data = self._bidi(data + data[-1:], timeout)
     result = []
     for i in range(clocklen, len(data), clocklen):
       result.append(1 if byte2int(data[i]) & tdomask else 0)

@@ -118,7 +118,7 @@ class WebUI(BaseFrontend):
   def write_log_message(self, timestamp, loglevel, messages):
     if not self.started: return
     data = {
-      "timestamp": time.mktime(timestamp.timetuple()) * 1000 + timestamp.microsecond / 1000,
+      "timestamp": time.mktime(timestamp.timetuple()) * 1000 + timestamp.microsecond / 1000.,
       "loglevel": loglevel,
       "message": [{"data": data, "format": format} for data, format in messages],
     }

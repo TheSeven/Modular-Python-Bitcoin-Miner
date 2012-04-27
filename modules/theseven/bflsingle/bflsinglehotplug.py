@@ -143,22 +143,26 @@ class BFLSingleHotplugWorker(BaseWorker):
           except: pass
           boards[port] = available
                 
-        for port, child in self.childmap.items():
-          if not port in boards:
-            try:
-              self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
-              child.stop()
-            except Exception as e:
-              self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
-            childstats = child.get_statistics()
-            fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
-            for field in fields: self.stats[field] += childstats[field]
-            try: self.child.destroy()
-            except: pass
-            del self.childmap[port]
-            try: self.children.remove(child)
-            except: pass
-                
+        kill = []
+        for serial, child in self.childmap.items():
+          if not serial in boards:
+            kill.append((serial, child))
+            
+        for serial, child in kill:
+          try:
+            self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
+            child.stop()
+          except Exception as e:
+            self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+          childstats = child.get_statistics()
+          fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
+          for field in fields: self.stats[field] += childstats[field]
+          try: self.child.destroy()
+          except: pass
+          del self.childmap[port]
+          try: self.children.remove(child)
+          except: pass
+              
         for port, available in boards.items():
           if port in self.childmap or not available: continue
           number += 1
