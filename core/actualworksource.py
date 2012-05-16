@@ -170,7 +170,7 @@ class ActualWorkSource(BaseWorkSource):
         started += result
         with self.stats.lock: self.stats.jobrequests += 1
     except:
-      self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
+      self.core.log(self, "Error while fetching job: %s\n" % (traceback.format_exc()), 200, "y")
       self._handle_error()
     if started: return started
     return False
@@ -192,7 +192,7 @@ class ActualWorkSource(BaseWorkSource):
         self._handle_success()
         return job.nonce_handled_callback(nonce, noncediff, result)
       except:
-        self.core.log("Error while sending share %s (difficulty %.5f) to %s: %s\n" % (hexlify(nonce).decode("ascii"), noncediff, self.settings.name, traceback.format_exc()), 200, "y")
+        self.core.log(self, "Error while sending share %s (difficulty %.5f): %s\n" % (hexlify(nonce).decode("ascii"), noncediff, traceback.format_exc()), 200, "y")
         tries += 1
         self._handle_error(True)
         time.sleep(min(30, tries))

@@ -140,7 +140,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
       with self.stats.lock:
         self.stats.blocks += 1
         self.stats.lastblock = now
-    self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
+    self.core.log(self, "New block detected\n", 300, "B")
     self.core.workqueue.cancel_jobs(cancel)
     return True
  
@@ -194,6 +194,6 @@ class DummyBlockchain(object):
           if job.worker: cancel.append(job)
           else: job.destroy()
       self.jobs = []
-    self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
+    self.core.log(self, "New block detected\n", 300, "B")
     self.core.workqueue.cancel_jobs(cancel)
     return True

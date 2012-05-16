@@ -30,6 +30,7 @@ import time
 import traceback
 from threading import RLock, Condition, Thread, current_thread
 from .startable import Startable
+from .util import Bunch
 
 
 
@@ -39,6 +40,8 @@ class Fetcher(Startable):
   def __init__(self, core):
     super(Fetcher, self).__init__()
     self.core = core
+    self.id = -2
+    self.settings = Bunch(name = "Fetcher controller")
     # Initialize global fetcher lock and wakeup condition
     self.lock = Condition()
     # Fetcher controller thread
@@ -104,5 +107,5 @@ class Fetcher(Startable):
           lockout = time.time() + min(5, 4 * self.core.workqueue.count / self.queuetarget - 1)
           while time.time() < lockout and self.core.workqueue.count > self.queuetarget / 4: self.lock.wait(0.1)
         except:
-          self.core.log("Fetcher: Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
+          self.core.log(self, "Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
           time.sleep(1)

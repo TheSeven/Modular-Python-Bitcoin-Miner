@@ -161,7 +161,7 @@ class BFLSingleWorker(BaseWorker):
         response = self.handle.readline()
         if response[:31] != b">>>ID: BitFORCE SHA256 Version " or response[-4:] != b">>>\n":
           raise Exception("Bad ZGX response: %s\n" % response.decode("ascii", "replace").strip())
-        self.core.log("%s: Firmware: %s\n" % (self.settings.name, response[7:-4].decode("ascii", "replace")), 400, "B")
+        self.core.log(self, "Firmware: %s\n" % (response[7:-4].decode("ascii", "replace")), 400, "B")
 
         # Main loop, continues until something goes wrong or we're shutting down.
         while not self.shutdown:
@@ -238,7 +238,7 @@ class BFLSingleWorker(BaseWorker):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+        self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
       finally:
         # We're not doing productive work any more, update stats and destroy current job
         self._jobend()

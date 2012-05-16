@@ -202,14 +202,14 @@ class IcarusWorker(BaseWorker):
         # This usually means that the wakeup timeout has expired.
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
         # self.stats.mhps has now been populated by the listener thread
-        self.core.log(self.settings.name + ": Running at %f MH/s\n" % self.stats.mhps, 300, "B")
+        self.core.log(self, "Running at %f MH/s\n" % self.stats.mhps, 300, "B")
         # Calculate the time that the device will need to process 2**32 nonces.
         # This is limited at 60 seconds in order to have some regular communication,
         # even with very slow devices (and e.g. detect if the device was unplugged).
         interval = min(60, 2**32 / 1000000. / self.stats.mhps)
         # Add some safety margin and take user's interval setting (if present) into account.
         self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
-        self.core.log(self.settings.name + ": Job interval: %f seconds\n" % self.jobinterval, 400, "B")
+        self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
         # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
         self.jobspersecond = 1. / self.jobinterval
         self.core.notify_speed_changed(self)
@@ -250,7 +250,7 @@ class IcarusWorker(BaseWorker):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+        self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
         # Make sure that the listener thread realizes that something went wrong
         self.error = e
       finally:
@@ -345,7 +345,7 @@ class IcarusWorker(BaseWorker):
     # If an exception is thrown in the listener thread...
     except Exception as e:
       # ...complain about it...
-      self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+      self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
       # ...put it into the exception container...
       self.error = e
       # ...wake up the main thread...

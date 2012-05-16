@@ -84,7 +84,7 @@ class Job(object):
     
   def set_worker(self, worker):
     self.worker = worker
-    self.core.log("Mining %s:%s on %s\n" % (self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), worker.settings.name), 400)
+    self.core.log(worker, "Mining %s:%s\n" % (self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii")), 400)
     with self.worker.stats.lock: self.worker.stats.jobsaccepted += 1
     with self.worksource.stats.lock: self.worksource.stats.jobsaccepted += 1
     
@@ -94,13 +94,13 @@ class Job(object):
     hash = Job.calculate_hash(data)
     if hash[-4:] != b"\0\0\0\0":
       if ignore_invalid: return False
-      self.core.log("%s sent K-not-zero share %s\n" % (self.worker.settings.name, hexlify(nonce).decode("ascii")), 200, "yB")
+      self.core.log(self.worker, "Got K-not-zero share %s\n" % (hexlify(nonce).decode("ascii")), 200, "yB")
       with self.worker.stats.lock: self.worker.stats.sharesinvalid += 1
       return False
-    self.core.log("%s found share: %s:%s:%s\n" % (self.worker.settings.name, self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), hexlify(nonce).decode("ascii")), 350, "g")
+    self.core.log(self.worker.settings.name, "Found share: %s:%s:%s\n" % (self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), hexlify(nonce).decode("ascii")), 350, "g")
     noncediff = 65535. * 2**48 / struct.unpack("<Q", hash[-12:-4])[0]
     if hash[::-1] > self.target[::-1]:
-      self.core.log("Share %s (difficulty %.5f) didn't meet difficulty %.5f\n" % (hexlify(nonce).decode("ascii"), noncediff, self.difficulty), 300, "g")
+      self.core.log(self.worker, "Share %s (difficulty %.5f) didn't meet difficulty %.5f\n" % (hexlify(nonce).decode("ascii"), noncediff, self.difficulty), 300, "g")
       return True
     self.worksource.nonce_found(self, data, nonce, noncediff)
     return True
@@ -108,12 +108,12 @@ class Job(object):
     
   def nonce_handled_callback(self, nonce, noncediff, result):
     if result == True:
-      self.core.log("%s accepted share %s (difficulty %.5f)\n" % (self.worksource.settings.name, hexlify(nonce).decode("ascii"), noncediff), 250, "gB")
+      self.core.log(self.worker, "%s accepted share %s (difficulty %.5f)\n" % (self.worksource.settings.name, hexlify(nonce).decode("ascii"), noncediff), 250, "gB")
       with self.worker.stats.lock: self.worker.stats.sharesaccepted += self.difficulty
       with self.worksource.stats.lock: self.worksource.stats.sharesaccepted += self.difficulty
     else:
       if result == False or result == None or len(result) == 0: result = "Unknown reason"
-      self.core.log("%s rejected share %s (difficulty %.5f): %s\n" % (self.worksource.settings.name, hexlify(nonce).decode("ascii"), noncediff, result), 200, "y")
+      self.core.log(self.worker, "%s rejected share %s (difficulty %.5f): %s\n" % (self.worksource.settings.name, hexlify(nonce).decode("ascii"), noncediff, result), 200, "y")
       with self.worker.stats.lock: self.worker.stats.sharesrejected += self.difficulty
       with self.worksource.stats.lock: self.worksource.stats.sharesrejected += self.difficulty
 
@@ -124,7 +124,7 @@ class Job(object):
     self.core.workqueue.remove_job(self)
     if self.worker:
       try: self.worker.notify_canceled(self)
-      except: self.core.log("Exception while canceling job of worker %s: %s" % (self.worker.settings.name, traceback.format_exc()), 100, "r")
+      except: self.core.log(self.worker, "Exception while canceling job: %s" % (traceback.format_exc()), 100, "r")
       with self.worker.stats.lock: self.worker.stats.jobscanceled += 1
       with self.worksource.stats.lock: self.worksource.stats.jobscanceled += 1
       

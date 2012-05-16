@@ -164,7 +164,7 @@ class ZtexWorker(BaseWorker):
         while not self.shutdown:
           data = self.rxconn.recv()
           if self.dead: break
-          if data[0] == "log": self.core.log("%s: Proxy: %s" % (self.settings.name, data[1]), data[2], data[3])
+          if data[0] == "log": self.core.log(self, "Proxy: %s" % data[1], data[2], data[3])
           elif data[0] == "ping": self._proxy_message("pong")
           elif data[0] == "pong": pass
           elif data[0] == "dying": raise Exception("Proxy died!")
@@ -180,7 +180,7 @@ class ZtexWorker(BaseWorker):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+        self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
       finally:
         with self.workloopwakeup: self.workloopwakeup.notify()
         try:
@@ -251,14 +251,14 @@ class ZtexWorker(BaseWorker):
 
   def _notify_speed_changed(self, speed):
     self.stats.mhps = speed / 1000000.
-    self.core.log(self.settings.name + ": Running at %f MH/s\n" % self.stats.mhps, 300, "B")
+    self.core.log(self, "Running at %f MH/s\n" % self.stats.mhps, 300, "B")
     # Calculate the time that the device will need to process 2**32 nonces.
     # This is limited at 60 seconds in order to have some regular communication,
     # even with very slow devices (and e.g. detect if the device was unplugged).
     interval = min(60, 2**32 / speed)
     # Add some safety margin and take user's interval setting (if present) into account.
     self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
-    self.core.log(self.settings.name + ": Job interval: %f seconds\n" % self.jobinterval, 400, "B")
+    self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
     # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
     self.jobs_per_second = 1. / self.jobinterval
     self.core.notify_speed_changed(self)
@@ -270,7 +270,7 @@ class ZtexWorker(BaseWorker):
       
   def _notify_keyspace_exhausted(self):
     with self.workloopwakeup: self.workloopwakeup.notify()
-    self.core.log(self.settings.name + " exhausted keyspace!\n", 200, "y")
+    self.core.log(self, "Exhausted keyspace!\n", 200, "y")
 
       
   def _send_job(self, job):
@@ -333,7 +333,7 @@ class ZtexWorker(BaseWorker):
     # If something went wrong...
     except Exception as e:
       # ...complain about it!
-      self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+      self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
     finally:
       # We're not doing productive work any more, update stats and destroy current job
       self._jobend()

@@ -69,7 +69,7 @@ class LogFileLogger(BaseFrontend):
     super(LogFileLogger, self)._stop()
 
       
-  def write_log_message(self, timestamp, loglevel, messages):
+  def write_log_message(self, source, timestamp, loglevel, messages):
     if not self.started: return
     if loglevel > self.settings.loglevel: return
     prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel

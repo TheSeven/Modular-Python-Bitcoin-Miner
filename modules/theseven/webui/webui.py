@@ -115,11 +115,12 @@ class WebUI(BaseFrontend):
     super(WebUI, self)._stop()
 
 
-  def write_log_message(self, timestamp, loglevel, messages):
+  def write_log_message(self, source, timestamp, loglevel, messages):
     if not self.started: return
     data = {
       "timestamp": time.mktime(timestamp.timetuple()) * 1000 + timestamp.microsecond / 1000.,
       "loglevel": loglevel,
+      "source": source.settings.name,
       "message": [{"data": data, "format": format} for data, format in messages],
     }
     with self.log_lock:
@@ -167,12 +168,12 @@ class RequestHandler(BaseHTTPRequestHandler):
    
   def log_error(self, format, *args):
     webui = self.server.webui
-    webui.core.log("%s: %s\n" % (webui.settings.name, format % args), 600, "y")
+    webui.core.log(webui, "%s\n" % (format % args), 600, "y")
 
 
   def log_message(self, format, *args):
     webui = self.server.webui
-    webui.core.log("%s: %s\n" % (webui.settings.name, format % args), 800, "")
+    webui.core.log(webui, "%s\n" % (format % args), 800, "")
 
     
   def do_HEAD(self):

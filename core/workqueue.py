@@ -210,4 +210,4 @@ class WorkQueue(Startable):
       if not jobs: return
       for job in jobs:
         try: job.cancel()
-        except: self.core.log("Fetcher: Error while canceling job: %s\n" % traceback.format_exc(), 100, "r")
+        except: self.core.log(self.core, "Error while canceling job: %s\n" % traceback.format_exc(), 100, "r")

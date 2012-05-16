@@ -38,6 +38,7 @@ class BaseFrontend(Startable, Inflatable):
   can_log = False
   can_show_stats = False
   can_configure = False
+  can_handle_events = False
   can_autodetect = False
   settings = dict(Inflatable.settings, **{
     "name": {"title": "Name", "type": "string", "position": 100},
@@ -49,6 +50,7 @@ class BaseFrontend(Startable, Inflatable):
     Inflatable.__init__(self, core, state)
     self.does_log = self.__class__.can_log
     self.does_show_stats = self.__class__.can_show_stats
+    self.does_handle_events = self.__class__.can_handle_events
     
     
   def destroy(self):

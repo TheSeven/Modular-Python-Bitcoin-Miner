@@ -178,7 +178,7 @@ class FTDIJTAGWorker(BaseWorker):
         
         while not self.shutdown:
           data = self.rxconn.recv()
-          if data[0] == "log": self.core.log("%s: Proxy: %s" % (self.settings.name, data[1]), data[2], data[3])
+          if data[0] == "log": self.core.log(self, "Proxy: %s" % data[1], data[2], data[3])
           elif data[0] == "ping": self._proxy_message("pong")
           elif data[0] == "pong": pass
           elif data[0] == "dying": raise Exception("Proxy died!")
@@ -192,7 +192,7 @@ class FTDIJTAGWorker(BaseWorker):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+        self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
       finally:
         try:
           for i in range(100): self.response_queue.put(None)
@@ -442,7 +442,7 @@ class FTDIJTAGFPGA(BaseWorker):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+        self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
       finally:
         # We're not doing productive work any more, update stats and destroy current job
         self._jobend()
@@ -534,8 +534,8 @@ class FTDIJTAGFPGA(BaseWorker):
       if self.stats.temperature > self.parent.settings.tempwarning: warning = True    
       if self.stats.temperature > self.parent.settings.tempcritical: critical = True    
 
-    if warning: self.core.log(self.settings.name + ": Detected overload condition for the FPGA!\n", 200, "y")
-    if critical: self.core.log(self.settings.name + ": Detected CRITICAL condition for the FPGA!\n", 100, "rB")
+    if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
+    if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
 
     if critical: speedstep = -20
     elif warning: speedstep = -2
@@ -553,12 +553,12 @@ class FTDIJTAGFPGA(BaseWorker):
   def _set_speed(self, speed):
     speed = min(max(speed, 4), self.parent.settings.maximumspeed)
     if self.stats.mhps == speed: return
-    self.core.log(self.settings.name + ": Setting clock speed to %d MHz...\n" % speed, 500, "B")
+    self.core.log(self, "Setting clock speed to %d MHz...\n" % speed, 500, "B")
     self.parent.set_speed(self.fpga, speed)
     self.stats.mhps = self.parent.get_speed(self.fpga)
     self._update_job_interval()
     if self.stats.mhps != speed:
-      self.core.log(self.settings.name + ": Setting clock speed failed!\n", 100, "rB")
+      self.core.log(self, "Setting clock speed failed!\n", 100, "rB")
    
    
   def _update_job_interval(self):
@@ -568,7 +568,7 @@ class FTDIJTAGFPGA(BaseWorker):
     interval = min(60, 2**32 / 1000000. / self.stats.mhps)
     # Add some safety margin and take user's interval setting (if present) into account.
     self.jobinterval = min(self.parent.settings.jobinterval, max(0.5, interval * 0.8 - 1))
-    self.core.log(self.settings.name + ": Job interval: %f seconds\n" % self.jobinterval, 400, "B")
+    self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
     # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
     self.jobs_per_second = 1. / self.jobinterval
     self.core.notify_speed_changed(self)

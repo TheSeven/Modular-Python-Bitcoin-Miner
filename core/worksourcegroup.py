@@ -91,10 +91,10 @@ class WorkSourceGroup(BaseWorkSource):
         if not worksource in self.children:
           if self.started:
             try:
-              self.core.log("%s: Starting up work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+              self.core.log(self, "Starting up work source %s...\n" % (worksource.settings.name), 800)
               worksource.start()
             except Exception as e:
-              self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+              self.core.log(self, "Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
           self.children.append(worksource)
 
     
@@ -105,10 +105,10 @@ class WorkSourceGroup(BaseWorkSource):
           worksource.set_parent()
           if self.started:
             try:
-              self.core.log("%s: Shutting down work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+              self.core.log(self, "Shutting down work source %s...\n" % (worksource.settings.name), 800)
               worksource.stop()
             except Exception as e:
-              self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+              self.core.log(self, "Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
           self.children.remove(worksource)
         
         
@@ -117,20 +117,20 @@ class WorkSourceGroup(BaseWorkSource):
     with self.childlock:
       for worksource in self.children:
         try:
-          self.core.log("%s: Starting up work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+          self.core.log(self, "Starting up work source %s...\n" % (worksource.settings.name), 800)
           worksource.start()
         except Exception as e:
-          self.core.log("Core: Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+          self.core.log(self, "Could not start work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
   
   
   def _stop(self):
     with self.childlock:
       for worksource in self.children:
         try:
-          self.core.log("%s: Shutting down work source %s...\n" % (self.settings.name, worksource.settings.name), 800)
+          self.core.log(self, "Shutting down work source %s...\n" % (worksource.settings.name), 800)
           worksource.stop()
         except Exception as e:
-          self.core.log("Core: Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
+          self.core.log(self, "Could not stop work source %s: %s\n" % (worksource.settings.name, traceback.format_exc()), 100, "yB")
     super(WorkSourceGroup, self)._stop()
       
       

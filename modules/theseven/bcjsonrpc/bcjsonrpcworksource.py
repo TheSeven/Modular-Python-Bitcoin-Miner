@@ -192,7 +192,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               response = conn.getresponse()
             except:
               conn = None
-              self.core.log("%s: Keep-alive job fetching connection died\n" % (self.settings.name), 500)
+              self.core.log(self, "Keep-alive job fetching connection died\n", 500)
           if not conn:
             conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
             now = time.time()
@@ -224,7 +224,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
                   if len(parts) != 2: raise Exception("Long poll URL contains host but no port!")
                   host = parts[0]
                   port = int(parts[1])
-                  self.core.log("Found long polling URL for %s: %s\n" % (self.settings.name, url), 500, "g")
+                  self.core.log(self, "Found long polling URL: %s\n" % (url), 500, "g")
                   self.signals_new_block = True
                   self.runcycle += 1
                   for i in range(self.settings.longpollconnections):
@@ -232,20 +232,20 @@ class BCJSONRPCWorkSource(ActualWorkSource):
                     thread.daemon = True
                     thread.start()
                 except Exception as e:
-                  self.core.log("Invalid long polling URL for %s: %s (%s)\n" % (self.settings.name, url, str(e)), 200, "y")
+                  self.core.log(self, "Invalid long polling URL: %s (%s)\n" % (url, str(e)), 200, "y")
                 break
             if self.signals_new_block and not lpfound:
               self.runcycle += 1
               self.signals_new_block = False
         jobs = self._build_jobs(response, data, now)
       except:
-        self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
+        self.core.log(self, "Error while fetching job: %s\n" % (traceback.format_exc()), 200, "y")
         self._handle_error()
       finally:
         with self.fetcherlock: self.fetchersrunning -= 1
       if jobs:
         self._push_jobs(jobs)
-        self.core.log("%s: Got %d jobs from getwork response\n" % (self.settings.name, len(jobs)), 500)
+        self.core.log(self, "Got %d jobs from getwork response\n" % (len(jobs)), 500)
         
         
   def nonce_found(self, job, data, nonce, noncediff):
@@ -272,7 +272,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
                 response = conn.getresponse()
               except:
                 conn = None
-                self.core.log("%s: Keep-alive share upload connection died\n" % (self.settings.name), 500)
+                self.core.log(self, "Keep-alive share upload connection died\n", 500)
             if not conn:
               conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.sendsharetimeout)
               conn.request("POST", self.settings.path, req, headers)
@@ -295,7 +295,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
           job.nonce_handled_callback(nonce, noncediff, result)
           break
         except:
-          self.core.log("Error while sending share %s (difficulty %.5f) to %s: %s\n" % (hexlify(nonce).decode("ascii"), noncediff, self.settings.name, traceback.format_exc()), 200, "y")
+          self.core.log(self, "Error while sending share %s (difficulty %.5f): %s\n" % (hexlify(nonce).decode("ascii"), noncediff, traceback.format_exc()), 200, "y")
           tries += 1
           self._handle_error(True)
           time.sleep(min(30, tries))
@@ -319,7 +319,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
             response = conn.getresponse()
           except:
             conn = None
-            self.core.log("%s: Keep-alive long poll connection died\n" % (self.settings.name), 500)
+            self.core.log(self, "Keep-alive long poll connection died\n", 500)
         if not conn:
           conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
           conn.request("GET", path, None, headers)
@@ -329,13 +329,13 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         data = response.read()
         jobs = self._build_jobs(response, data, time.time() - 1, True)
         if not jobs:
-          self.core.log("%s: Got empty long poll response\n" % self.settings.name, 500)
+          self.core.log(self, "Got empty long poll response\n", 500)
           continue
         self._push_jobs(jobs)
-        self.core.log("%s: Got %d jobs from long poll response\n" % (self.settings.name, len(jobs)), 500)
+        self.core.log(self, "Got %d jobs from long poll response\n" % (len(jobs)), 500)
       except:
         conn = None
-        self.core.log("%s long poll failed: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
+        self.core.log(self, "Long poll failed: %s\n" % (traceback.format_exc()), 200, "y")
         tries += 1
         if time.time() - starttime >= 60: tries = 0
         if tries > 5: time.sleep(30)

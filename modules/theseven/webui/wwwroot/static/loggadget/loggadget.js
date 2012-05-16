@@ -162,6 +162,7 @@ mod.loggadget = {
                         var td1 = document.createElement("td");
                         var td2 = document.createElement("td");
                         var td3 = document.createElement("td");
+                        var td4 = document.createElement("td");
                         var d = new Date(data[i].timestamp);
                         var timestamp = pad(d.getFullYear(), 4) + "-" + pad(d.getMonth() + 1, 2) + "-"
                                       + pad(d.getDate(), 2) + " " + pad(d.getHours(), 2) + ":"
@@ -176,6 +177,10 @@ mod.loggadget = {
                         td2.appendChild(document.createTextNode("[" + data[i].loglevel + "]"));
                         td3.style.padding = "0px 3px";
                         td3.style.whiteSpace = "pre";
+                        td3.style.textAlign = "right";
+                        td3.appendChild(document.createTextNode(data[i].source + ": "));
+                        td4.style.padding = "0px 3px";
+                        td4.style.whiteSpace = "pre";
                         for (var j in data[i].message)
                           if (data[i].message.hasOwnProperty(j))
                           {
@@ -186,11 +191,12 @@ mod.loggadget = {
                               if (format.indexOf("g") != -1) span.style.color = "#0f0";
                               if (format.indexOf("B") != -1) span.style.fontWeight = "bold";
                               span.appendChild(document.createTextNode(data[i].message[j].data));
-                              td3.appendChild(span);
+                              td4.appendChild(span);
                           }
                         tr.appendChild(td1);
                         tr.appendChild(td2);
                         tr.appendChild(td3);
+                        tr.appendChild(td4);
                         tbody.appendChild(tr);
                         if (atBottom) div.scrollTop = div.scrollHeight;
                     }

@@ -232,10 +232,10 @@ class X6500HotplugWorker(BaseWorker):
     while self.children:
       child = self.children.pop(0)
       try:
-        self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
+        self.core.log(self, "Shutting down worker %s...\n" % (child.settings.name), 800)
         child.stop()
       except Exception as e:
-        self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+        self.core.log(self, "Could not stop worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
 
       
   # Main thread entry point
@@ -293,10 +293,10 @@ class X6500HotplugWorker(BaseWorker):
             
         for serial, child in kill:
           try:
-            self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
+            self.core.log(self, "Shutting down worker %s...\n" % (child.settings.name), 800)
             child.stop()
           except Exception as e:
-            self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+            self.core.log(self, "Could not stop worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
           childstats = child.get_statistics()
           fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
           for field in fields: self.stats[field] += childstats[field]
@@ -343,11 +343,11 @@ class X6500HotplugWorker(BaseWorker):
             self.childmap[serial] = child
             self.children.append(child)
             try:
-              self.core.log("%s: Starting up worker %s...\n" % (self.settings.name, child.settings.name), 800)
+              self.core.log(self, "Starting up worker %s...\n" % (child.settings.name), 800)
               child.start()
             except Exception as e:
-              self.core.log("%s: Could not start worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+              self.core.log(self, "Could not start worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
               
-      except: self.core.log("Caught exception: %s\n" % traceback.format_exc(), 100, "rB")
+      except: self.core.log(self, "Caught exception: %s\n" % traceback.format_exc(), 100, "rB")
           
       with self.wakeup: self.wakeup.wait(self.settings.scaninterval)
