@@ -92,14 +92,16 @@ class Fetcher(Startable):
         worksource = self.core.get_root_work_source()
         queuecount = self.core.workqueue.count
         fetchercount = worksource.get_running_fetcher_count()
-        startfetchers = min(32, (self.queuetarget - queuecount) // 2 - fetchercount)
-        if startfetchers <= 0: self.lock.wait()
+        startfetchers = min(5, (self.queuetarget - queuecount) // 2 - fetchercount)
+        if startfetchers <= 0:
+          self.lock.wait()
+          continue
         try:
           started = worksource.start_fetchers(startfetchers if self.core.workqueue.count * 4 < self.queuetarget else 1)
           if not started:
             self.lock.wait(0.1)
             continue
-          lockout = time.time() + 4 * self.core.workqueue.count / self.queuetarget - 1
+          lockout = time.time() + min(5, 4 * self.core.workqueue.count / self.queuetarget - 1)
           while time.time() < lockout and self.core.workqueue.count > self.queuetarget / 4: self.lock.wait(0.1)
         except:
           self.core.log("Fetcher: Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
