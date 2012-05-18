@@ -45,8 +45,8 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
   
   def __init__(self, core, state = None):
     StatisticsProvider.__init__(self)
-    Startable.__init__(self)
     Inflatable.__init__(self, core, state)
+    Startable.__init__(self)
     
     self.worksourcelock = RLock()
     self.blocklock = RLock()
@@ -77,8 +77,9 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     
     
   def _reset(self):    
+    self.core.event(300, self, "reset", None, "Resetting blockchain state")
     Startable._reset(self)
-    self.currentidentifier = b""#None
+    self.currentidentifier = None
     self.knownidentifiers = []
     self.timeoutend = 0
     self.jobs = []
@@ -152,6 +153,7 @@ class DummyBlockchain(object):
   def __init__(self, core):
     self.core = core
     self.id = 0
+    self.settings = Bunch(name = "Dummy blockchain")
     
     # Initialize job list (protected by global job queue lock)
     self.jobs = []

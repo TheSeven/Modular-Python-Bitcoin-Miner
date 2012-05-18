@@ -48,8 +48,8 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
 
   def __init__(self, core, state = None):
     StatisticsProvider.__init__(self)
-    Startable.__init__(self)
     Inflatable.__init__(self, core, state)
+    Startable.__init__(self)
 
     self.parent = None
     self.statelock = RLock()
@@ -70,6 +70,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     
     
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting work source state")
     Startable._reset(self)
     self.mhashes_pending = 0
     self.mhashes_deferred = 0

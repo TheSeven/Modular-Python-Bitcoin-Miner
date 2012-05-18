@@ -29,6 +29,7 @@
 import time
 from threading import Condition, RLock, Thread
 from .startable import Startable
+from .util import Bunch
 try: from queue import Queue
 except: from Queue import Queue
 
@@ -38,14 +39,17 @@ class WorkQueue(Startable):
 
   
   def __init__(self, core):
-    super(WorkQueue, self).__init__()
     self.core = core
+    self.id = -3
+    self.settings = Bunch(name = "Work queue")
+    super(WorkQueue, self).__init__()
     # Initialize global work queue lock and wakeup condition
     self.lock = Condition()
     self.cancelqueue = Queue()
     
     
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting work queue state")
     super(WorkQueue, self)._reset()
     # Initialize job list container and count
     self.lists = {}

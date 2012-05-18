@@ -38,10 +38,10 @@ class Fetcher(Startable):
 
   
   def __init__(self, core):
-    super(Fetcher, self).__init__()
     self.core = core
     self.id = -2
     self.settings = Bunch(name = "Fetcher controller")
+    super(Fetcher, self).__init__()
     # Initialize global fetcher lock and wakeup condition
     self.lock = Condition()
     # Fetcher controller thread
@@ -49,6 +49,7 @@ class Fetcher(Startable):
     
     
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting fetcher state")
     super(Fetcher, self)._reset()
     self.speedchanged = True
     self.queuetarget = 5

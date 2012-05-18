@@ -46,8 +46,8 @@ class BaseFrontend(Startable, Inflatable):
 
 
   def __init__(self, core, state = None):
-    Startable.__init__(self)
     Inflatable.__init__(self, core, state)
+    Startable.__init__(self)
     self.does_log = self.__class__.can_log
     self.does_show_stats = self.__class__.can_show_stats
     self.does_handle_events = self.__class__.can_handle_events
@@ -65,6 +65,5 @@ class BaseFrontend(Startable, Inflatable):
 
 
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting frontend state")
     Startable._reset(self)
-    self.jobs_per_second = 0
-    self.parallel_jobs = 0

@@ -63,8 +63,8 @@ class Core(Startable):
     self.stdout = sys.stdout
     self.stderr = sys.stderr
     from .util import OutputRedirector
-    sys.stdout = OutputRedirector(self, Bunch(id = -3, settings = Bunch(name = "stdout")), 500)
-    sys.stderr = OutputRedirector(self, Bunch(id = -4, settings = Bunch(name = "stderr")), 100, "rB")
+    sys.stdout = OutputRedirector(self, Bunch(id = -4, settings = Bunch(name = "stdout")), 500)
+    sys.stderr = OutputRedirector(self, Bunch(id = -5, settings = Bunch(name = "stderr")), 100, "rB")
     
     # Initialize parent classes
     super(Core, self).__init__()
@@ -512,7 +512,7 @@ class Core(Startable):
       for string, format in messages: message += string
       prefix = "%s [%3d] %s: " % (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"), loglevel, source.settings.name)
       with self.printlock:
-        for line in string.splitlines(True): self.stderr.write(prefix + line)
+        for line in message.splitlines(True): self.stderr.write(prefix + line)
 
 
   def log_worker_thread(self):
