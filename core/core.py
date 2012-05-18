@@ -526,7 +526,11 @@ class Core(Startable):
       
       for frontend in self.frontends:
         if frontend.can_log:
-          frontend.write_log_message(*data)
+          try: frontend.write_log_message(*data)
+          except:
+            if not hasattr(frontend, "_logging_broken"):
+              frontend._logging_broken = True
+              self.log(frontend, "Exception while logging message: %s" % traceback.format_exc(), 50, "rB")
           
       self.logqueue.task_done()
 
@@ -546,6 +550,7 @@ class Core(Startable):
       
       for frontend in self.frontends:
         if frontend.can_handle_events:
-          frontend.handle_stats_event(*data)
+          try: frontend.handle_stats_event(*data)
+          except: self.log(frontend, "Exception while logging event: %s" % traceback.format_exc(), 200, "r")
           
       self.eventqueue.task_done()
