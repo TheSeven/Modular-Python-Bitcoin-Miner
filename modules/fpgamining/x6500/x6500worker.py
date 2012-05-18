@@ -125,7 +125,8 @@ class X6500Worker(BaseWorker):
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
     # We can't switch the device or driver on the fly, so trigger a restart if they changed.
     # self.serial/self.useftd2xx are cached copys of self.settings.serial/self.settings.useftd2xx
-    if self.settings.serial != self.serial or self.settings.useftd2xx != self.useftd2xx: self.async_restart()
+    if self.started and (self.settings.serial != self.serial or self.settings.useftd2xx != self.useftd2xx):
+      self.async_restart()
     # We need to inform the proxy about a poll interval change
     if self.started and self.settings.pollinterval != self.pollinterval: self._notify_poll_interval_changed()
     for child in self.children: child.apply_settings()
@@ -283,8 +284,8 @@ class X6500Worker(BaseWorker):
     if self.children:
       self.children[0].stats.temperature = fpga0
       self.children[1].stats.temperature = fpga1
-      self.core.event(350, self.children[0], "temperature", fpga0 * 1000, "%f °C" % fpga0)
-      self.core.event(350, self.children[1], "temperature", fpga1 * 1000, "%f °C" % fpga1)
+      self.core.event(350, self.children[0], "temperature", fpga0 * 1000, "%f \xc2\xb0C" % fpga0)
+      self.core.event(350, self.children[1], "temperature", fpga1 * 1000, "%f \xc2\xb0C" % fpga1)
 
       
   def send_job(self, fpga, job):

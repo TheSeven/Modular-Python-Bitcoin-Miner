@@ -182,7 +182,7 @@ class X6500HotplugWorker(BaseWorker):
     if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval = 10
     # We can't switch the driver on the fly, so trigger a restart if it changed.
     # self.useftd2xx is a cached copy of self.settings.useftd2xx
-    if self.settings.useftd2xx != self.useftd2xx: self.async_restart()
+    if self.started and self.settings.useftd2xx != self.useftd2xx: self.async_restart()
     # Push our settings down to our children
     fields = ["takeover", "uploadfirmware", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
               "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]

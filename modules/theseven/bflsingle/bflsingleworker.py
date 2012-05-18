@@ -65,7 +65,7 @@ class BFLSingleWorker(BaseWorker):
     if not "port" in self.settings or not self.settings.port: self.settings.port = "/dev/ttyUSB0"
     # We can't change the port name on the fly, so trigger a restart if they changed.
     # self.port is a cached copy of self.settings.port.
-    if self.settings.port != self.port: self.async_restart()
+    if self.started and self.settings.port != self.port: self.async_restart()
     
 
   # Reset our state. Called both from the constructor and from self.start().
@@ -203,7 +203,7 @@ class BFLSingleWorker(BaseWorker):
           if response[:23] != b"Temperature (celcius): " or response[-1:] != b"\n":
             raise Exception("Bad ZLX response: %s\n" % response.decode("ascii", "replace").strip())
           self.stats.temperature = float(response[23:-1])
-          self.core.event(350, self.children[0], "temperature", self.stats.temperature * 1000, "%f °C" % self.stats.temperature)
+          self.core.event(350, self.children[0], "temperature", self.stats.temperature * 1000, "%f \xc2\xb0C" % self.stats.temperature)
           if self.shutdown: break
 
           # Wait while the device is processing the job. If the job gets canceled, we will be woken up.

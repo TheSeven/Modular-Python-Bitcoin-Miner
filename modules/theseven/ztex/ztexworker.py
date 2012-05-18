@@ -76,7 +76,7 @@ class ZtexWorker(BaseWorker):
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
     # We can't switch the device on the fly, so trigger a restart if they changed.
     # self.serial is a cached copy of self.settings.serial.
-    if self.settings.serial != self.serial: self.async_restart()
+    if self.started and self.settings.serial != self.serial: self.async_restart()
     # We need to inform the proxy about a poll interval change
     if self.started and self.settings.pollinterval != self.pollinterval: self._notify_poll_interval_changed()
     

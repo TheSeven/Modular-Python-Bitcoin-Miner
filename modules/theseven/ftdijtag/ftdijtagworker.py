@@ -100,7 +100,7 @@ class FTDIJTAGWorker(BaseWorker):
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
     # We can't switch the device on the fly, so trigger a restart if it changed.
     # self.serial is a cached copys of self.settings.serial
-    if self.settings.serial != self.serial: self.async_restart()
+    if self.started and self.settings.serial != self.serial: self.async_restart()
     # We need to inform the proxy about a poll interval change
     if self.started and self.settings.pollinterval != self.pollinterval: self._notify_poll_interval_changed()
     for child in self.children: child.apply_settings()
@@ -256,7 +256,7 @@ class FTDIJTAGWorker(BaseWorker):
       for fpga in temperatures:
         if len(self.children) > fpga:
           self.children[fpga].stats.temperature = temperatures[fpga]
-          self.core.event(350, self.children[fpga], "temperature", temperatures[fpga] * 1000, "%f °C" % temperatures[fpga])
+          self.core.event(350, self.children[fpga], "temperature", temperatures[fpga] * 1000, "%f \xc2\xb0C" % temperatures[fpga])
 
       
   def send_job(self, fpga, job):

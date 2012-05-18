@@ -105,7 +105,7 @@ class Job(object):
       with self.worker.stats.lock: self.worker.stats.sharesinvalid += 1
       self.core.event(300, self.worker, "nonceinvalid", nonceval, None, self.worker, self.worksource, self.blockchain, self)
       return False
-    self.core.log(self.worker.settings.name, "Found share: %s:%s:%s\n" % (self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), hexlify(nonce).decode("ascii")), 350, "g")
+    self.core.log(self.worker, "Found share: %s:%s:%s\n" % (self.worksource.settings.name, hexlify(self.data[:76]).decode("ascii"), hexlify(nonce).decode("ascii")), 350, "g")
     noncediff = 65535. * 2**48 / struct.unpack("<Q", hash[-12:-4])[0]
     self.core.event(450, self.worker, "noncevalid", nonceval, str(noncediff), self.worker, self.worksource, self.blockchain, self)
     if hash[::-1] > self.target[::-1]:
@@ -117,6 +117,7 @@ class Job(object):
     
     
   def nonce_handled_callback(self, nonce, noncediff, result):
+    nonceval = struct.unpack("<I", nonce)[0]
     if result == True:
       self.core.log(self.worker, "%s accepted share %s (difficulty %.5f)\n" % (self.worksource.settings.name, hexlify(nonce).decode("ascii"), noncediff), 250, "gB")
       with self.worker.stats.lock: self.worker.stats.sharesaccepted += self.difficulty
