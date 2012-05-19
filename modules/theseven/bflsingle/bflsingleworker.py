@@ -203,7 +203,7 @@ class BFLSingleWorker(BaseWorker):
           if response[:23] != b"Temperature (celcius): " or response[-1:] != b"\n":
             raise Exception("Bad ZLX response: %s\n" % response.decode("ascii", "replace").strip())
           self.stats.temperature = float(response[23:-1])
-          self.core.event(350, self.children[0], "temperature", self.stats.temperature * 1000, "%f \xc2\xb0C" % self.stats.temperature)
+          self.core.event(350, self, "temperature", self.stats.temperature * 1000, "%f \xc2\xb0C" % self.stats.temperature, worker = self)
           if self.shutdown: break
 
           # Wait while the device is processing the job. If the job gets canceled, we will be woken up.
@@ -231,7 +231,7 @@ class BFLSingleWorker(BaseWorker):
           if not self.job.canceled:
             delta = now - self.job.starttime
             self.stats.mhps = 2**32 / delta / 1000000.
-            self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps)
+            self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
             self.jobinterval = delta - 0.2
             self.jobspersecond = 1. / self.jobinterval
             self.core.notify_speed_changed(self)

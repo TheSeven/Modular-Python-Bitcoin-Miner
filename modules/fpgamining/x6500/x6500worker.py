@@ -284,8 +284,8 @@ class X6500Worker(BaseWorker):
     if self.children:
       self.children[0].stats.temperature = fpga0
       self.children[1].stats.temperature = fpga1
-      self.core.event(350, self.children[0], "temperature", fpga0 * 1000, "%f \xc2\xb0C" % fpga0)
-      self.core.event(350, self.children[1], "temperature", fpga1 * 1000, "%f \xc2\xb0C" % fpga1)
+      self.core.event(350, self.children[0], "temperature", fpga0 * 1000, "%f \xc2\xb0C" % fpga0, worker = self.children[0])
+      self.core.event(350, self.children[1], "temperature", fpga1 * 1000, "%f \xc2\xb0C" % fpga1, worker = self.children[1])
 
       
   def send_job(self, fpga, job):
@@ -657,7 +657,7 @@ class X6500FPGA(BaseWorker):
    
    
   def _update_job_interval(self):
-    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps)
+    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, self)
     # Calculate the time that the device will need to process 2**32 nonces.
     # This is limited at 60 seconds in order to have some regular communication,
     # even with very slow devices (and e.g. detect if the device was unplugged).

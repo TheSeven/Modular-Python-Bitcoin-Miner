@@ -70,7 +70,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     
     
   def _reset(self):
-    self.core.event(300, self, "reset", None, "Resetting work source state")
+    self.core.event(300, self, "reset", None, "Resetting work source state", worksource = self)
     Startable._reset(self)
     self.mhashes_pending = 0
     self.mhashes_deferred = 0

@@ -251,7 +251,7 @@ class ZtexWorker(BaseWorker):
 
   def _notify_speed_changed(self, speed):
     self.stats.mhps = speed / 1000000.
-    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps)
+    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
     self.core.log(self, "Running at %f MH/s\n" % self.stats.mhps, 300, "B")
     # Calculate the time that the device will need to process 2**32 nonces.
     # This is limited at 60 seconds in order to have some regular communication,

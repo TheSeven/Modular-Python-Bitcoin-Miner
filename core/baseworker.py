@@ -63,7 +63,7 @@ class BaseWorker(StatisticsProvider, Startable, Inflatable):
 
       
   def _reset(self):
-    self.core.event(300, self, "reset", None, "Resetting worker state")
+    self.core.event(300, self, "reset", None, "Resetting worker state", worker = self)
     Startable._reset(self)
     self.job = None
     self.jobs_per_second = 0

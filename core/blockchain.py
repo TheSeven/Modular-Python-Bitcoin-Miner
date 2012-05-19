@@ -77,7 +77,7 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     
     
   def _reset(self):    
-    self.core.event(300, self, "reset", None, "Resetting blockchain state")
+    self.core.event(300, self, "reset", None, "Resetting blockchain state", blockchain = self)
     Startable._reset(self)
     self.currentidentifier = None
     self.knownidentifiers = []
