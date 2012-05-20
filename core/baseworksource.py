@@ -85,6 +85,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     self.stats.sharesaccepted = 0
     self.stats.sharesrejected = 0
     self.stats.difficulty = 0
+    self.jobs = []
     
     
   def _get_statistics(self, stats, childstats):
@@ -111,6 +112,24 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     return self.parent
 
     
+  def add_job(self, job):
+    if not job in self.jobs: self.jobs.append(job)
+  
+
+  def remove_job(self, job):
+    while job in self.jobs: self.jobs.remove(job)
+
+
+  def _cancel_jobs(graceful = False):
+    with self.core.workqueue.lock:
+      while self.jobs:
+        job = self.jobs.pop(0)
+        if job.worker: cancel.append(job)
+        else: job.destroy()
+    if not graceful: self.jobs = []
+    self.core.workqueue.cancel_jobs(cancel, graceful)
+  
+
   def add_pending_mhashes(self, mhashes):
     with self.statelock: self.mhashes_pending += mhashes
     if self.parent: self.parent.add_pending_mhashes(mhashes)

@@ -123,11 +123,12 @@ class SimpleRS232Worker(BaseWorker):
 
       
   # This function should interrupt processing of the specified job if possible.
-  # This is neccesary to avoid producing stale shares after a new block was found,
+  # This is necesary to avoid producing stale shares after a new block was found,
   # or if a job expires for some other reason. If we don't know about the job, just ignore it.
   # Never attempts to fetch a new job in here, always do that asynchronously!
-  # This needs to be very lightweight and fast.
-  def notify_canceled(self, job):
+  # This needs to be very lightweight and fast. We don't care whether it's a
+  # graceful cancellation for this module because the work upload overhead is low. 
+  def notify_canceled(self, job, graceful):
     # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.wakeup:
       # If the currently being processed, or currently being uploaded job are affected,

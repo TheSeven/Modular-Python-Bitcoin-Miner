@@ -119,6 +119,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.fetcherthreads = []
     self.uploadqueue = Queue()
     self.uploaderthreads = []
+    self.lastidentifier = None
     
     
   def _start(self):
@@ -170,6 +171,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
       self.fetcherspending += 1
       self.fetcherlock.notify()
     return 1
+
 
   def fetcher(self):
     conn = None
@@ -331,6 +333,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         if not jobs:
           self.core.log(self, "Got empty long poll response\n", 500)
           continue
+        self._cancel_jobs(True)
         self._push_jobs(jobs)
         self.core.log(self, "Got %d jobs from long poll response\n" % (len(jobs)), 500)
       except:
@@ -366,6 +369,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     target = unhexlify(response["result"]["target"].encode("ascii"))
     try: identifier = int(response["result"]["identifier"])
     except: identifier = None
+    if identifier != self.lastidentifier:
+      self._cancel_jobs()
+      self.lastidentifier = identifier
     midstate = Job.calculate_midstate(data)
     prefix = data[:68]
     timebase = struct.unpack(">I", data[68:72])[0]

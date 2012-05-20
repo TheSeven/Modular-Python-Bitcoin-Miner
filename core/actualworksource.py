@@ -64,7 +64,7 @@ class ActualWorkSource(BaseWorkSource):
     
       
   def _stop(self):
-    self.core.workqueue.flush_all_of_work_source(self)
+    self._cancel_jobs()
     super(ActualWorkSource, self)._stop()
     
     

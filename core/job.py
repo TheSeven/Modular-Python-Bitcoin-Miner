@@ -45,12 +45,12 @@ class Job(object):
     self.expiry = expiry
     self.data = data
     self.target = target
+    self.identifier = identifier
+    self.prevhash = data[4:36]
     self.difficulty = 65535. * 2**48 / struct.unpack("<Q", self.target[-12:-4])[0]
     with self.worksource.stats.lock: self.worksource.stats.difficulty = self.difficulty
     if midstate: self.midstate = midstate
     else: self.midstate = Job.calculate_midstate(data)
-    if identifier: self.identifier = identifier
-    else: self.identifier = data[4:36]
     self.canceled = False
     self.destroyed = False
     self.worker = None
@@ -59,6 +59,7 @@ class Job(object):
     
     
   def register(self):
+    self.worksource.add_job(self)
     self.blockchain.add_job(self)
     self.worksource.add_pending_mhashes(-self.hashes_remaining / 1000000.)
     self.core.event(500, self.worksource, "registerjob", None, None, None, self.worksource, self.blockchain, self)
@@ -67,6 +68,7 @@ class Job(object):
   def destroy(self):
     if self.destroyed: return
     self.destroyed = True
+    self.worksource.remove_job(self)
     self.blockchain.remove_job(self)
     self.core.workqueue.remove_job(self)
     self.worksource.add_pending_mhashes(self.hashes_remaining / 1000000.)
@@ -131,13 +133,15 @@ class Job(object):
       self.core.event(300, self.worksource, "noncerejected", nonceval, result, self.worker, self.worksource, self.blockchain, self)
 
 
-  def cancel(self):
+  def cancel(self, graceful = False):
     self.canceled = True
-    self.blockchain.remove_job(self)
+    if not graceful:
+      self.worksource.remove_job(self)
+      self.blockchain.remove_job(self)
     self.core.workqueue.remove_job(self)
     if self.worker:
       self.core.event(450, self.worksource, "canceljob", None, None, self.worker, self.worksource, self.blockchain, self)
-      try: self.worker.notify_canceled(self)
+      try: self.worker.notify_canceled(self, graceful)
       except: self.core.log(self.worker, "Exception while canceling job: %s" % (traceback.format_exc()), 100, "r")
       with self.worker.stats.lock: self.worker.stats.jobscanceled += 1
       with self.worksource.stats.lock: self.worksource.stats.jobscanceled += 1

@@ -79,8 +79,8 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
   def _reset(self):    
     self.core.event(300, self, "reset", None, "Resetting blockchain state", blockchain = self)
     Startable._reset(self)
-    self.currentidentifier = None
-    self.knownidentifiers = []
+    self.currentprevhash = None
+    self.knownprevhashes = []
     self.timeoutend = 0
     self.jobs = []
     self.stats.starttime = time.time()
@@ -122,16 +122,16 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
 
 
   def check_job(self, job):
-    if self.currentidentifier == job.identifier: return True
+    if self.currentprevhash == job.prevhash: return True
     cancel = []
     with self.blocklock:
       now = time.time()
       timeout_expired = now > self.timeoutend
       self.timeoutend = now + self.settings.timeout
-      if job.identifier in self.knownidentifiers: return False
-      if timeout_expired: self.knownidentifiers = [self.currentidentifier]
-      else: self.knownidentifiers.append(self.currentidentifier)
-      self.currentidentifier = job.identifier
+      if job.prevhash in self.knownprevhashes: return False
+      if timeout_expired: self.knownprevhashes = [self.currentprevhash]
+      else: self.knownprevhashes.append(self.currentprevhash)
+      self.currentprevhash = job.prevhash
       with self.core.workqueue.lock:
         while self.jobs:
           job = self.jobs.pop(0)
@@ -157,8 +157,8 @@ class DummyBlockchain(object):
     
     # Initialize job list (protected by global job queue lock)
     self.jobs = []
-    self.currentidentifier = None
-    self.knownidentifiers = []
+    self.currentprevhash = None
+    self.knownprevhashes = []
     self.timeoutend = 0
     self.blocklock = RLock()
     
@@ -180,16 +180,16 @@ class DummyBlockchain(object):
 
   
   def check_job(self, job):
-    if self.currentidentifier == job.identifier: return True
+    if self.currentprevhash == job.prevhash: return True
     cancel = []
     with self.blocklock:
       now = time.time()
       timeout_expired = now > self.timeoutend
       self.timeoutend = now + 10
-      if job.identifier in self.knownidentifiers: return False
-      if timeout_expired: self.knownidentifiers = [self.currentidentifier]
-      else: self.knownidentifiers.append(self.currentidentifier)
-      self.currentidentifier = job.identifier
+      if job.prevhash in self.knownprevhashes: return False
+      if timeout_expired: self.knownprevhashes = [self.currentprevhash]
+      else: self.knownprevhashes.append(self.currentprevhash)
+      self.currentprevhash = job.prevhash
       with self.core.workqueue.lock:
         while self.jobs:
           job = self.jobs.pop(0)

@@ -93,9 +93,9 @@ class WorkQueue(Startable):
       self.lock.notify_all()
     
     
-  def cancel_jobs(self, jobs):
+  def cancel_jobs(self, jobs, graceful = False):
     if not jobs: return
-    self.cancelqueue.put(jobs)
+    self.cancelqueue.put((jobs, graceful))
     
     
   def remove_job(self, job):
@@ -111,22 +111,6 @@ class WorkQueue(Startable):
       except: pass
       
       
-  def flush_all_of_work_source(self, worksource):
-    cancel = []
-    destroy = []
-    with self.lock:
-      for expiry in self.lists:
-        for job in self.lists[expiry]:
-          if job.worksource == worksource:
-            destroy.append(job)
-      for expiry in self.takenlists:
-        for job in self.takenlists[expiry]:
-          if job.worksource == worksource:
-            cancel.append(job)
-      for job in destroy: job.destroy()
-    self.cancel_jobs(cancel)
-    
-    
   def get_job(self, worker, expiry_min_ahead, async = False):
     with self.lock:
       job = self._get_job_internal(expiry_min_ahead, async)
@@ -210,8 +194,9 @@ class WorkQueue(Startable):
   
   def _cancelloop(self):
     while True:
-      jobs = self.cancelqueue.get()
-      if not jobs: return
+      data = self.cancelqueue.get()
+      if not data: return
+      jobs, graceful = data
       for job in jobs:
-        try: job.cancel()
+        try: job.cancel(graceful)
         except: self.core.log(self.core, "Error while canceling job: %s\n" % traceback.format_exc(), 100, "r")
