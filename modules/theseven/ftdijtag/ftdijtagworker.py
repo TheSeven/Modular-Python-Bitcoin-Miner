@@ -256,7 +256,8 @@ class FTDIJTAGWorker(BaseWorker):
       for fpga in temperatures:
         if len(self.children) > fpga:
           self.children[fpga].stats.temperature = temperatures[fpga]
-          self.core.event(350, self.children[fpga], "temperature", temperatures[fpga] * 1000, "%f \xc2\xb0C" % temperatures[fpga], worker = self.children[fpga])
+          if temperatures[fpga]:
+            self.core.event(350, self.children[fpga], "temperature", temperatures[fpga] * 1000, "%f \xc2\xb0C" % temperatures[fpga], worker = self.children[fpga])
 
       
   def send_job(self, fpga, job):

@@ -284,8 +284,8 @@ class X6500Worker(BaseWorker):
     if self.children:
       self.children[0].stats.temperature = fpga0
       self.children[1].stats.temperature = fpga1
-      self.core.event(350, self.children[0], "temperature", fpga0 * 1000, "%f \xc2\xb0C" % fpga0, worker = self.children[0])
-      self.core.event(350, self.children[1], "temperature", fpga1 * 1000, "%f \xc2\xb0C" % fpga1, worker = self.children[1])
+      if fpga0: self.core.event(350, self.children[0], "temperature", fpga0 * 1000, "%f \xc2\xb0C" % fpga0, worker = self.children[0])
+      if fpga1: self.core.event(350, self.children[1], "temperature", fpga1 * 1000, "%f \xc2\xb0C" % fpga1, worker = self.children[1])
 
       
   def send_job(self, fpga, job):
