@@ -120,7 +120,8 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     while job in self.jobs: self.jobs.remove(job)
 
 
-  def _cancel_jobs(graceful = False):
+  def _cancel_jobs(self, graceful = False):
+    cancel = []
     with self.core.workqueue.lock:
       while self.jobs:
         job = self.jobs.pop(0)
