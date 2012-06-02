@@ -172,6 +172,7 @@ class WorkSourceGroup(BaseWorkSource):
       startindex = self._get_start_index()
     best = False
     found = False
+    iteration = 0
     while not found:
       index = startindex
       first = True
@@ -191,6 +192,9 @@ class WorkSourceGroup(BaseWorkSource):
         if index >= len(children): index = 0
         first = False
       if not found: self._distribute_mhashes()
+      iteration += 1
+      if iteration > 150: break
+      if iteration > 100: force = True
     return best
     
     
