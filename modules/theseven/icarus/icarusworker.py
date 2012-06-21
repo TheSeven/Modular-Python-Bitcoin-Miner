@@ -127,7 +127,7 @@ class IcarusWorker(BaseWorker):
   # or if a job expires for some other reason. If we don't know about the job, just ignore it.
   # Never attempts to fetch a new job in here, always do that asynchronously!
   # This needs to be very lightweight and fast.
-  def notify_canceled(self, job):
+  def notify_canceled(self, job, graceful):
     # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.wakeup:
       # If the currently being processed, or currently being uploaded job are affected,
