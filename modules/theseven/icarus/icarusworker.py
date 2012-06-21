@@ -70,7 +70,7 @@ class IcarusWorker(BaseWorker):
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     # We can't change the port name or baud rate on the fly, so trigger a restart if they changed.
     # self.port/self.baudrate are cached copys of self.settings.port/self.settings.baudrate
-    if self.started and self.settings.port != self.port or self.settings.baudrate != self.baudrate: self.async_restart()
+    if self.started and (self.settings.port != self.port or self.settings.baudrate != self.baudrate): self.async_restart()
     
 
   # Reset our state. Called both from the constructor and from self.start().
