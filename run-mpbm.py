@@ -49,7 +49,7 @@ if __name__ == "__main__":
   parser.add_option("--add-example-work-sources", action = "store_true", default = False,
                     help = "Add the example work sources to the instance")
   (options, args) = parser.parse_args()
-  
+
   # Figure out instance name
   if len(args) == 0: instancename = "default"
   elif len(args) == 1: instancename = args[0]
@@ -57,11 +57,11 @@ if __name__ == "__main__":
 
   # Create core instance, will load saved instance state if present
   core = Core(instance = instancename, default_loglevel = options.default_loglevel)
-  
+
   # Autodetect appropriate frontends if requested or if a new instance is being set up
   if options.detect_frontends or core.is_new_instance:
     core.detect_frontends()
-  
+
   # Autodetect available workers if requested or if a new instance is being set up
   if options.detect_workers or core.is_new_instance:
     core.detect_workers()
@@ -127,13 +127,13 @@ if __name__ == "__main__":
     worksource.settings.longpollconnections = 0
     worksource.apply_settings()
     examplesources.add_work_source(worksource)
-    
+
   def stop(signum, frame):
     core.stop()
     sys.exit(0)
-    
+
   signal.signal(signal.SIGINT, stop)
   signal.signal(signal.SIGTERM, stop)
   core.start()
-  
+
   while True: time.sleep(100)

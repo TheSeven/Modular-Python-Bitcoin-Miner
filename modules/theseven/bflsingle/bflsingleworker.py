@@ -27,7 +27,6 @@
 
 
 import os
-import serial
 import time
 import traceback
 from threading import Condition, Thread
@@ -154,6 +153,7 @@ class BFLSingleWorker(BaseWorker):
         self.job = None
 
         # Open the serial port
+        import serial
         self.handle = serial.Serial(self.port, 115200, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
 
         # We keep control of the wakeup lock at all times unless we're sleeping

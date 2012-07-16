@@ -88,18 +88,19 @@ class WebUI(BaseFrontend):
     if not "log_buffer_max_length" in self.settings: self.settings.log_buffer_max_length = 1000
     if not "log_buffer_purge_size" in self.settings: self.settings.log_buffer_purge_size = 100
     if self.started and self.settings.port != self.port: self.async_restart(3)
-    
-    
+
+
   def _reset(self):
     self.log_buffer = []
     self.log_listeners = []
 
-    
+
   def _start(self):
     super(WebUI, self)._start()
     self.httpd = ThreadingTCPServer(("", self.settings.port), RequestHandler, False)
     self.httpd.webui = self
-    self.httpd.allow_reuse_address = 1
+    self.httpd.allow_reuse_address = True
+    self.httpd.daemon_threads = True
     self.httpd.server_bind()
     self.httpd.server_activate()
     self.serverthread = Thread(None, self.httpd.serve_forever, self.settings.name + "_httpd")
@@ -129,21 +130,21 @@ class WebUI(BaseFrontend):
       self.log_buffer.append(data)
       if len(self.log_buffer) > self.settings.log_buffer_max_length:
         self.log_buffer = self.log_buffer[self.settings.log_buffer_purge_size:]
-        
-        
+
+
   def register_log_listener(self, listener):
     with self.log_lock:
       if not listener in self.log_listeners:
         self.log_listeners.append(listener)
       for data in self.log_buffer: listener.put(data)
-        
-        
+
+
   def unregister_log_listener(self, listener):
     with self.log_lock:
       while listener in self.log_listeners:
         self.log_listeners.remove(listener)
-        
-        
+
+
 
 class RequestHandler(BaseHTTPRequestHandler):
 
@@ -151,21 +152,21 @@ class RequestHandler(BaseHTTPRequestHandler):
   rootfile = "/static/init/init.htm"
   mimetypes = {
     '': 'application/octet-stream',  # Default
-    '.htm': 'text/html',
-    '.html': 'text/html',
+    '.htm': 'text/html; charset=UTF-8',
+    '.html': 'text/html; charset=UTF-8',
     '.png': 'image/png',
     '.gif': 'image/gif',
-    '.js': 'text/javascript',
-    '.css': 'text/css',
+    '.js': 'text/javascript; charset=UTF-8',
+    '.css': 'text/css; charset=UTF-8',
   }
 
-  
+
   def log_request(self, code = '-', size = '-'):
     if code == 200:
       if size != "-": self.log_message("HTTP request: %s \"%s\" %s %s", self.address_string(), self.requestline, str(code), str(size))
     else: self.log_error("Request failed: %s \"%s\" %s %s", self.address_string(), self.requestline, str(code), str(size))
-   
-   
+
+
   def log_error(self, format, *args):
     webui = self.server.webui
     webui.core.log(webui, "%s\n" % (format % args), 600, "y")
@@ -175,7 +176,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     webui = self.server.webui
     webui.core.log(webui, "%s\n" % (format % args), 800, "")
 
-    
+
   def do_HEAD(self):
     # Essentially the same as GET, just without a body
     self.do_GET(False)
@@ -230,7 +231,7 @@ class RequestHandler(BaseHTTPRequestHandler):
       try: f.close()
       except: pass
 
-      
+
   def do_POST(self):
     # Remove query strings and anchors, and unescape the path
     path = urllib.unquote(self.path.split('?',1)[0].split('#',1)[0])
@@ -240,8 +241,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     privileges = self.check_auth()
     if not privileges:
       # Invalid credentials => 401 Authorization Required
-      self.fail(401)
-      self.send_header("WWW-Authenticate", "Basic realm=\"MPBM WebUI\"")
+      self.fail(401, [("WWW-Authenticate", "Basic realm=\"MPBM WebUI\"")])
       return None
     # Look for a handler for that path and execute it if present
     if path in handlermap:
@@ -249,12 +249,12 @@ class RequestHandler(BaseHTTPRequestHandler):
     # No handler for that path found => 404 Not Found
     else: self.fail(404)
 
-    
+
   def check_auth(self):
     # Check authentication and figure out privilege level
     authdata = self.headers.get("authorization", None)
     credentials = ""
-    if authdata != None: 
+    if authdata != None:
       authdata = authdata.split(" ", 1)
       if authdata[0].lower() == "basic":
         try: credentials = base64.b64decode(authdata[1].encode("ascii")).decode("utf_8")
@@ -264,7 +264,7 @@ class RequestHandler(BaseHTTPRequestHandler):
       privileges = self.server.webui.settings.users[credentials]
     return privileges
 
-  
+
   def fail(self, status, headers = []):
     self.send_response(status)
     for header in headers:

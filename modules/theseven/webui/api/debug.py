@@ -35,6 +35,5 @@ def dumpthreadstates(core, webui, httprequest, path, request, privileges):
       code.append("\n# Thread: %s(%d)" % (id2name.get(threadId,""), threadId))
       for filename, lineno, name, line in traceback.extract_stack(stack):
           code.append('File: "%s", line %d, in %s' % (filename, lineno, name))
-          if line:
-              code.append("  %s" % (line.strip()))
+          if line: code.append("  %s" % (line.strip()))
   return {"data": "\n".join(code)}

@@ -36,21 +36,21 @@ from .bflsingleworker import BFLSingleWorker
 
 # Worker main class, referenced from __init__.py
 class BFLSingleHotplugWorker(BaseWorker):
-  
+
   version = "theseven.bflsingle hotplug manager v0.1.0beta"
   default_name = "BFL Single hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{
     "scaninterval": {"title": "Bus scan interval", "type": "float", "position": 2200},
   })
-  
-  
+
+
   @classmethod
   def autodetect(self, core):
     try:
       import serial
       found = False
-      for port in glob("/dev/serial/by-id/usb-Butterfly_Labs_Inc._BitFORCE_SHA256*"):
+      for port in glob("/dev/serial/by-id/usb-Butterfly_Labs_Inc._BitFORCE_SHA256-*"):
         try:
           handle = serial.Serial(port, 115200, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
           handle.close()
@@ -59,8 +59,8 @@ class BFLSingleHotplugWorker(BaseWorker):
         except: pass
       if found: core.add_worker(self(core))
     except: pass
-    
-    
+
+
   # Constructor, gets passed a reference to the miner core and the saved worker state, if present
   def __init__(self, core, state = None):
     # Initialize bus scanner wakeup event
@@ -69,7 +69,7 @@ class BFLSingleHotplugWorker(BaseWorker):
     # Let our superclass do some basic initialization and restore the state if neccessary
     super(BFLSingleHotplugWorker, self).__init__(core, state)
 
-    
+
   # Validate settings, filling them with default values if neccessary.
   # Called from the constructor and after every settings change.
   def apply_settings(self):
@@ -78,7 +78,7 @@ class BFLSingleHotplugWorker(BaseWorker):
     if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval = 10
     # Rescan the bus immediately to apply the new settings
     with self.wakeup: self.wakeup.notify()
-    
+
 
   # Reset our state. Called both from the constructor and from self.start().
   def _reset(self):
@@ -100,8 +100,8 @@ class BFLSingleHotplugWorker(BaseWorker):
     self.mainthread = Thread(None, self.main, self.settings.name + "_main")
     self.mainthread.daemon = True
     self.mainthread.start()
-  
-  
+
+
   # Shut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
@@ -121,20 +121,19 @@ class BFLSingleHotplugWorker(BaseWorker):
       except Exception as e:
         self.core.log(self, "Could not stop worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
 
-      
+
   # Main thread entry point
   # This thread is responsible for scanning for boards and spawning worker modules for them
   def main(self):
+    import serial
     number = 0
-  
+
     # Loop until we are shut down
     while not self.shutdown:
-    
-      import serial
 
       try:
         boards = {}
-        for port in glob("/dev/serial/by-id/usb-Butterfly_Labs_Inc._BitFORCE_SHA256*"):
+        for port in glob("/dev/serial/by-id/usb-Butterfly_Labs_Inc._BitFORCE_SHA256-*"):
           available = False
           try:
             handle = serial.Serial(port, 115200, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
@@ -142,13 +141,13 @@ class BFLSingleHotplugWorker(BaseWorker):
             available = True
           except: pass
           boards[port] = available
-                
+
         kill = []
-        for serial, child in self.childmap.items():
-          if not serial in boards:
-            kill.append((serial, child))
-            
-        for serial, child in kill:
+        for port, child in self.childmap.items():
+          if not port in boards:
+            kill.append((port, child))
+
+        for port, child in kill:
           try:
             self.core.log(self, "Shutting down worker %s...\n" % (child.settings.name), 800)
             child.stop()
@@ -162,7 +161,7 @@ class BFLSingleHotplugWorker(BaseWorker):
           del self.childmap[port]
           try: self.children.remove(child)
           except: pass
-              
+
         for port, available in boards.items():
           if port in self.childmap or not available: continue
           number += 1
@@ -177,7 +176,7 @@ class BFLSingleHotplugWorker(BaseWorker):
             child.start()
           except Exception as e:
             self.core.log(self, "Could not start worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
-              
+
       except: self.core.log(self, "Caught exception: %s\n" % traceback.format_exc(), 100, "rB")
-          
+
       with self.wakeup: self.wakeup.wait(self.settings.scaninterval)

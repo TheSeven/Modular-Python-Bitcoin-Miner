@@ -26,7 +26,6 @@
 
 
 
-import serial
 import time
 import struct
 import traceback
@@ -70,7 +69,7 @@ class SimpleRS232Worker(BaseWorker):
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     # We can't change the port name or baud rate on the fly, so trigger a restart if they changed.
     # self.port/self.baudrate are cached copys of self.settings.port/self.settings.baudrate
-    if self.started and self.settings.port != self.port or self.settings.baudrate != self.baudrate: self.async_restart()
+    if self.started and (self.settings.port != self.port or self.settings.baudrate != self.baudrate): self.async_restart()
     
 
   # Reset our state. Called both from the constructor and from self.start().
@@ -173,6 +172,7 @@ class SimpleRS232Worker(BaseWorker):
         self.nextjob = None
 
         # Open the serial port
+        import serial
         self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
 
         # Send enough zero bytes to make sure that the device is not expecting data any more.

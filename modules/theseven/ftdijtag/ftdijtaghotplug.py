@@ -26,7 +26,6 @@
 
 
 
-import usb
 import traceback
 from threading import Condition, Thread
 from core.baseworker import BaseWorker
@@ -75,6 +74,7 @@ class FTDIJTAGHotplugWorker(BaseWorker):
   def autodetect(self, core):
     return  #TODO: Remove modules/fpgamining tree and activate this once ztexmerge has been evicted
     try:
+      import usb
       found = False
       try:
         import usb
@@ -196,6 +196,8 @@ class FTDIJTAGHotplugWorker(BaseWorker):
   # Main thread entry point
   # This thread is responsible for scanning for boards and spawning worker modules for them
   def main(self):
+    import usb
+
     # Loop until we are shut down
     while not self.shutdown:
       try:

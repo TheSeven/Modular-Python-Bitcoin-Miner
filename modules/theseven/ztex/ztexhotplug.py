@@ -171,11 +171,11 @@ class ZtexHotplugWorker(BaseWorker):
   # Main thread entry point
   # This thread is responsible for scanning for boards and spawning worker modules for them
   def main(self):
+    import usb
+
     # Loop until we are shut down
     while not self.shutdown:
     
-      import usb
-
       try:
         boards = {}
         for bus in usb.busses():

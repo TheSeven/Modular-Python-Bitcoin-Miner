@@ -411,11 +411,15 @@ class FTDIJTAGDevice(object):
       script["tdomask"] = byte2int(script["tdo"])
       script["ir_to_dr"] = script["leave_shift"] + script["shift_dr"]
       self.outmask |= script["tckmask"] | script["tmsmask"] | script["tdimask"]
-    self.handle.controlMsg(0x40, 3, None, 0, 0, 1000)
+    self.handle.controlMsg(0x40, 3, None, 0, 0)
     self._switch_async()
+    self.initialized = {}
     self.busdevices = {}
     self.devices = []
-    for bus in sorted(self.jtagscript.keys()): self._init_bus(bus)
+    for bus in sorted(self.jtagscript.keys()):
+      self.initialized[bus] = False
+      try: self._init_bus(bus)
+      except Exception as e: self.proxy.log("%s\n" % e, 150, "rB")
     
     
   def _init_bus(self, bus):
@@ -487,6 +491,7 @@ class FTDIJTAGDevice(object):
                              + script["shift_dr"]
     script["readnonce_pull"] = self._tmstail(bus, clock * readnonce_pull_len)
     script["readnonce_tail"] = script["leave_shift"]
+    self.initialized[bus] = True
     
     
   def register(self, device):
@@ -542,16 +547,16 @@ class FTDIJTAGDevice(object):
     
     
   def _purge_buffers(self):
-    self.handle.controlMsg(0x40, 0, None, 1, self.index, 1000)
-    self.handle.controlMsg(0x40, 0, None, 2, self.index, 1000)
+    self.handle.controlMsg(0x40, 0, None, 1, self.index)
+    self.handle.controlMsg(0x40, 0, None, 2, self.index)
     
     
   def _set_bit_mode(self, mask, mode):
-    self.handle.controlMsg(0x40, 0xb, None, (mode << 8) | mask, self.index, 1000)
+    self.handle.controlMsg(0x40, 0xb, None, (mode << 8) | mask, self.index)
   
   
   def _get_bit_mode(self):
-    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index, 1000))))[0]
+    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index))))[0]
     
   
   def _switch_async(self):
@@ -569,7 +574,7 @@ class FTDIJTAGDevice(object):
     offset = 0
     while offset < size:
       write_size = min(4096, size - offset)
-      ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size], 1000)
+      ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size])
       offset = offset + ret
     
     
@@ -578,7 +583,7 @@ class FTDIJTAGDevice(object):
     data = b""
     offset = 0
     while offset < size and time.time() < timeout:
-      ret = bytes(bytearray(self.handle.bulkRead(self.inep, min(64, size - offset + 2), 1000)))
+      ret = bytes(bytearray(self.handle.bulkRead(self.inep, min(64, size - offset + 2))))
       data += ret[2:]
       offset += len(ret) - 2
     return data
@@ -637,6 +642,7 @@ class FTDIJTAGDevice(object):
     nonces = {}
     for bus in self.jtagscript:
       script = self.jtagscript[bus]
+      if not self.initialized[bus]: continue
       with self.lock:
         self._write(script["readnonce_head"])
         data = self._shift(bus, script["readnonce_pull"])
