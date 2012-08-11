@@ -301,6 +301,8 @@ class CairnsmoreWorker(BaseWorker):
         # If no response was available, retry
         if len(nonce) != 4: continue
         nonce = struct.pack("<I", struct.unpack(">I", nonce)[0] - self.offset)
+        if newjob.nonce != nonce and struct.unpack("<I", newjob.nonce)[0] != struct.unpack("<I", nonce)[0] + 256:
+          self.offset = struct.unpack("<I", nonce)[0] - struct.unpack("<I", newjob.nonce)[0]
         # Snapshot the current jobs to avoid race conditions
         newjob = self.job
         oldjob = self.oldjob
