@@ -301,8 +301,7 @@ class CairnsmoreWorker(BaseWorker):
         # If no response was available, retry
         if len(nonce) != 4: continue
         nonce = struct.pack("<I", struct.unpack(">I", nonce)[0] - self.offset)
-        if newjob.nonce != nonce and struct.unpack("<I", newjob.nonce)[0] != struct.unpack("<I", nonce)[0] + 256:
-          self.offset = struct.unpack("<I", nonce)[0] - struct.unpack("<I", newjob.nonce)[0]
+
         # Snapshot the current jobs to avoid race conditions
         newjob = self.job
         oldjob = self.oldjob
@@ -332,11 +331,11 @@ class CairnsmoreWorker(BaseWorker):
         # This needs self.stats.mhps to be set.
         if isinstance(newjob, ValidationJob):
           # This is a validation job. Validate that the nonce is correct, and complain if not.
-          if newjob.nonce != nonce and newjob.nonce != nonce + 256:
+          if newjob.nonce != nonce and struct.unpack("<I", newjob.nonce)[0] != struct.unpack("<I", nonce)[0] + 256:
             raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(newjob.nonce).decode("ascii")))
           else:
             # The nonce was correct. Wake up the main thread.
-            self.offset = nonce - newjob.nonce
+            self.offset = struct.unpack("<I", nonce)[0] - struct.unpack("<I", newjob.nonce)[0]
             with self.wakeup:
               self.checksuccess = True
               self.wakeup.notify()
