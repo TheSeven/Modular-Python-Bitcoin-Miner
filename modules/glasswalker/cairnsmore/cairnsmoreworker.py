@@ -222,7 +222,7 @@ class CairnsmoreWorker(BaseWorker):
           self.wakeup.release()
           job = self.core.get_job(self, self.jobinterval + 2)
           self.wakeup.acquire()
-          
+
           # If a new block was found while we were fetching that job, just discard it and get a new one.
           if job.canceled:
             job.destroy()
@@ -289,7 +289,7 @@ class CairnsmoreWorker(BaseWorker):
       while True:
         # If the main thread has a problem, make sure we die before it restarts
         if self.error != None: break
-        
+
         # If there were suspiciously many hashes without even a single share,
         # assume that PL2303 did it's job (i.e. serial port locked up),
         # and restart the board worker.
@@ -334,7 +334,7 @@ class CairnsmoreWorker(BaseWorker):
             raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(newjob.nonce).decode("ascii")))
           else:
             # The nonce was correct. Wake up the main thread.
-	    self.offset = nonce - newjob.nonce
+            self.offset = nonce - newjob.nonce
             with self.wakeup:
               self.checksuccess = True
               self.wakeup.notify()
