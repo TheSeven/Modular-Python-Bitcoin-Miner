@@ -161,6 +161,7 @@ class CairnsmoreWorker(BaseWorker):
 
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
+	self.offset = 0
 
         # Job that the device is currently working on, or that is currently being uploaded.
         # This variable is used by BaseWorker to figure out the current work source for statistics.
@@ -299,7 +300,7 @@ class CairnsmoreWorker(BaseWorker):
         nonce = self.handle.read(4)
         # If no response was available, retry
         if len(nonce) != 4: continue
-        nonce = nonce[::-1]
+        nonce = nonce[::-1] - self.offset
         # Snapshot the current jobs to avoid race conditions
         newjob = self.job
         oldjob = self.oldjob
@@ -318,21 +319,22 @@ class CairnsmoreWorker(BaseWorker):
         if not job and oldjob:
           if oldjob.nonce_found(nonce): job = oldjob
         # If the nonce is too low, the measurement may be inaccurate.
-        nonceval = struct.unpack("<I", nonce)[0] & 0x7fffffff
+        nonceval = struct.unpack("<I", nonce)[0] #& 0x7fffffff
         if job and job.starttime and nonceval >= 0x04000000:
           # Calculate actual on-device processing time (not including transfer times) of the job.
           delta = (now - job.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
           # This assumes that the device processes all nonces (starting at zero) sequentially.
-          self.stats.mhps = nonceval / 500000. / delta
+          self.stats.mhps = nonceval / 1000000. / delta
           self.core.event(350, self, "speed", self.stats.mhps * 500, "%f MH/s" % self.stats.mhps, worker = self)
         # This needs self.stats.mhps to be set.
         if isinstance(newjob, ValidationJob):
           # This is a validation job. Validate that the nonce is correct, and complain if not.
-          if newjob.nonce != nonce:
+          if newjob.nonce != nonce and newjob.nonce != nonce + 256:
             raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(newjob.nonce).decode("ascii")))
           else:
             # The nonce was correct. Wake up the main thread.
+	    self.offset = nonce - newjob.nonce
             with self.wakeup:
               self.checksuccess = True
               self.wakeup.notify()
