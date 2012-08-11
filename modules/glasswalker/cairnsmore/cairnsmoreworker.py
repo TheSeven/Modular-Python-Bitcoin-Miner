@@ -161,7 +161,7 @@ class CairnsmoreWorker(BaseWorker):
 
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
-	self.offset = 0
+        self.offset = 0
 
         # Job that the device is currently working on, or that is currently being uploaded.
         # This variable is used by BaseWorker to figure out the current work source for statistics.
