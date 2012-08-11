@@ -63,8 +63,8 @@ class CairnsmoreWorker(BaseWorker):
     super(CairnsmoreWorker, self).apply_settings()
     # Pretty much self-explanatory...
     if not "port" in self.settings or not self.settings.port: self.settings.port = "/dev/ttyUSB0"
-    if not "baudrate" in self.settings or not self.settings.baudrate: self.settings.baudrate = 57600
-    if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 11
+    if not "baudrate" in self.settings or not self.settings.baudrate: self.settings.baudrate = 115200
+    if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 20
     # We can't change the port name or baud rate on the fly, so trigger a restart if they changed.
     # self.port/self.baudrate are cached copys of self.settings.port/self.settings.baudrate
     if self.started and (self.settings.port != self.port or self.settings.baudrate != self.baudrate): self.async_restart()
@@ -300,7 +300,7 @@ class CairnsmoreWorker(BaseWorker):
         nonce = self.handle.read(4)
         # If no response was available, retry
         if len(nonce) != 4: continue
-        nonce = nonce[::-1] - self.offset
+        nonce = struct.pack(">I", struct.unpack(">I", nonce[::-1])[0] - self.offset)
         # Snapshot the current jobs to avoid race conditions
         newjob = self.job
         oldjob = self.oldjob
