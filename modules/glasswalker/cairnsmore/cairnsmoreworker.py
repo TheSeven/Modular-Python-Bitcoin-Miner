@@ -319,6 +319,7 @@ class CairnsmoreWorker(BaseWorker):
           if newjob.nonce_found(nonce, oldjob): job = newjob
         if not job and oldjob:
           if oldjob.nonce_found(nonce): job = oldjob
+        if not job and isinstance(newjob, ValidationJob): job = newjob
         # If the nonce is too low, the measurement may be inaccurate.
         nonceval = struct.unpack("<I", nonce)[0] #& 0x7fffffff
         if job and job.starttime and nonceval >= 0x04000000:
