@@ -43,6 +43,11 @@ class CairnsmoreWorker(BaseWorker):
     "port": {"title": "Port", "type": "string", "position": 1000},
     "baudrate": {"title": "Baud rate", "type": "int", "position": 1100},
     "jobinterval": {"title": "Job interval", "type": "float", "position": 1200},
+    "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
+    "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
+    "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 3200},
+    "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 3300},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3400},
   })
   
   
@@ -65,6 +70,16 @@ class CairnsmoreWorker(BaseWorker):
     if not "port" in self.settings or not self.settings.port: self.settings.port = "/dev/ttyUSB0"
     if not "baudrate" in self.settings or not self.settings.baudrate: self.settings.baudrate = 115200
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 20
+    if not "initialspeed" in self.settings: self.settings.initialspeed = 150
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 200
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
+    if not "invalidwarning" in self.settings: self.settings.invalidwarning = 2
+    self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
+    if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
+    self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
+    self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     # We can't change the port name or baud rate on the fly, so trigger a restart if they changed.
     # self.port/self.baudrate are cached copys of self.settings.port/self.settings.baudrate
     if self.started and (self.settings.port != self.port or self.settings.baudrate != self.baudrate): self.async_restart()
@@ -163,6 +178,11 @@ class CairnsmoreWorker(BaseWorker):
         self.stats.mhps = 0
         self.offset = 0
 
+        # Initialize clocking tracking data
+        self.speed = 0
+        self.recentshares = 0
+        self.recentinvalid = 0
+        
         # Job that the device is currently working on, or that is currently being uploaded.
         # This variable is used by BaseWorker to figure out the current work source for statistics.
         self.job = None
@@ -182,6 +202,9 @@ class CairnsmoreWorker(BaseWorker):
         self.listenerthread.daemon = True
         self.listenerthread.start()
 
+        # Configure core clock
+        self._set_speed(self.settings.initialspeed // 3.125)
+        
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
         self._sendjob(job)
@@ -200,18 +223,6 @@ class CairnsmoreWorker(BaseWorker):
         # We woke up, but the validation job hasn't succeeded in the mean time.
         # This usually means that the wakeup timeout has expired.
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
-        # self.stats.mhps has now been populated by the listener thread
-        self.core.log(self, "Running at %f MH/s\n" % self.stats.mhps, 300, "B")
-        # Calculate the time that the device will need to process 2**32 nonces.
-        # This is limited at 60 seconds in order to have some regular communication,
-        # even with very slow devices (and e.g. detect if the device was unplugged).
-        interval = min(60, 2**32 / 1000000. / self.stats.mhps)
-        # Add some safety margin and take user's interval setting (if present) into account.
-        self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
-        self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
-        # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-        self.jobspersecond = 1. / self.jobinterval
-        self.core.notify_speed_changed(self)
 
         # Main loop, continues until something goes wrong or we're shutting down.
         while not self.shutdown:
@@ -223,7 +234,15 @@ class CairnsmoreWorker(BaseWorker):
           job = self.core.get_job(self, self.jobinterval + 2)
           self.wakeup.acquire()
 
-          # If a new block was found while we were fetching that job, just discard it and get a new one.
+          # If the job could be interpreted as a command, ignore it.
+          if job.data[68:72] == unhexlify(b"ffffffff"):
+            job.destroy()
+            continue
+
+          # Go through the safety checks and adjust the clock if necessary
+          self.safetycheck()
+          
+          # If a new block was found while we were fetching this job, just discard it and get a new one.
           if job.canceled:
             job.destroy()
             continue
@@ -321,14 +340,14 @@ class CairnsmoreWorker(BaseWorker):
           if oldjob.nonce_found(nonce): job = oldjob
         if not job and isinstance(newjob, ValidationJob): job = newjob
         # If the nonce is too low, the measurement may be inaccurate.
-        nonceval = struct.unpack("<I", nonce)[0] #& 0x7fffffff
+        nonceval = struct.unpack("<I", nonce)[0]
         if job and job.starttime and nonceval >= 0x04000000:
           # Calculate actual on-device processing time (not including transfer times) of the job.
           delta = (now - job.starttime) - 40. / self.baudrate
           # Calculate the hash rate based on the processing time and number of neccessary MHashes.
           # This assumes that the device processes all nonces (starting at zero) sequentially.
           self.stats.mhps = nonceval / 1000000. / delta
-          self.core.event(350, self, "speed", self.stats.mhps * 500, "%f MH/s" % self.stats.mhps, worker = self)
+          self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
         # This needs self.stats.mhps to be set.
         if isinstance(newjob, ValidationJob):
           # This is a validation job. Validate that the nonce is correct, and complain if not.
@@ -392,3 +411,54 @@ class CairnsmoreWorker(BaseWorker):
       self.oldjob = self.job
       self.job.destroy()
       self.job = None
+  
+  
+  # Check the invalid rate and adjust the FPGA clock accordingly
+  def safetycheck(self):
+    
+    warning = False
+    critical = False
+    if self.recentinvalid > self.parent.settings.invalidwarning: warning = True
+    if self.recentinvalid > self.parent.settings.invalidcritical: critical = True
+
+    if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
+    if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
+
+    if critical: speedstep = -10
+    elif warning: speedstep = -1
+    elif not self.recentinvalid and self.recentshares >= self.parent.settings.speedupthreshold:
+      speedstep = 1
+    else: speedstep = 0    
+
+    if speedstep: self._set_speed(self.speed + speedstep)
+
+    if speedstep:
+      self.recentinvalid = 0
+      self.recentshares = 0
+    
+   
+  def _set_speed(self, speed):
+    speed = min(max(speed, 2), self.parent.settings.maximumspeed // 3.125)
+    if self.speed == speed: return
+    self.core.log(self, "Setting clock speed to %.2f MHz...\n" % speed * 3.125, 500, "B")
+    self._jobend()
+    self.handle.write(b"\0" * 84 + struct.pack("BBBB", 0, speed, speed, 0) + b"\xff" * 4 + b"\0" * 4)
+    self.handle.flush()
+    self.speed = speed
+    self.stats.mhps = speed * 3.125
+    self._update_job_interval()
+
+
+  def _update_job_interval(self):
+    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
+    # Calculate the time that the device will need to process 2**32 nonces.
+    # This is limited at 60 seconds in order to have some regular communication,
+    # even with very slow devices (and e.g. detect if the device was unplugged).
+    interval = min(60, 2**32 / 1000000. / self.stats.mhps)
+    # Add some safety margin and take user's interval setting (if present) into account.
+    self.jobinterval = min(self.parent.settings.jobinterval, max(0.5, interval * 0.8 - 1))
+    self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
+    # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+    self.jobs_per_second = 1. / self.jobinterval
+    self.core.notify_speed_changed(self)
+  
