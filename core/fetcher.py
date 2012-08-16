@@ -92,19 +92,25 @@ class Fetcher(Startable):
               jobspersecond += worker.get_jobs_per_second()
               paralleljobs += worker.get_parallel_jobs()
           self.queuetarget = max(5, paralleljobs * 2, jobspersecond * 30)
+          self.core.workqueue.target = self.queuetarget
         
         worksource = self.core.get_root_work_source()
         queuecount = self.core.workqueue.count
-        fetchercount = worksource.get_running_fetcher_count()
-        startfetchers = min(5, (self.queuetarget - queuecount) // 2 - fetchercount)
-        if startfetchers <= 0:
-          self.lock.wait()
+        fetchercount, jobcount = worksource.get_running_fetcher_count()
+        needjobs = self.queuetarget - queuecount - jobcount
+        startfetchers = max(0, min(5, (self.queuetarget - queuecount - jobcount // 2) // 2))
+        if not startfetchers and queuecount == 0 and fetchercount < 3: startfetchers = 1
+        if not startfetchers:
+          if self.core.workqueue.count * 2 > self.queuetarget: self.lock.wait()
+          else: self.lock.wait(0.1)
           continue
         try:
-          started = worksource.start_fetchers(startfetchers if self.core.workqueue.count * 4 < self.queuetarget else 1)
-          if not started:
-            self.lock.wait(0.1)
-            continue
+          if startfetchers:
+            started, startedjobs = worksource.start_fetchers(startfetchers if self.core.workqueue.count * 4 < self.queuetarget else 1, needjobs)
+            if not started:
+              self.lock.wait(0.1)
+              continue
+          else: self.lock.wait(0.1)
           lockout = time.time() + min(5, 4 * self.core.workqueue.count / self.queuetarget - 1)
           while time.time() < lockout and self.core.workqueue.count > self.queuetarget / 4: self.lock.wait(0.1)
         except:

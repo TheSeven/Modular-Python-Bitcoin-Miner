@@ -53,6 +53,7 @@ class WorkQueue(Startable):
     super(WorkQueue, self)._reset()
     # Initialize job list container and count
     self.lists = {}
+    self.target = 5
     self.count = 0
     self.expirycutoff = 0
     # Initialize taken job list container

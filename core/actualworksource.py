@@ -154,26 +154,29 @@ class ActualWorkSource(BaseWorkSource):
       
       
   def get_running_fetcher_count(self):
-    if not self.started: return 0
+    if not self.started: return 0, 0
     return self._get_running_fetcher_count()
 
     
-  def start_fetchers(self, count):
-    if not self.started or not self.settings.enabled or self._is_locked_out() or not count: return False
+  def start_fetchers(self, count, jobs):
+    if not self.started or not self.settings.enabled or self._is_locked_out() or not count: return False, 0
     started = 0
+    totaljobs = 0
     try:
       while started < count:
-        result = self._start_fetcher()
-        if not result:
-          if started: return started
-          return result
-        started += result
-        with self.stats.lock: self.stats.jobrequests += 1
+        result, newjobs = self._start_fetcher()
+        totaljobs += newjobs
+        if result:
+          started += result
+          with self.stats.lock: self.stats.jobrequests += result
+        if not result or totaljobs >= jobs:
+          if started: return started, totaljobs
+          return result, 0
     except:
       self.core.log(self, "Error while fetching job: %s\n" % (traceback.format_exc()), 200, "y")
       self._handle_error()
-    if started: return started
-    return False
+    if started: return started, totaljobs
+    return False, 0
 
 
   def nonce_found(self, job, data, nonce, noncediff):

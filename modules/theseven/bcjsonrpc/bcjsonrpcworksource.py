@@ -69,6 +69,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.fetcherthreads = []
     self.fetchersrunning = 0
     self.fetcherspending = 0
+    self.fetcherjobsrunning = 0
+    self.fetcherjobspending = 0
     self.uploadqueue = Queue()
     self.uploaderthreads = []
     super(BCJSONRPCWorkSource, self).__init__(core, state)
@@ -116,6 +118,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.longpollurl = None
     self.fetchersrunning = 0
     self.fetcherspending = 0
+    self.fetcherjobsrunning = 0
+    self.fetcherjobspending = 0
     self.fetcherthreads = []
     self.uploadqueue = Queue()
     self.uploaderthreads = []
@@ -159,18 +163,19 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     
   
   def _get_running_fetcher_count(self):
-    return self.fetchersrunning
+    return self.fetchersrunning, self.fetcherjobsrunning + self.fetcherjobspending
   
   
   def _start_fetcher(self):
     count = len(self.fetcherthreads)
     if not count: return False
     with self.fetcherlock:
-      if self.fetchersrunning >= count: return 0
+      if self.fetchersrunning >= count: return 0, 0
+      self.fetcherjobspending += self.estimated_jobs
       self.fetchersrunning += 1
       self.fetcherspending += 1
       self.fetcherlock.notify()
-    return 1
+    return 1, self.estimated_jobs
 
 
   def fetcher(self):
@@ -181,6 +186,10 @@ class BCJSONRPCWorkSource(ActualWorkSource):
           self.fetcherlock.wait()
           if self.shutdown: return
         self.fetcherspending -= 1
+        myjobs = self.estimated_jobs
+        self.fetcherjobsrunning += myjobs
+        self.fetcherjobspending -= myjobs
+        if not self.fetcherspending or self.fetcherjobspending < 0: self.fetcherjobspending = 0
       jobs = None
       try:
         req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
@@ -246,7 +255,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         self.core.log(self, "Error while fetching job: %s\n" % (traceback.format_exc()), 200, "y")
         self._handle_error()
       finally:
-        with self.fetcherlock: self.fetchersrunning -= 1
+        with self.fetcherlock:
+          self.fetchersrunning -= 1
+          self.fetcherjobsrunning -= myjobs
       if jobs:
         self._push_jobs(jobs)
         self.core.log(self, "Got %d jobs from getwork response\n" % (len(jobs)), 500)
@@ -331,11 +342,14 @@ class BCJSONRPCWorkSource(ActualWorkSource):
           response = conn.getresponse()
         if self.runcycle > runcycle: return
         data = response.read()
+        self._cancel_jobs(True)
+        if self.core.workqueue.count > self.core.workqueue.target:
+          self.core.log(self, "Discarding jobs from long poll response because work buffer is full\n", 500)
+          continue
         jobs = self._build_jobs(response, data, time.time() - 1, True)
         if not jobs:
           self.core.log(self, "Got empty long poll response\n", 500)
           continue
-        self._cancel_jobs(True)
         self._push_jobs(jobs)
         self.core.log(self, "Got %d jobs from long poll response\n" % (len(jobs)), 500)
       except:
