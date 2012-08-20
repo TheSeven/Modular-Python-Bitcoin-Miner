@@ -449,8 +449,8 @@ class CairnsmoreWorker(BaseWorker):
     commandpacket = struct.pack("BBBB",command_validator,command_data,command_id,command_prefix)
 #    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
 #    self.handle.flush()
-#    self.speed = speed
-#    self.stats.mhps = speed * 2.5
+    self.speed = speed
+    self.stats.mhps = speed * 2.5
     self._update_job_interval()
 
 
