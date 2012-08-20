@@ -18,7 +18,6 @@
 # Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh if you
 # want to support further development of the Modular Python Bitcoin Miner.
 
-#Note this is simply a modified version of the IcarusWorker by TheSeven. All credit due to him, I simply adjusted it in minor ways for the Enterpoint Cairnsmore1
 
 ######################################
 # Cairnsmore worker interface module #
@@ -37,7 +36,7 @@ from core.job import ValidationJob
 # Worker main class, referenced from __init__.py
 class CairnsmoreWorker(BaseWorker):
   
-  version = "glasswalker.cairnsmore worker v0.1.0beta"
+  version = "theseven.cairnsmore worker v0.1.0beta"
   default_name = "Untitled Cairnsmore worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},
@@ -203,7 +202,7 @@ class CairnsmoreWorker(BaseWorker):
         self.listenerthread.start()
 
         # Configure core clock
-        self._set_speed(self.settings.initialspeed // 3.125)
+#        self._set_speed(self.settings.initialspeed // 3.125)
         
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
@@ -418,19 +417,19 @@ class CairnsmoreWorker(BaseWorker):
     
     warning = False
     critical = False
-    if self.recentinvalid > self.parent.settings.invalidwarning: warning = True
-    if self.recentinvalid > self.parent.settings.invalidcritical: critical = True
+    if self.recentinvalid > self.settings.invalidwarning: warning = True
+    if self.recentinvalid > self.settings.invalidcritical: critical = True
 
     if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
     if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
 
     if critical: speedstep = -10
     elif warning: speedstep = -1
-    elif not self.recentinvalid and self.recentshares >= self.parent.settings.speedupthreshold:
+    elif not self.recentinvalid and self.recentshares >= self.settings.speedupthreshold:
       speedstep = 1
     else: speedstep = 0    
 
-    if speedstep: self._set_speed(self.speed + speedstep)
+#    if speedstep: self._set_speed(self.speed + speedstep)
 
     if speedstep:
       self.recentinvalid = 0
@@ -438,14 +437,19 @@ class CairnsmoreWorker(BaseWorker):
     
    
   def _set_speed(self, speed):
-    speed = min(max(speed, 2), self.parent.settings.maximumspeed // 3.125)
+    speed = min(max(speed, 2), self.settings.maximumspeed // 2.5)
     if self.speed == speed: return
-    self.core.log(self, "Setting clock speed to %.2f MHz...\n" % speed * 3.125, 500, "B")
+    self.core.log(self, "Setting clock speed to %.2f MHz...\n" % (speed * 2.5), 500, "B")
     self._jobend()
-    self.handle.write(b"\0" * 84 + struct.pack("BBBB", 0, speed, speed, 0) + b"\xff" * 4 + b"\0" * 4)
+    command_id = 0
+    command_data = int(speed)
+    command_prefix = 0b10110111
+    command_validator = (command_id ^ command_data ^ command_prefix ^ 0b01101101)
+    commandpacket = struct.pack("BBBB",command_validator,command_data,command_id,command_prefix)
+    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
     self.handle.flush()
     self.speed = speed
-    self.stats.mhps = speed * 3.125
+    self.stats.mhps = speed * 2.5
     self._update_job_interval()
 
 
@@ -456,7 +460,7 @@ class CairnsmoreWorker(BaseWorker):
     # even with very slow devices (and e.g. detect if the device was unplugged).
     interval = min(60, 2**32 / 1000000. / self.stats.mhps)
     # Add some safety margin and take user's interval setting (if present) into account.
-    self.jobinterval = min(self.parent.settings.jobinterval, max(0.5, interval * 0.8 - 1))
+    self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
     self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
     # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
     self.jobs_per_second = 1. / self.jobinterval
