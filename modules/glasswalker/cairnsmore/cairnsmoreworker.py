@@ -36,7 +36,7 @@ from core.job import ValidationJob
 # Worker main class, referenced from __init__.py
 class CairnsmoreWorker(BaseWorker):
   
-  version = "theseven.cairnsmore worker v0.1.0beta"
+  version = "glasswalker.cairnsmore worker v0.1.0beta"
   default_name = "Untitled Cairnsmore worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},
@@ -106,6 +106,9 @@ class CairnsmoreWorker(BaseWorker):
     # Cache the port number and baud rate, as we don't like those to change on the fly
     self.port = self.settings.port
     self.baudrate = self.settings.baudrate
+
+    self.jobinterval = self.settings.jobinterval
+
     # Assume a default job interval to make the core start fetching work for us.
     # The actual hashrate will be measured (and this adjusted to the correct value) later.
     self.jobs_per_second = 1. / self.settings.jobinterval
