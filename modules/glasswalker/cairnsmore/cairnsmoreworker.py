@@ -107,8 +107,6 @@ class CairnsmoreWorker(BaseWorker):
     self.port = self.settings.port
     self.baudrate = self.settings.baudrate
 
-    self.jobinterval = self.settings.jobinterval
-
     # Assume a default job interval to make the core start fetching work for us.
     # The actual hashrate will be measured (and this adjusted to the correct value) later.
     self.jobs_per_second = 1. / self.settings.jobinterval
@@ -205,7 +203,7 @@ class CairnsmoreWorker(BaseWorker):
         self.listenerthread.start()
 
         # Configure core clock
-#        self._set_speed(self.settings.initialspeed // 3.125)
+        self._set_speed(self.settings.initialspeed // 2.5)
         
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
@@ -432,7 +430,7 @@ class CairnsmoreWorker(BaseWorker):
       speedstep = 1
     else: speedstep = 0    
 
-#    if speedstep: self._set_speed(self.speed + speedstep)
+    if speedstep: self._set_speed(self.speed + speedstep)
 
     if speedstep:
       self.recentinvalid = 0
@@ -449,10 +447,10 @@ class CairnsmoreWorker(BaseWorker):
     command_prefix = 0b10110111
     command_validator = (command_id ^ command_data ^ command_prefix ^ 0b01101101)
     commandpacket = struct.pack("BBBB",command_validator,command_data,command_id,command_prefix)
-    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
-    self.handle.flush()
-    self.speed = speed
-    self.stats.mhps = speed * 2.5
+#    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
+#    self.handle.flush()
+#    self.speed = speed
+#    self.stats.mhps = speed * 2.5
     self._update_job_interval()
 
 
