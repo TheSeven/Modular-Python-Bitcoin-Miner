@@ -124,6 +124,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.uploadqueue = Queue()
     self.uploaderthreads = []
     self.lastidentifier = None
+    self.jobepoch = 0
+    self.lpepoch = 0
     
     
   def _start(self):
@@ -199,6 +201,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         try:
           if conn:
             try:
+              epoch = self.jobepoch
               now = time.time()
               conn.request("POST", self.settings.path, req, headers)
               conn.sock.settimeout(self.settings.getworktimeout)
@@ -208,6 +211,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               self.core.log(self, "Keep-alive job fetching connection died\n", 500)
           if not conn:
             conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
+            epoch = self.jobepoch
             now = time.time()
             conn.request("POST", self.settings.path, req, headers)
             conn.sock.settimeout(self.settings.getworktimeout)
@@ -250,7 +254,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
             if self.signals_new_block and not lpfound:
               self.runcycle += 1
               self.signals_new_block = False
-        jobs = self._build_jobs(response, data, now, "getwork")
+        jobs = self._build_jobs(response, data, epoch, now, "getwork")
       except:
         self.core.log(self, "Error while fetching job: %s\n" % (traceback.format_exc()), 200, "y")
         self._handle_error()
@@ -306,6 +310,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               if h[0].lower() == "x-reject-reason":
                 result = h[1]
                 break
+          if result is not True:
+            self.jobepoch += 1
+            self._cancel_jobs(True)
           self._handle_success()
           job.nonce_handled_callback(nonce, noncediff, result)
           break
@@ -329,6 +336,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         if conn:
           try:
             if conn.sock: conn.sock.settimeout(self.settings.longpolltimeout)
+            epoch = self.lpepoch + 1
             conn.request("GET", path, None, headers)
             conn.sock.settimeout(self.settings.longpollresponsetimeout)
             response = conn.getresponse()
@@ -337,13 +345,17 @@ class BCJSONRPCWorkSource(ActualWorkSource):
             self.core.log(self, "Keep-alive long poll connection died\n", 500)
         if not conn:
           conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
+          epoch = self.lpepoch + 1
           conn.request("GET", path, None, headers)
           conn.sock.settimeout(self.settings.longpollresponsetimeout)
           response = conn.getresponse()
         if self.runcycle > runcycle: return
+        if epoch > self.lpepoch:
+          self.lpepoch = epoch
+          self.jobepoch += 1
+          self._cancel_jobs(True)
         data = response.read()
-        self._cancel_jobs(True)
-        jobs = self._build_jobs(response, data, time.time() - 1, "long poll", True, True)
+        jobs = self._build_jobs(response, data, self.jobepoch, time.time() - 1, "long poll", True, True)
         if not jobs: continue
         self._push_jobs(jobs)
         self.core.log(self, "Got %d jobs from long poll response\n" % (len(jobs)), 500)
@@ -357,7 +369,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         starttime = time.time()
         
         
-  def _build_jobs(self, response, data, now, source, ignoreempty = False, discardiffull = False):
+  def _build_jobs(self, response, data, epoch, now, source, ignoreempty = False, discardiffull = False):
     decoded = data.decode("utf_8")
     if len(decoded) == 0 and ignoreempty:
       self.core.log(self, "Got empty %s response\n" % source, 500)
@@ -386,8 +398,13 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         expiry = roll_ntime
     if isp2pool: expiry = 60
     self.stats.supports_rollntime = roll_ntime > 1
+    if epoch != self.jobepoch:
+      self.core.log(self, "Discarding %d jobs from %s response because request was issued before flush\n" % (roll_ntime, source), 500)
+      with self.stats.lock: self.stats.jobsreceived += roll_ntime
+      return
     if self.core.workqueue.count > self.core.workqueue.target * (1 if discardiffull else 5):
       self.core.log(self, "Discarding %d jobs from %s response because work buffer is full\n" % (roll_ntime, source), 500)
+      with self.stats.lock: self.stats.jobsreceived += roll_ntime
       return
     expiry += now - self.settings.expirymargin
     midstate = Job.calculate_midstate(data)
