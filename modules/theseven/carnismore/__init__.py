@@ -1,3 +1,3 @@
-from .icarusworker import IcarusWorker
+from .carnismoreworker import CarnismoreWorker
 
-workerclasses = [IcarusWorker]
+workerclasses = [CarnismoreWorker]
