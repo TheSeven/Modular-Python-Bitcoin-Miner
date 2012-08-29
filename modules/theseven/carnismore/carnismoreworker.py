@@ -34,7 +34,7 @@ from core.baseworker import BaseWorker
 from core.job import ValidationJob
 
 # Worker main class, referenced from __init__.py
-class CairnsmoreWorker(BaseWorker):
+class CarnismoreWorker(BaseWorker):
   
   version = "theseven.cairnsmore worker v0.1.0beta"
   default_name = "Untitled Cairnsmore worker"
