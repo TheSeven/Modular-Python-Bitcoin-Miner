@@ -103,7 +103,7 @@ class Job(object):
     hash = Job.calculate_hash(data)
     if hash[-4:] != b"\0\0\0\0":
       if ignore_invalid: return False
-      self.core.log(self.worker, "Got K-not-zero share %s\n" % (hexlify(nonce).decode("ascii")), 200, "yB")
+      self.core.log(self.worker, "Got H-not-zero share %s\n" % (hexlify(nonce).decode("ascii")), 200, "yB")
       with self.worker.stats.lock: self.worker.stats.sharesinvalid += 1
       self.core.event(300, self.worker, "nonceinvalid", nonceval, None, self.worker, self.worksource, self.blockchain, self)
       return False
