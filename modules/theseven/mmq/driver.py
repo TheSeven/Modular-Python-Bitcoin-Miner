@@ -61,7 +61,7 @@ class Spartan6FPGA(object):
     self.usercode = self.driver.get_usercode(self.id)
     if self.usercode != self.fwusercode: self._upload_firmware()
     self.usercode = self.driver.get_usercode(self.id)
-    if self.usercode == 0xffffffff: raise DeviceException("FPGA didn't accept bitstream!")
+    if self.usercode == 0xffffffff: raise DeviceException("USERCODE register not available!")
     self.firmware_rev = (self.usercode >> 8) & 0xff
     self.firmware_build = self.usercode & 0xf
     self.proxy.log("%s: Firmware version %d, build %d\n" % (self.name, self.firmware_rev, self.firmware_build), 500)
@@ -125,6 +125,7 @@ class Spartan6FPGA(object):
             percent = 100. * bytes / self.fwlength
             speed = bytes / (time.time() - starttime) / 1024.
             self.proxy.log("%s: Programming: %.1f%% done, %.1f kiB/s\n" % (self.name, percent, speed), 300, "B")
+    if struct.unpack("B", self.driver._txn(b"", 1))[0] != 1: raise DeviceException("FPGA didn't accept bitstream!")
     
     
   def parse_nonce(self, data):
