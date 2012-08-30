@@ -108,6 +108,10 @@ mod.statsgadget = {
                 var time = data["timestamp"];
                 var gHashesTotalDefinition = {"title": "GHashes total", "renderer": intRenderer};
                 var averageMHpsDefinition = {"title": "Average MH/s", "renderer": floatRenderer, "rendererconfig": {"precision": 2}};
+                var effectiveMHpsDefinition = {"title": "Effective MH/s", "transform": effectiveMHpsTransform, "renderer": floatPercentageRenderer,
+                                               "rendererconfig": {"precision": 1, "reference": makeReference("avgmhps"), "percentagePrecision": 1}};
+                var utilityDefinition = {"title": "Utility [shares/min]", "transform": perMinuteTransform,
+                                         "renderer": floatRenderer, "rendererconfig": {"precision": 2}};
                 var jobRequestsDefinition = {"title": "Job requests", "renderer": intRenderer};
                 var uploadRetriesDefinition = {"title": "Upload retries", "renderer": intRenderer};
                 var acceptedJobsDefinition = {"title": "Accepted jobs", "renderer": intRenderer};
@@ -154,10 +158,10 @@ mod.statsgadget = {
                     "temperature": {210: {"title": "Temperature [°C]", "renderer": floatRenderer, "rendererconfig": {"precision": 2}}},
                     "errorrate": {220: {"title": "Error rate", "renderer": percentageRenderer, "rendererconfig": {"percentagePrecision": 2}}},
                     "avgmhps": {230: averageMHpsDefinition},
-                    "ghashes": {240: gHashesTotalDefinition},
+                    "ghashes": {260: gHashesTotalDefinition},
                     "jobsaccepted": {300: acceptedJobsDefinition, 310: makePerHourDefinition("Jobs per hour", 2)},
                     "jobscanceled": {320: canceledJobsDefinition, 330: makePerHourDefinition("Canceled per hour", 2)},
-                    "sharesaccepted": {400: acceptedSharesDefinition},
+                    "sharesaccepted": {240: effectiveMHpsDefinition, 250: utilityDefinition, 400: acceptedSharesDefinition},
                     "sharesrejected": {410: rejectedSharesDefinition, 420: makePerHourDefinition("Rejects per hour", 2)},
                     "sharesinvalid": {430: invalidSharesDefinition, 440: makePerHourDefinition("Invalids per hour", 2)},
                     "starttime": {1000: uptimeDefinition},
@@ -218,9 +222,19 @@ mod.statsgadget = {
                 div.appendChild(blockchainTable);
                 timeout = setTimeout(refresh, mod.uiconfig.data.statsgadget.refreshinterval * 1000);
                 
+                function perMinuteTransform(stats, value, def)
+                {
+                    return value * 60 / (time - stats.starttime);
+                }
+                
                 function perHourTransform(stats, value, def)
                 {
                     return value * 3600 / (time - stats.starttime);
+                }
+                
+                function effectiveMHpsTransform(stats, value, def)
+                {
+                    return value * Math.pow(2, 32) / 1000000 / (time - stats.starttime);
                 }
                 
                 function timeAgoTransform(stats, value, def)
