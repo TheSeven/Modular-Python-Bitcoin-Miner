@@ -226,7 +226,7 @@ class MMQDevice(object):
   
   def send_job(self, fpga, job):
     result = struct.unpack("B", self._txn(struct.pack("BB", 8, self.devices[fpga].id) + job, 1))[0]
-    if result != 1: raise Exception("%s: Device didn't accept job!" % self.devices[fpga].name)
+    if result != 1: raise Exception("%s: Device didn't accept job: 0x%02x" % (self.devices[fpga].name, result))
 
   
   def set_speed(self, fpga, speed):
