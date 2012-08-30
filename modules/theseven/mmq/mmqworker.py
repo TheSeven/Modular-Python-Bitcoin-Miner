@@ -47,7 +47,6 @@ class MMQWorker(BaseWorker):
   default_name = "Untitled MMQ worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},
-    "baudrate": {"title": "Baud rate", "type": "int", "position": 1200},
     "firmware": {"title": "Firmware file location", "type": "string", "position": 1400},
     "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
     "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
