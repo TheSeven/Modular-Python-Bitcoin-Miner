@@ -337,6 +337,8 @@ class CarnismoreWorker(BaseWorker):
           if newjob.nonce_found(nonce, oldjob): job = newjob
         if not job and oldjob:
           if oldjob.nonce_found(nonce): job = oldjob
+        self.recentshares += 1
+        if not job: self.recentinvalid += 1
         if not job and isinstance(newjob, ValidationJob): job = newjob
         # If the nonce is too low, the measurement may be inaccurate.
         nonceval = struct.unpack("<I", nonce)[0]
