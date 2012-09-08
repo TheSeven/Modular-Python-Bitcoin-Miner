@@ -46,7 +46,8 @@ class CairnsmoreWorker(BaseWorker):
     "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
     "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 3200},
     "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 3300},
-    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3400},
+    "warmupstepshares": {"title": "Shares per warmup step", "type": "int", "position": 3400},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3500},
   })
   
   
@@ -77,6 +78,8 @@ class CairnsmoreWorker(BaseWorker):
     self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
     if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
     self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "warmupstepshares" in self.settings: self.settings.warmupstepshares = 5
+    self.settings.warmupstepshares = min(max(self.settings.warmupstepshares, 1), 10000)
     if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
     self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     # We can't change the port name or baud rate on the fly, so trigger a restart if they changed.
@@ -424,10 +427,7 @@ class CairnsmoreWorker(BaseWorker):
     if self.recentinvalid >= self.settings.invalidwarning: warning = True
     if self.recentinvalid >= self.settings.invalidcritical: critical = True
 
-    if self.initialramp:
-      localspeedupthreshold = self.settings.speedupthreshold/25
-    else:
-      localspeedupthreshold = self.settings.speedupthreshold
+    threshold = self.settings.warmupstepshares if self.initialramp else self.settings.speedupthreshold
 
     if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
     if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
@@ -438,7 +438,7 @@ class CairnsmoreWorker(BaseWorker):
     elif warning:
       speedstep = -1
       self.initialramp = False
-    elif not self.recentinvalid and self.recentshares >= localspeedupthreshold:
+    elif not self.recentinvalid and self.recentshares >= threshold:
       speedstep = 1
     else: speedstep = 0    
 
@@ -452,16 +452,12 @@ class CairnsmoreWorker(BaseWorker):
   def _set_speed(self, speed):
     speed = min(max(speed, 2), self.settings.maximumspeed // 2.5)
     if self.speed == speed: return
-    if self.initialramp:
-      self.core.log(self, "WARMUP RAMPING Setting clock speed to %.2f MHz...\n" % (speed * 2.5), 500, "B")
-    else:
-      self.core.log(self, "Setting clock speed to %.2f MHz...\n" % (speed * 2.5), 500, "B")
-    self._jobend()
+    self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed * 2.5), 500, "B")
     command_id = 0
     command_data = int(speed)
     command_prefix = 0b10110111
     command_validator = (command_id ^ command_data ^ command_prefix ^ 0b01101101)
-    commandpacket = struct.pack("BBBB",command_validator,command_data,command_id,command_prefix)
+    commandpacket = struct.pack("BBBB", command_validator, command_data, command_id, command_prefix)
     self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
     self.handle.flush()
     self.speed = speed
