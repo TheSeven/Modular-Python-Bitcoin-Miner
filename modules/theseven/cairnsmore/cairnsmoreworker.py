@@ -36,7 +36,7 @@ from core.job import ValidationJob
 # Worker main class, referenced from __init__.py
 class CairnsmoreWorker(BaseWorker):
   
-  version = "glasswalker.cairnsmore worker v0.1.0beta"
+  version = "theseven.cairnsmore worker v0.1.0beta"
   default_name = "Untitled Cairnsmore worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},
@@ -106,7 +106,6 @@ class CairnsmoreWorker(BaseWorker):
     # Cache the port number and baud rate, as we don't like those to change on the fly
     self.port = self.settings.port
     self.baudrate = self.settings.baudrate
-
     # Assume a default job interval to make the core start fetching work for us.
     # The actual hashrate will be measured (and this adjusted to the correct value) later.
     self.jobs_per_second = 1. / self.settings.jobinterval
@@ -203,7 +202,7 @@ class CairnsmoreWorker(BaseWorker):
         self.listenerthread.start()
 
         # Configure core clock
-        self._set_speed(self.settings.initialspeed // 2.5)
+        self._set_speed(self.settings.initialspeed // 3.125)
         
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
@@ -338,6 +337,8 @@ class CairnsmoreWorker(BaseWorker):
           if newjob.nonce_found(nonce, oldjob): job = newjob
         if not job and oldjob:
           if oldjob.nonce_found(nonce): job = oldjob
+        self.recentshares += 1
+        if not job: self.recentinvalid += 1
         if not job and isinstance(newjob, ValidationJob): job = newjob
         # If the nonce is too low, the measurement may be inaccurate.
         nonceval = struct.unpack("<I", nonce)[0]
@@ -435,8 +436,8 @@ class CairnsmoreWorker(BaseWorker):
     if speedstep:
       self.recentinvalid = 0
       self.recentshares = 0
-    
-   
+
+
   def _set_speed(self, speed):
     speed = min(max(speed, 2), self.settings.maximumspeed // 2.5)
     if self.speed == speed: return
@@ -447,8 +448,8 @@ class CairnsmoreWorker(BaseWorker):
     command_prefix = 0b10110111
     command_validator = (command_id ^ command_data ^ command_prefix ^ 0b01101101)
     commandpacket = struct.pack("BBBB",command_validator,command_data,command_id,command_prefix)
-#    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
-#    self.handle.flush()
+    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
+    self.handle.flush()
     self.speed = speed
     self.stats.mhps = speed * 2.5
     self._update_job_interval()
