@@ -77,7 +77,7 @@ class CairnsmoreWorker(BaseWorker):
     self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
     if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
     self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
-    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
+    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 50
     self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     # We can't change the port name or baud rate on the fly, so trigger a restart if they changed.
     # self.port/self.baudrate are cached copys of self.settings.port/self.settings.baudrate
@@ -202,7 +202,7 @@ class CairnsmoreWorker(BaseWorker):
         self.listenerthread.start()
 
         # Configure core clock
-        self._set_speed(self.settings.initialspeed // 3.125)
+        self._set_speed(self.settings.initialspeed // 2.5)
         
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
