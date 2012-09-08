@@ -69,6 +69,8 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.fetcherthreads = []
     self.fetchersrunning = 0
     self.fetcherspending = 0
+    self.fetcherjobsrunning = 0
+    self.fetcherjobspending = 0
     self.uploadqueue = Queue()
     self.uploaderthreads = []
     super(BCJSONRPCWorkSource, self).__init__(core, state)
@@ -116,10 +118,14 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     self.longpollurl = None
     self.fetchersrunning = 0
     self.fetcherspending = 0
+    self.fetcherjobsrunning = 0
+    self.fetcherjobspending = 0
     self.fetcherthreads = []
     self.uploadqueue = Queue()
     self.uploaderthreads = []
     self.lastidentifier = None
+    self.jobepoch = 0
+    self.lpepoch = 0
     
     
   def _start(self):
@@ -159,18 +165,19 @@ class BCJSONRPCWorkSource(ActualWorkSource):
     
   
   def _get_running_fetcher_count(self):
-    return self.fetchersrunning
+    return self.fetchersrunning, self.fetcherjobsrunning + self.fetcherjobspending
   
   
   def _start_fetcher(self):
     count = len(self.fetcherthreads)
     if not count: return False
     with self.fetcherlock:
-      if self.fetchersrunning >= count: return 0
+      if self.fetchersrunning >= count: return 0, 0
+      self.fetcherjobspending += self.estimated_jobs
       self.fetchersrunning += 1
       self.fetcherspending += 1
       self.fetcherlock.notify()
-    return 1
+    return 1, self.estimated_jobs
 
 
   def fetcher(self):
@@ -181,6 +188,10 @@ class BCJSONRPCWorkSource(ActualWorkSource):
           self.fetcherlock.wait()
           if self.shutdown: return
         self.fetcherspending -= 1
+        myjobs = self.estimated_jobs
+        self.fetcherjobsrunning += myjobs
+        self.fetcherjobspending -= myjobs
+        if not self.fetcherspending or self.fetcherjobspending < 0: self.fetcherjobspending = 0
       jobs = None
       try:
         req = json.dumps({"method": "getwork", "params": [], "id": 0}).encode("utf_8")
@@ -190,6 +201,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         try:
           if conn:
             try:
+              epoch = self.jobepoch
               now = time.time()
               conn.request("POST", self.settings.path, req, headers)
               conn.sock.settimeout(self.settings.getworktimeout)
@@ -199,6 +211,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               self.core.log(self, "Keep-alive job fetching connection died\n", 500)
           if not conn:
             conn = http_client.HTTPConnection(self.settings.host, self.settings.port, True, self.settings.getworktimeout)
+            epoch = self.jobepoch
             now = time.time()
             conn.request("POST", self.settings.path, req, headers)
             conn.sock.settimeout(self.settings.getworktimeout)
@@ -241,12 +254,14 @@ class BCJSONRPCWorkSource(ActualWorkSource):
             if self.signals_new_block and not lpfound:
               self.runcycle += 1
               self.signals_new_block = False
-        jobs = self._build_jobs(response, data, now)
+        jobs = self._build_jobs(response, data, epoch, now, "getwork")
       except:
         self.core.log(self, "Error while fetching job: %s\n" % (traceback.format_exc()), 200, "y")
         self._handle_error()
       finally:
-        with self.fetcherlock: self.fetchersrunning -= 1
+        with self.fetcherlock:
+          self.fetchersrunning -= 1
+          self.fetcherjobsrunning -= myjobs
       if jobs:
         self._push_jobs(jobs)
         self.core.log(self, "Got %d jobs from getwork response\n" % (len(jobs)), 500)
@@ -295,6 +310,9 @@ class BCJSONRPCWorkSource(ActualWorkSource):
               if h[0].lower() == "x-reject-reason":
                 result = h[1]
                 break
+          if result is not True:
+            self.jobepoch += 1
+            self._cancel_jobs(True)
           self._handle_success()
           job.nonce_handled_callback(nonce, noncediff, result)
           break
@@ -318,6 +336,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         if conn:
           try:
             if conn.sock: conn.sock.settimeout(self.settings.longpolltimeout)
+            epoch = self.lpepoch + 1
             conn.request("GET", path, None, headers)
             conn.sock.settimeout(self.settings.longpollresponsetimeout)
             response = conn.getresponse()
@@ -326,16 +345,18 @@ class BCJSONRPCWorkSource(ActualWorkSource):
             self.core.log(self, "Keep-alive long poll connection died\n", 500)
         if not conn:
           conn = http_client.HTTPConnection(host, port, True, self.settings.longpolltimeout)
+          epoch = self.lpepoch + 1
           conn.request("GET", path, None, headers)
           conn.sock.settimeout(self.settings.longpollresponsetimeout)
           response = conn.getresponse()
         if self.runcycle > runcycle: return
+        if epoch > self.lpepoch:
+          self.lpepoch = epoch
+          self.jobepoch += 1
+          self._cancel_jobs(True)
         data = response.read()
-        jobs = self._build_jobs(response, data, time.time() - 1, True)
-        if not jobs:
-          self.core.log(self, "Got empty long poll response\n", 500)
-          continue
-        self._cancel_jobs(True)
+        jobs = self._build_jobs(response, data, self.jobepoch, time.time() - 1, "long poll", True, True)
+        if not jobs: continue
         self._push_jobs(jobs)
         self.core.log(self, "Got %d jobs from long poll response\n" % (len(jobs)), 500)
       except:
@@ -348,7 +369,20 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         starttime = time.time()
         
         
-  def _build_jobs(self, response, data, now, ignoreempty = False):
+  def _build_jobs(self, response, data, epoch, now, source, ignoreempty = False, discardiffull = False):
+    decoded = data.decode("utf_8")
+    if len(decoded) == 0 and ignoreempty:
+      self.core.log(self, "Got empty %s response\n" % source, 500)
+      return
+    decoded = json.loads(decoded)
+    data = unhexlify(decoded["result"]["data"].encode("ascii"))
+    target = unhexlify(decoded["result"]["target"].encode("ascii"))
+    try: identifier = int(decoded["result"]["identifier"])
+    except: identifier = None
+    if identifier != self.lastidentifier:
+      self._cancel_jobs()
+      self.lastidentifier = identifier
+    self.blockchain.check_job(Job(self.core, self, 0, data, target, True, identifier))
     roll_ntime = 1
     expiry = 60
     isp2pool = False
@@ -364,19 +398,18 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         expiry = roll_ntime
     if isp2pool: expiry = 60
     self.stats.supports_rollntime = roll_ntime > 1
-    response = data.decode("utf_8")
-    if len(response) == 0 and ignoreempty: return
-    response = json.loads(response)
-    data = unhexlify(response["result"]["data"].encode("ascii"))
-    target = unhexlify(response["result"]["target"].encode("ascii"))
-    try: identifier = int(response["result"]["identifier"])
-    except: identifier = None
-    if identifier != self.lastidentifier:
-      self._cancel_jobs()
-      self.lastidentifier = identifier
+    if epoch != self.jobepoch:
+      self.core.log(self, "Discarding %d jobs from %s response because request was issued before flush\n" % (roll_ntime, source), 500)
+      with self.stats.lock: self.stats.jobsreceived += roll_ntime
+      return
+    if self.core.workqueue.count > self.core.workqueue.target * (1 if discardiffull else 5):
+      self.core.log(self, "Discarding %d jobs from %s response because work buffer is full\n" % (roll_ntime, source), 500)
+      with self.stats.lock: self.stats.jobsreceived += roll_ntime
+      return
+    expiry += now - self.settings.expirymargin
     midstate = Job.calculate_midstate(data)
     prefix = data[:68]
     timebase = struct.unpack(">I", data[68:72])[0]
     suffix = data[72:]
-    return [Job(self.core, self, now + expiry - self.settings.expirymargin, prefix + struct.pack(">I", timebase + i) + suffix, target, midstate, identifier) for i in range(roll_ntime)]
+    return [Job(self.core, self, expiry, prefix + struct.pack(">I", timebase + i) + suffix, target, midstate, identifier) for i in range(roll_ntime)]
   

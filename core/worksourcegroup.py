@@ -166,7 +166,7 @@ class WorkSourceGroup(BaseWorkSource):
       return self.last_index
       
       
-  def _start_fetcher(self, force = False):
+  def _start_fetcher(self, jobs, force = False):
     with self.childlock:
       children = [child for child in self.children]
       startindex = self._get_start_index()
@@ -183,10 +183,10 @@ class WorkSourceGroup(BaseWorkSource):
         if force or worksource.mhashes_pending >= mhashes:
           found = True
           if mhashes: worksource.add_pending_mhashes(-mhashes)
-          result = worksource.start_fetchers(1)
+          result, gotjobs = worksource.start_fetchers(1, jobs)
           if result is not False:
             if mhashes: worksource.add_pending_mhashes(mhashes)
-            if result: return result
+            if result: return result, gotjobs
             best = result
         index += 1
         if index >= len(children): index = 0
@@ -195,21 +195,24 @@ class WorkSourceGroup(BaseWorkSource):
       iteration += 1
       if iteration > 150: break
       if iteration > 100: force = True
-    return best
+    return best, 0
     
     
   def get_running_fetcher_count(self):
-    return sum(child.get_running_fetcher_count() for child in self.children)
+    data = [child.get_running_fetcher_count() for child in self.children]
+    return sum(child[0] for child in data), sum(child[1] for child in data)
 
     
-  def start_fetchers(self, count):
-    if not self.started or not self.settings.enabled or not self.children or not count: return False
+  def start_fetchers(self, count, jobs):
+    if not self.started or not self.settings.enabled or not self.children or not count: return False, 0
     started = 0
     result = False
-    while started < count:
-      result = self._start_fetcher()
-      if not result: result = self._start_fetcher(True)
+    totaljobs = 0
+    while started < count and totaljobs < jobs:
+      result, newjobs = self._start_fetcher(jobs)
+      if not result: result, newjobs = self._start_fetcher(jobs, True)
       if not result: break
       started += result
-    if started: return started
-    return result
+      totaljobs += newjobs
+    if started: return started, totaljobs
+    return result, 0

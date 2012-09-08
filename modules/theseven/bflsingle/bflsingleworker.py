@@ -26,7 +26,6 @@
 
 
 
-import os
 import time
 import traceback
 from threading import Condition, Thread

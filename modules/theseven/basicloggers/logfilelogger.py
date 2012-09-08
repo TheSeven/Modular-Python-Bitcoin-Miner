@@ -72,7 +72,7 @@ class LogFileLogger(BaseFrontend):
   def write_log_message(self, source, timestamp, loglevel, messages):
     if not self.started: return
     if loglevel > self.settings.loglevel: return
-    prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
+    prefix = "%s [%3d] %s: " % (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"), loglevel, source.settings.name)
     newline = True
     for message, format in messages:
       for line in message.splitlines(True):
