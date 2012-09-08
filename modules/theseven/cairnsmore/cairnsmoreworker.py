@@ -34,7 +34,7 @@ from core.baseworker import BaseWorker
 from core.job import ValidationJob
 
 # Worker main class, referenced from __init__.py
-class CarnismoreWorker(BaseWorker):
+class CairnsmoreWorker(BaseWorker):
   
   version = "theseven.cairnsmore worker v0.1.0beta"
   default_name = "Untitled Cairnsmore worker"
@@ -92,6 +92,8 @@ class CarnismoreWorker(BaseWorker):
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.port = None
     self.baudrate = None
+    self.initialramp = True
+
 #    # Initialize custom statistics. This is not neccessary for this worker module,
 #    # but might be interesting for other modules, so it is kept here for reference.
 #    self.stats.field1 = 0
@@ -202,7 +204,7 @@ class CarnismoreWorker(BaseWorker):
         self.listenerthread.start()
 
         # Configure core clock
-        self._set_speed(self.settings.initialspeed // 3.125)
+        self._set_speed(self.settings.initialspeed // 2.5)
         
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
@@ -416,18 +418,27 @@ class CarnismoreWorker(BaseWorker):
   
   # Check the invalid rate and adjust the FPGA clock accordingly
   def safetycheck(self):
-    
+
     warning = False
     critical = False
-    if self.recentinvalid > self.settings.invalidwarning: warning = True
-    if self.recentinvalid > self.settings.invalidcritical: critical = True
+    if self.recentinvalid >= self.settings.invalidwarning: warning = True
+    if self.recentinvalid >= self.settings.invalidcritical: critical = True
+
+    if self.initialramp:
+      localspeedupthreshold = self.settings.speedupthreshold/25
+    else:
+      localspeedupthreshold = self.settings.speedupthreshold
 
     if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
     if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
 
-    if critical: speedstep = -10
-    elif warning: speedstep = -1
-    elif not self.recentinvalid and self.recentshares >= self.settings.speedupthreshold:
+    if critical:
+      speedstep = -10
+      self.initialramp = False
+    elif warning:
+      speedstep = -1
+      self.initialramp = False
+    elif not self.recentinvalid and self.recentshares >= localspeedupthreshold:
       speedstep = 1
     else: speedstep = 0    
 
@@ -436,17 +447,25 @@ class CarnismoreWorker(BaseWorker):
     if speedstep:
       self.recentinvalid = 0
       self.recentshares = 0
-    
-   
+
+
   def _set_speed(self, speed):
-    speed = min(max(speed, 2), self.settings.maximumspeed // 3.125)
+    speed = min(max(speed, 2), self.settings.maximumspeed // 2.5)
     if self.speed == speed: return
-    self.core.log(self, "Setting clock speed to %.2f MHz...\n" % (speed * 3.125), 500, "B")
+    if self.initialramp:
+      self.core.log(self, "WARMUP RAMPING Setting clock speed to %.2f MHz...\n" % (speed * 2.5), 500, "B")
+    else:
+      self.core.log(self, "Setting clock speed to %.2f MHz...\n" % (speed * 2.5), 500, "B")
     self._jobend()
-    self.handle.write(b"\0" * 52 + struct.pack("BBBB", 0, speed, speed, 0) + b"\xff" * 4 + b"\0" * 4)
+    command_id = 0
+    command_data = int(speed)
+    command_prefix = 0b10110111
+    command_validator = (command_id ^ command_data ^ command_prefix ^ 0b01101101)
+    commandpacket = struct.pack("BBBB",command_validator,command_data,command_id,command_prefix)
+    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
     self.handle.flush()
     self.speed = speed
-    self.stats.mhps = speed * 3.125
+    self.stats.mhps = speed * 2.5
     self._update_job_interval()
 
 
