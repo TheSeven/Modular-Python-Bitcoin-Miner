@@ -373,6 +373,7 @@ class FTDIJTAGFPGA(BaseWorker):
       try:
         # Record our starting timestamp, in order to back off if we repeatedly die
         starttime = time.time()
+        self.error = None
 
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
@@ -425,6 +426,7 @@ class FTDIJTAGFPGA(BaseWorker):
           self.wakeup.release()
           job = self.core.get_job(self, self.jobinterval + 2)
           self.wakeup.acquire()
+          if self.error: raise self.error
           
           # If a new block was found while we were fetching that job, just discard it and get a new one.
           if job.canceled:
@@ -433,6 +435,7 @@ class FTDIJTAGFPGA(BaseWorker):
 
           # Upload the job to the device
           self._sendjob(job)
+          if self.error: raise self.error
           
           # Go through the safety checks and reduce the clock if necessary
           self.safetycheck()
@@ -445,6 +448,7 @@ class FTDIJTAGFPGA(BaseWorker):
           # Wait while the device is processing the job. If nonces are sent by the device, they
           # will be processed by the listener thread. If the job gets canceled, we will be woken up.
           self.wakeup.wait(self.jobinterval)
+          if self.error: raise self.error
 
       # If something went wrong...
       except Exception as e:
@@ -485,8 +489,10 @@ class FTDIJTAGFPGA(BaseWorker):
     if not job and oldjob:
       if oldjob.nonce_found(nonce): job = oldjob
     self.recentshares += 1
-    if not job: self.recentinvalid += 1
     nonceval = struct.unpack("<I", nonce)[0]
+    if not job:
+      self.recentinvalid += 1
+      if not nonceval: raise Exception("Firmware might have crashed, restarting!")
     if isinstance(newjob, ValidationJob):
       # This is a validation job. Validate that the nonce is correct, and complain if not.
       if newjob.nonce != nonce:
