@@ -101,6 +101,12 @@ class MMQBoardProxy(Process):
           end = time.time()
           self.respond(start, end)
         
+        elif data[0] == "read_reg":
+          self.respond(self.device.read_reg(data[1], data[2]))
+        
+        elif data[0] == "write_reg":
+          self.device.write_reg(data[1], data[2], data[3])
+        
         elif data[0] == "set_speed":
           self.device.set_speed(data[1], data[2])
         

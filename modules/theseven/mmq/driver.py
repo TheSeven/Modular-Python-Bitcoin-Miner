@@ -212,7 +212,7 @@ class MMQDevice(object):
     with self.lock:
       self.handle.write(data)
       result = self.handle.read(expectlen)
-    if len(result) != expectlen: raise Exception("Short read: Expected %d bytes, got %d!" % (expectlen, len(result)))
+    if len(result) != expectlen: raise Exception("Short read: Expected %d bytes, got %d (%s)!" % (expectlen, len(result), hexlify(result).decode("ascii")))
     return result
     
     
@@ -227,6 +227,15 @@ class MMQDevice(object):
   def send_job(self, fpga, job):
     result = struct.unpack("B", self._txn(struct.pack("BB", 8, self.devices[fpga].id) + job, 1))[0]
     if result != 1: raise Exception("%s: Device didn't accept job: 0x%02x" % (self.devices[fpga].name, result))
+
+  
+  def write_reg(self, fpga, reg, value):
+    result = struct.unpack("B", self._txn(struct.pack("<BBBI", 11, self.devices[fpga].id, reg, value), 1))[0]
+    if result != 1: raise Exception("%s: Writing register %d failed: 0x%02x" % (self.devices[fpga].name, reg, result))
+
+  
+  def read_reg(self, fpga, reg):
+    return struct.unpack("<I", self._txn(struct.pack("BBB", 12, self.devices[fpga].id, reg), 4))[0]
 
   
   def set_speed(self, fpga, speed):
@@ -252,5 +261,5 @@ class MMQDevice(object):
     temps = {}
     with self.lock:
       for device in self.devices:
-        temps[device.index] = struct.unpack("B", self._txn(struct.pack("BB", 10, device.id), 1))[0]
+        temps[device.index] = struct.unpack("<h", self._txn(struct.pack("BB", 13, device.id), 2))[0] / 128.
     return temps
