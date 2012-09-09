@@ -77,6 +77,7 @@ class X6500BoardProxy(Process):
       if self.useftd2xx: self.device = FT232R(FT232R_D2XX(self.serial))
       else: self.device = FT232R(FT232R_PyUSB(self.serial, self.takeover))
       self.fpgas = [FPGA(self, "FPGA0", self.device, 0), FPGA(self, "FPGA1", self.device, 1)]
+      needupload = False
       
       for id, fpga in enumerate(self.fpgas):
         fpga.id = id
@@ -85,9 +86,10 @@ class X6500BoardProxy(Process):
         for idcode in fpga.jtag.idcodes:
           self.log("FPGA%d: %s - Firmware: rev %d, build %d\n" % (id, JTAG.decodeIdcode(idcode), fpga.firmware_rev, fpga.firmware_build), 500)
         if fpga.jtag.deviceCount != 1: raise Exception("This module needs two JTAG buses with one FPGA each!")
+        if not fpga.jtag.read_ir()[5]: needupload = True
 
       # Upload firmware if we were asked to
-      if self.uploadfirmware:
+      if self.uploadfirmware or needupload:
         self.log("Programming FPGAs...\n", 200, "B")
         start_time = time.time()
         bitfile = BitFile.read(self.firmware)

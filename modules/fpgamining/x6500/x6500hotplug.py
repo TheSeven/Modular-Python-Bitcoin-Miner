@@ -50,7 +50,7 @@ class X6500HotplugWorker(BaseWorker):
       "position": 1100
     },
     "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
-    "uploadfirmware": {"title": "Upload firmware", "type": "boolean", "position": 1300},
+    "uploadfirmware": {"title": "Force firmware upload", "type": "boolean", "position": 1300},
     "firmware": {"title": "Firmware file location", "type": "string", "position": 1400},
     "blacklist": {
       "title": "Board list type",

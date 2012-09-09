@@ -57,7 +57,7 @@ class X6500Worker(BaseWorker):
       "position": 1100
     },
     "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
-    "uploadfirmware": {"title": "Upload firmware", "type": "boolean", "position": 1300},
+    "uploadfirmware": {"title": "Force firmware upload", "type": "boolean", "position": 1300},
     "firmware": {"title": "Firmware file location", "type": "string", "position": 1400},
     "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
     "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
