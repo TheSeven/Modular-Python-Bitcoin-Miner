@@ -64,7 +64,8 @@ class FTDIJTAGHotplugWorker(BaseWorker):
     "tempcritical": {"title": "Critical temperature", "type": "int", "position": 4100},
     "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 4200},
     "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 4300},
-    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 4400},
+    "warmupstepshares": {"title": "Shares per warmup step", "type": "int", "position": 4400},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 4500},
     "jobinterval": {"title": "Job interval", "type": "float", "position": 5100},
     "pollinterval": {"title": "Poll interval", "type": "float", "position": 5200},
   })
@@ -138,14 +139,16 @@ class FTDIJTAGHotplugWorker(BaseWorker):
     self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
     if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
     self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "warmupstepshares" in self.settings: self.settings.warmupstepshares = 5
+    self.settings.warmupstepshares = min(max(self.settings.warmupstepshares, 1), 10000)
     if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
     self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
     if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval = 10
     # Push our settings down to our children
-    fields = ["takeover", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
-              "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
+    fields = ["takeover", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical", "invalidwarning",
+              "invalidcritical", "warmupstepshares", "speedupthreshold", "jobinterval", "pollinterval"]
     for child in self.children:
       for field in fields: child.settings[field] = self.settings[field]
       child.apply_settings()
@@ -284,8 +287,8 @@ class FTDIJTAGHotplugWorker(BaseWorker):
             child = FTDIJTAGWorker(self.core)
             child.settings.name = boardtype + " board " + serial
             child.settings.serial = serial
-            fields = ["takeover", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
-                      "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
+            fields = ["takeover", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical", "invalidwarning",
+                      "invalidcritical", "warmupstepshares",  "speedupthreshold", "jobinterval", "pollinterval"]
             for field in fields: child.settings[field] = self.settings[field]
             child.apply_settings()
             self.childmap[serial] = child

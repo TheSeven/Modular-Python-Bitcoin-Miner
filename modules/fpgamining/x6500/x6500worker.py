@@ -65,7 +65,8 @@ class X6500Worker(BaseWorker):
     "tempcritical": {"title": "Critical temperature", "type": "int", "position": 3100},
     "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 3200},
     "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 3300},
-    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3400},
+    "warmupstepshares": {"title": "Shares per warmup step", "type": "int", "position": 3400},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3500},
     "jobinterval": {"title": "Job interval", "type": "float", "position": 4100},
     "pollinterval": {"title": "Poll interval", "type": "float", "position": 4200},
   })
@@ -119,6 +120,8 @@ class X6500Worker(BaseWorker):
     self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
     if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
     self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "warmupstepshares" in self.settings: self.settings.warmupstepshares = 5
+    self.settings.warmupstepshares = min(max(self.settings.warmupstepshares, 1), 10000)
     if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
     self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
@@ -342,6 +345,7 @@ class X6500FPGA(BaseWorker):
     super(X6500FPGA, self)._reset()
     self.stats.temperature = None
     self.stats.speed = None
+    self.initialramp = True
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
@@ -616,18 +620,24 @@ class X6500FPGA(BaseWorker):
     
     warning = False
     critical = False
-    if self.recentinvalid > self.parent.settings.invalidwarning: warning = True
-    if self.recentinvalid > self.parent.settings.invalidcritical: critical = True
+    if self.recentinvalid >= self.parent.settings.invalidwarning: warning = True
+    if self.recentinvalid >= self.parent.settings.invalidcritical: critical = True
     if self.stats.temperature:
       if self.stats.temperature > self.parent.settings.tempwarning: warning = True    
       if self.stats.temperature > self.parent.settings.tempcritical: critical = True    
 
-    if warning: self.core.log(self, "Detected overload condition for the FPGA!\n", 200, "y")
-    if critical: self.core.log(self, "Detected CRITICAL condition for the FPGA!\n", 100, "rB")
+    threshold = self.parent.settings.warmupstepshares if self.initialramp else self.parent.settings.speedupthreshold
 
-    if critical: speedstep = -20
-    elif warning: speedstep = -2
-    elif not self.recentinvalid and self.recentshares >= self.parent.settings.speedupthreshold:
+    if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
+    if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
+
+    if critical:
+      speedstep = -20
+      self.initialramp = False
+    elif warning:
+      speedstep = -2
+      self.initialramp = False
+    elif not self.recentinvalid and self.recentshares >= threshold:
       speedstep = 2
     else: speedstep = 0    
 
@@ -648,7 +658,7 @@ class X6500FPGA(BaseWorker):
   def _set_speed(self, speed):
     speed = min(max(speed, 4), self.parent.settings.maximumspeed)
     if self.stats.speed == speed: return
-    self.core.log(self, "Setting clock speed to %d MHz...\n" % speed, 500, "B")
+    self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed), 500, "B")
     self.parent.set_speed(self.fpga, speed)
     self.stats.speed = self.parent.get_speed(self.fpga)
     self.stats.mhps = self.stats.speed
