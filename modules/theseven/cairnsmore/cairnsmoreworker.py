@@ -444,7 +444,7 @@ class CairnsmoreWorker(BaseWorker):
 
     if speedstep: self._set_speed(self.speed + speedstep)
 
-    if speedstep:
+    if speedstep or self.recentshares >= threshold:
       self.recentinvalid = 0
       self.recentshares = 0
 

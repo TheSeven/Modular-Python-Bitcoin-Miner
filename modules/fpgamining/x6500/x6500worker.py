@@ -650,7 +650,7 @@ class X6500FPGA(BaseWorker):
         self.parent.shutdown_fpga(self.fpga)
         self.async_stop(2)
 
-    if speedstep:
+    if speedstep or self.recentshares >= threshold:
       self.recentinvalid = 0
       self.recentshares = 0
     
