@@ -193,7 +193,7 @@ class CairnsmoreHotplugWorker(BaseWorker):
         for port, available in boards.items():
           if port in self.childmap or not available: continue
           child = CairnsmoreWorker(self.core)
-          child.settings.name = "Cairnsmore1 board %s FPGA%d" % (re.match("/dev/serial/by-id/usb-FTDI_Cairnsmore1_([0-9A-Z]+)-if0([0-3])-port0", port).group(1, 2))
+          child.settings.name = "Cairnsmore1 board %s FPGA%s" % (re.match("/dev/serial/by-id/usb-FTDI_Cairnsmore1_([0-9A-Z]+)-if0([0-3])-port0", port).group(1, 2))
           child.settings.port = port
           fields = ["jobinterval", "baudrate", "initialspeed", "maximumspeed", "invalidwarning",
                     "invalidcritical", "warmupstepshares",  "speedupthreshold"]
