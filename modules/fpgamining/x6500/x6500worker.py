@@ -626,7 +626,7 @@ class X6500FPGA(BaseWorker):
       if self.stats.temperature > self.parent.settings.tempwarning: warning = True    
       if self.stats.temperature > self.parent.settings.tempcritical: critical = True    
 
-    threshold = self.settings.warmupstepshares if self.initialramp and not self.recentinvalid else self.settings.speedupthreshold
+    threshold = self.parent.settings.warmupstepshares if self.initialramp and not self.recentinvalid else self.parent.settings.speedupthreshold
 
     if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
     if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
