@@ -452,7 +452,7 @@ class CairnsmoreWorker(BaseWorker):
   def _set_speed(self, speed):
     speed = min(max(speed, 2), self.settings.maximumspeed // 2.5)
     if self.speed == speed: return
-    if self.speed == self.settings.maximumspeed // 2.5: self.initialramp = False
+    if speed == self.settings.maximumspeed // 2.5: self.initialramp = False
     self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed * 2.5), 500, "B")
     command_id = 0
     command_data = int(speed)

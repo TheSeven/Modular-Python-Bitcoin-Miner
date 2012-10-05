@@ -658,7 +658,7 @@ class X6500FPGA(BaseWorker):
   def _set_speed(self, speed):
     speed = min(max(speed, 4), self.parent.settings.maximumspeed)
     if self.stats.speed == speed: return
-    if self.speed == self.parent.settings.maximumspeed: self.initialramp = False
+    if speed == self.parent.settings.maximumspeed: self.initialramp = False
     self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed), 500, "B")
     self.parent.set_speed(self.fpga, speed)
     self.stats.speed = self.parent.get_speed(self.fpga)
