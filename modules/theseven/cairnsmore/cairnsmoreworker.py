@@ -427,7 +427,7 @@ class CairnsmoreWorker(BaseWorker):
     if self.recentinvalid >= self.settings.invalidwarning: warning = True
     if self.recentinvalid >= self.settings.invalidcritical: critical = True
 
-    threshold = self.settings.warmupstepshares if self.initialramp else self.settings.speedupthreshold
+    threshold = self.settings.warmupstepshares if self.initialramp and not self.recentinvalid else self.settings.speedupthreshold
 
     if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
     if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
@@ -440,7 +440,7 @@ class CairnsmoreWorker(BaseWorker):
       self.initialramp = False
     elif not self.recentinvalid and self.recentshares >= threshold:
       speedstep = 1
-    else: speedstep = 0    
+    else: speedstep = 0
 
     if speedstep: self._set_speed(self.speed + speedstep)
 
@@ -452,6 +452,7 @@ class CairnsmoreWorker(BaseWorker):
   def _set_speed(self, speed):
     speed = min(max(speed, 2), self.settings.maximumspeed // 2.5)
     if self.speed == speed: return
+    if self.speed == self.settings.maximumspeed // 2.5: self.initialramp = False
     self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed * 2.5), 500, "B")
     command_id = 0
     command_data = int(speed)

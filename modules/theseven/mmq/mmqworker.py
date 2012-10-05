@@ -564,7 +564,7 @@ class MMQFPGA(BaseWorker):
       if self.stats.temperature > self.parent.settings.tempwarning: warning = True    
       if self.stats.temperature > self.parent.settings.tempcritical: critical = True    
 
-    threshold = self.parent.settings.warmupstepshares if self.initialramp else self.parent.settings.speedupthreshold
+    threshold = self.settings.warmupstepshares if self.initialramp and not self.recentinvalid else self.settings.speedupthreshold
 
     if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
     if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
@@ -589,6 +589,7 @@ class MMQFPGA(BaseWorker):
   def _set_speed(self, speed):
     speed = min(max(speed, 4), self.parent.settings.maximumspeed)
     if self.stats.mhps == speed: return
+    if self.speed == self.parent.settings.maximumspeed: self.initialramp = False
     self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed), 500, "B")
     self.parent.set_speed(self.fpga, speed)
     self.stats.mhps = self.parent.get_speed(self.fpga)
