@@ -57,6 +57,6 @@ class jsonapi(object):
       httprequest.wfile.write(data)
     # Something went wrong, no matter what => 500 Internal Server Error
     except:
-      core.log("Exception while handling API call: %s\n" % traceback.format_exc(), 700, "y")
+      core.log(webui, "Exception while handling API call: %s\n" % traceback.format_exc(), 700, "y")
       try: httprequest.send_response(500)
       except: pass
