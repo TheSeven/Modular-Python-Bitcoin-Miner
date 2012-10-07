@@ -60,26 +60,34 @@ class WorkQueue(Startable):
     self.takenlists = {}
     
     
-  def add_job(self, job):
+  def add_job(self, job, source = None, subsource = "unknown source"):
+    if not source: source = self
     with self.lock:
       if not job.blockchain.check_job(job):
         mhashes = job.hashes_remaining / 1000000.
         job.worksource.add_pending_mhashes(-mhashes)
         job.worksource.add_deferred_mhashes(mhashes)
-        return
+        self.core.log(source, "Discarding one job from %s because it is stale\n" % subsource, 500)
+        return False
       expiry = int(job.expiry)
       if not expiry in self.lists: self.lists[expiry] = [job]
       else: self.lists[expiry].append(job)
       if expiry > self.expirycutoff: self.count += 1
       job.register()
       self.lock.notify_all()
+      self.core.log(source, "Got one job from %s\n" % subsource, 500)
+      return True
     
     
-  def add_jobs(self, jobs):
+  def add_jobs(self, jobs, source = None, subsource = "unknown source"):
+    if not source: source = self
     with self.lock:
       seen = {}
+      accepted = 0
+      dropped = 0
       for job in jobs:
         if not job.blockchain.check_job(job):
+          dropped += 1
           if not job.worksource in seen:
             mhashes = 2**32 / 1000000.
             job.worksource.add_pending_mhashes(-mhashes)
@@ -91,7 +99,11 @@ class WorkQueue(Startable):
           else: self.lists[expiry].append(job)
           if expiry > self.expirycutoff: self.count += 1
           job.register()
+          accepted += 1
       self.lock.notify_all()
+      if accepted: self.core.log(source, "Got %d jobs from %s\n" % (accepted, subsource), 500)
+      if dropped: self.core.log(source, "Discarding %d jobs from %s because they are stale\n" % (dropped, subsource), 500)
+      return accepted
     
     
   def cancel_jobs(self, jobs, graceful = False):

@@ -148,9 +148,13 @@ class ActualWorkSource(BaseWorkSource):
       self.lockoutend = max(self.lockoutend, time.time() + self.settings.stalelockout)
       
       
-  def _push_jobs(self, jobs):
+  def _push_jobs(self, jobs, source = "unknown source"):
     self._handle_success(jobs)
-    if jobs: self.core.workqueue.add_jobs(jobs)
+    if jobs:
+      accepted = self.core.workqueue.add_jobs(jobs, self, source)
+      if accepted != len(jobs): self._handle_stale()
+      return accepted
+    else: return 0
       
       
   def get_running_fetcher_count(self):

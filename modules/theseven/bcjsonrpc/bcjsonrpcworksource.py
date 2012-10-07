@@ -263,8 +263,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
           self.fetchersrunning -= 1
           self.fetcherjobsrunning -= myjobs
       if jobs:
-        self._push_jobs(jobs)
-        self.core.log(self, "Got %d jobs from getwork response\n" % (len(jobs)), 500)
+        self._push_jobs(jobs, "getwork response")
         
         
   def nonce_found(self, job, data, nonce, noncediff):
@@ -357,8 +356,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
         data = response.read()
         jobs = self._build_jobs(response, data, self.jobepoch, time.time() - 1, "long poll", True, True)
         if not jobs: continue
-        self._push_jobs(jobs)
-        self.core.log(self, "Got %d jobs from long poll response\n" % (len(jobs)), 500)
+        self._push_jobs(jobs, "long poll response")
       except:
         conn = None
         self.core.log(self, "Long poll failed: %s\n" % (traceback.format_exc()), 200, "y")
