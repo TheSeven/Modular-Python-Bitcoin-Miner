@@ -95,7 +95,6 @@ class CairnsmoreWorker(BaseWorker):
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.port = None
     self.baudrate = None
-    self.initialramp = True
 
 #    # Initialize custom statistics. This is not neccessary for this worker module,
 #    # but might be interesting for other modules, so it is kept here for reference.
@@ -207,7 +206,7 @@ class CairnsmoreWorker(BaseWorker):
         self.listenerthread.start()
 
         # Configure core clock
-        self.initialramp = False
+        self.initialramp = True
         self._set_speed(self.settings.initialspeed // 2.5)
         
         # Send validation job to device
