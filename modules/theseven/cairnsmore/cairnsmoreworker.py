@@ -207,6 +207,7 @@ class CairnsmoreWorker(BaseWorker):
         self.listenerthread.start()
 
         # Configure core clock
+        self.initialramp = False
         self._set_speed(self.settings.initialspeed // 2.5)
         
         # Send validation job to device
@@ -394,7 +395,7 @@ class CairnsmoreWorker(BaseWorker):
     # Calculate how long the old job was running
     if self.oldjob and self.oldjob.starttime:
       if self.oldjob.starttime:
-        hashes = (now - self.oldjob.starttime) * self.stats.mhps * 1000000
+        hashes = min(2**32, (now - self.oldjob.starttime) * self.stats.mhps * 1000000)
         self.hasheswithoutshare += hashes
         self.oldjob.hashes_processed(hashes)
       self.oldjob.destroy()
@@ -409,7 +410,7 @@ class CairnsmoreWorker(BaseWorker):
     # rate to get the number of hashes calculated for that job and update statistics.
     if self.job:
       if self.job.starttime:
-        hashes = (now - self.job.starttime) * self.stats.mhps * 1000000
+        hashes = min(2**32, (now - self.job.starttime) * self.stats.mhps * 1000000)
         self.hasheswithoutshare += hashes
         self.job.hashes_processed(hashes)
       # Destroy the job, which is neccessary to actually account the calculated amount
