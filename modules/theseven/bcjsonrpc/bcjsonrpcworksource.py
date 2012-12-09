@@ -170,7 +170,7 @@ class BCJSONRPCWorkSource(ActualWorkSource):
   
   def _start_fetcher(self):
     count = len(self.fetcherthreads)
-    if not count: return False
+    if not count: return False, 0
     with self.fetcherlock:
       if self.fetchersrunning >= count: return 0, 0
       self.fetcherjobspending += self.estimated_jobs
