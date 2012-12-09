@@ -83,6 +83,7 @@ class X6500HotplugWorker(BaseWorker):
   
   @classmethod
   def autodetect(self, core):
+    return  #Disabled in favor of FTDIJTAG module
     try:
       found = False
       try:

@@ -73,12 +73,10 @@ class FTDIJTAGHotplugWorker(BaseWorker):
   
   @classmethod
   def autodetect(self, core):
-    return  #TODO: Remove modules/fpgamining tree and activate this once ztexmerge has been evicted
     try:
       import usb
       found = False
       try:
-        import usb
         for bus in usb.busses():
           for dev in bus.devices:
             if dev.idVendor == 0x0403 and dev.idProduct == 0x6001:
