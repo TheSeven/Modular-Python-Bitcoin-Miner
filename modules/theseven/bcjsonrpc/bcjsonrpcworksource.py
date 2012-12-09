@@ -44,7 +44,7 @@ except ImportError: import httplib as http_client
 
 class BCJSONRPCWorkSource(ActualWorkSource):
   
-  version = "theseven.bcjsonrpc work source v0.1.0beta"
+  version = "theseven.bcjsonrpc work source v0.1.0"
   default_name = "Untitled BCJSONRPC work source"
   settings = dict(ActualWorkSource.settings, **{
     "getworktimeout": {"title": "Getwork timeout", "type": "float", "position": 19000},

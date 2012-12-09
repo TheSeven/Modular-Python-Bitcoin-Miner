@@ -43,7 +43,7 @@ except: from Queue import Queue
 # Worker main class, referenced from __init__.py
 class X6500Worker(BaseWorker):
   
-  version = "fpgamining.x6500 worker v0.1.0beta"
+  version = "fpgamining.x6500 worker v0.1.0"
   default_name = "Untitled X6500 worker"
   settings = dict(BaseWorker.settings, **{
     "serial": {"title": "Board serial number", "type": "string", "position": 1000},

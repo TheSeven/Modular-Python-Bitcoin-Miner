@@ -37,7 +37,7 @@ from .mmqworker import MMQWorker
 # Worker main class, referenced from __init__.py
 class MMQHotplugWorker(BaseWorker):
   
-  version = "theseven.mmq hotplug manager v0.1.0beta"
+  version = "theseven.mmq hotplug manager v0.1.0"
   default_name = "MMQ hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{

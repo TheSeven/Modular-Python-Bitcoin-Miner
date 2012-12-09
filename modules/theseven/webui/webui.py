@@ -44,7 +44,7 @@ except: from BaseHTTPServer import BaseHTTPRequestHandler
 
 class WebUI(BaseFrontend):
 
-  version = "theseven.webui v0.1.0beta"
+  version = "theseven.webui v0.1.0"
   default_name = "WebUI"
   can_log = True
   can_configure = True

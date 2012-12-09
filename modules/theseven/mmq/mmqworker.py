@@ -43,7 +43,7 @@ except: from Queue import Queue
 # Worker main class, referenced from __init__.py
 class MMQWorker(BaseWorker):
   
-  version = "theseven.mmq worker v0.1.0beta"
+  version = "theseven.mmq worker v0.1.0"
   default_name = "Untitled MMQ worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},

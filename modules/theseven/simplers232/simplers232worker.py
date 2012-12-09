@@ -39,7 +39,7 @@ from core.job import ValidationJob
 # Worker main class, referenced from __init__.py
 class SimpleRS232Worker(BaseWorker):
   
-  version = "theseven.simplers232 worker v0.1.0beta"
+  version = "theseven.simplers232 worker v0.1.0"
   default_name = "Untitled SimpleRS232 worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},

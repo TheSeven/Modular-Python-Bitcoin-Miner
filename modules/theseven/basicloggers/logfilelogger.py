@@ -34,7 +34,7 @@ from core.basefrontend import BaseFrontend
 
 class LogFileLogger(BaseFrontend):
 
-  version = "theseven.basicloggers log file logger v0.1.0beta"
+  version = "theseven.basicloggers log file logger v0.1.0"
   default_name = "Untitled log file logger"
   can_log = True
   can_autodetect = False

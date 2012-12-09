@@ -38,7 +38,7 @@ from .cairnsmoreworker import CairnsmoreWorker
 # Worker main class, referenced from __init__.py
 class CairnsmoreHotplugWorker(BaseWorker):
 
-  version = "theseven.cairnsmore hotplug manager v0.1.0beta"
+  version = "theseven.cairnsmore hotplug manager v0.1.0"
   default_name = "Cairnsmore hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{

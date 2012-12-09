@@ -39,7 +39,7 @@ from core.job import ValidationJob
 # Worker main class, referenced from __init__.py
 class IcarusWorker(BaseWorker):
   
-  version = "theseven.icarus worker v0.1.0beta"
+  version = "theseven.icarus worker v0.1.0"
   default_name = "Untitled Icarus worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},

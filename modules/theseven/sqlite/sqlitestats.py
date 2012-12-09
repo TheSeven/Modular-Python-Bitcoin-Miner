@@ -38,7 +38,7 @@ from core.statistics import Statistics
 
 class SQLiteStats(BaseFrontend):
 
-  version = "theseven.sqlite statistics logger v0.1.0beta"
+  version = "theseven.sqlite statistics logger v0.1.0"
   default_name = "Untitled SQLite statistics logger"
   can_log = True
   can_handle_events = True

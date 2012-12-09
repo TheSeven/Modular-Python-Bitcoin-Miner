@@ -44,7 +44,7 @@ except ImportError: from Queue import Queue
 
 class Core(Startable):
 
-  version = "Modular Python Bitcoin Miner v0.1.0beta"
+  version = "Modular Python Bitcoin Miner v0.1.0"
 
   
   def __init__(self, instance = "default", default_loglevel = 500):

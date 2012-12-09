@@ -36,7 +36,7 @@ from core.job import ValidationJob
 # Worker main class, referenced from __init__.py
 class CairnsmoreWorker(BaseWorker):
   
-  version = "theseven.cairnsmore worker v0.1.0beta"
+  version = "theseven.cairnsmore worker v0.1.0"
   default_name = "Untitled Cairnsmore worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},

@@ -44,7 +44,7 @@ except: from Queue import Queue
 # Worker main class, referenced from __init__.py
 class FTDIJTAGWorker(BaseWorker):
   
-  version = "theseven.ftdijtag worker v0.1.0beta"
+  version = "theseven.ftdijtag worker v0.1.0"
   default_name = "Untitled FTDIJTAG worker"
   settings = dict(BaseWorker.settings, **{
     "serial": {"title": "Board serial number", "type": "string", "position": 1000},
