@@ -63,6 +63,11 @@ class ActualWorkSource(BaseWorkSource):
     self.estimated_expiry = 60
     
       
+  def _stop(self):
+    self._cancel_jobs()
+    super(ActualWorkSource, self)._stop()
+    
+    
   def _get_statistics(self, stats, childstats):
     super(ActualWorkSource, self)._get_statistics(stats, childstats)
     stats.signals_new_block = self.signals_new_block
@@ -143,33 +148,47 @@ class ActualWorkSource(BaseWorkSource):
       self.lockoutend = max(self.lockoutend, time.time() + self.settings.stalelockout)
       
       
-  def _push_jobs(self, jobs):
+  def _push_jobs(self, jobs, source = "unknown source"):
     self._handle_success(jobs)
-    if jobs: self.core.workqueue.add_jobs(jobs)
+    if jobs:
+      accepted = self.core.workqueue.add_jobs(jobs, self, source)
+      if accepted != len(jobs): self._handle_stale()
+      return accepted
+    else: return 0
       
       
-  def get_job(self):
-    if not self.started or not self.settings.enabled or self._is_locked_out(): return []
+  def get_running_fetcher_count(self):
+    if not self.started: return 0, 0
+    return self._get_running_fetcher_count()
+
+    
+  def start_fetchers(self, count, jobs):
+    if not self.started or not self.settings.enabled or self._is_locked_out() or not count: return False, 0
+    started = 0
+    totaljobs = 0
     try:
-      with self.stats.lock: self.stats.jobrequests += 1
-      jobs = self._get_job()
-      if jobs:
-        self._handle_success(jobs)
-        self.core.log("%s: Got %d jobs\n" % (self.settings.name, len(jobs)), 500)
-      else: self._handle_error()
-      return jobs
+      while started < count:
+        result, newjobs = self._start_fetcher()
+        totaljobs += newjobs
+        if result:
+          started += result
+          with self.stats.lock: self.stats.jobrequests += result
+        if not result or totaljobs >= jobs:
+          if started: return started, totaljobs
+          return result, 0
     except:
-      self.core.log("%s: Error while fetching job: %s\n" % (self.settings.name, traceback.format_exc()), 200, "y")
+      self.core.log(self, "Error while fetching job: %s\n" % (traceback.format_exc()), 200, "y")
       self._handle_error()
-      return []
-  
+    if started: return started, totaljobs
+    return False, 0
+
 
   def nonce_found(self, job, data, nonce, noncediff):
     if self.nonce_found_async:
       thread = Thread(None, self.nonce_found_thread, self.settings.name + "_nonce_found_" + hexlify(nonce).decode("ascii"), (job, data, nonce, noncediff))
       thread.daemon = True
       thread.start()
-    else: self.none_found_thread(job, data, nonce, noncediff)
+    else: self.nonce_found_thread(job, data, nonce, noncediff)
 
     
   def nonce_found_thread(self, job, data, nonce, noncediff):
@@ -180,7 +199,7 @@ class ActualWorkSource(BaseWorkSource):
         self._handle_success()
         return job.nonce_handled_callback(nonce, noncediff, result)
       except:
-        self.core.log("Error while sending share %s (difficulty %.5f) to %s: %s\n" % (hexlify(nonce).decode("ascii"), noncediff, self.settings.name, traceback.format_exc()), 200, "y")
+        self.core.log(self, "Error while sending share %s (difficulty %.5f): %s\n" % (hexlify(nonce).decode("ascii"), noncediff, traceback.format_exc()), 200, "y")
         tries += 1
         self._handle_error(True)
         time.sleep(min(30, tries))

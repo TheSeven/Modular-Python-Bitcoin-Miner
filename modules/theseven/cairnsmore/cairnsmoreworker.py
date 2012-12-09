@@ -19,10 +19,9 @@
 # want to support further development of the Modular Python Bitcoin Miner.
 
 
-
-########################################
-# Simple RS232 worker interface module #
-########################################
+######################################
+# Cairnsmore worker interface module #
+######################################
 
 
 
@@ -34,24 +33,28 @@ from binascii import hexlify, unhexlify
 from core.baseworker import BaseWorker
 from core.job import ValidationJob
 
-
-
 # Worker main class, referenced from __init__.py
-class SimpleRS232Worker(BaseWorker):
+class CairnsmoreWorker(BaseWorker):
   
-  version = "theseven.simplers232 worker v0.1.0"
-  default_name = "Untitled SimpleRS232 worker"
+  version = "theseven.cairnsmore worker v0.1.0"
+  default_name = "Untitled Cairnsmore worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},
     "baudrate": {"title": "Baud rate", "type": "int", "position": 1100},
     "jobinterval": {"title": "Job interval", "type": "float", "position": 1200},
+    "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
+    "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
+    "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 3200},
+    "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 3300},
+    "warmupstepshares": {"title": "Shares per warmup step", "type": "int", "position": 3400},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3500},
   })
   
   
   # Constructor, gets passed a reference to the miner core and the saved worker state, if present
   def __init__(self, core, state = None):
     # Let our superclass do some basic initialization and restore the state if neccessary
-    super(SimpleRS232Worker, self).__init__(core, state)
+    super(CairnsmoreWorker, self).__init__(core, state)
 
     # Initialize wakeup flag for the main thread.
     # This serves as a lock at the same time.
@@ -62,11 +65,23 @@ class SimpleRS232Worker(BaseWorker):
   # Called from the constructor and after every settings change.
   def apply_settings(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(SimpleRS232Worker, self).apply_settings()
+    super(CairnsmoreWorker, self).apply_settings()
     # Pretty much self-explanatory...
-    if not "port" in self.settings or not self.settings.port: self.settings.port = "/dev/ttyS0"
+    if not "port" in self.settings or not self.settings.port: self.settings.port = "/dev/ttyUSB0"
     if not "baudrate" in self.settings or not self.settings.baudrate: self.settings.baudrate = 115200
-    if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
+    if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 20
+    if not "initialspeed" in self.settings: self.settings.initialspeed = 150
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 200
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
+    if not "invalidwarning" in self.settings: self.settings.invalidwarning = 2
+    self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
+    if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
+    self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "warmupstepshares" in self.settings: self.settings.warmupstepshares = 5
+    self.settings.warmupstepshares = min(max(self.settings.warmupstepshares, 1), 10000)
+    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
+    self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     # We can't change the port name or baud rate on the fly, so trigger a restart if they changed.
     # self.port/self.baudrate are cached copys of self.settings.port/self.settings.baudrate
     if self.started and (self.settings.port != self.port or self.settings.baudrate != self.baudrate): self.async_restart()
@@ -75,11 +90,12 @@ class SimpleRS232Worker(BaseWorker):
   # Reset our state. Called both from the constructor and from self.start().
   def _reset(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(SimpleRS232Worker, self)._reset()
+    super(CairnsmoreWorker, self)._reset()
     # These need to be set here in order to make the equality check in apply_settings() happy,
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.port = None
     self.baudrate = None
+
 #    # Initialize custom statistics. This is not neccessary for this worker module,
 #    # but might be interesting for other modules, so it is kept here for reference.
 #    self.stats.field1 = 0
@@ -90,7 +106,7 @@ class SimpleRS232Worker(BaseWorker):
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _start(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(SimpleRS232Worker, self)._start()
+    super(CairnsmoreWorker, self)._start()
     # Cache the port number and baud rate, as we don't like those to change on the fly
     self.port = self.settings.port
     self.baudrate = self.settings.baudrate
@@ -111,7 +127,7 @@ class SimpleRS232Worker(BaseWorker):
   # Shut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(SimpleRS232Worker, self)._stop()
+    super(CairnsmoreWorker, self)._stop()
     # Set the shutdown flag for our threads, making them terminate ASAP.
     self.shutdown = True
     # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
@@ -122,25 +138,23 @@ class SimpleRS232Worker(BaseWorker):
 
       
   # This function should interrupt processing of the specified job if possible.
-  # This is necesary to avoid producing stale shares after a new block was found,
+  # This is neccesary to avoid producing stale shares after a new block was found,
   # or if a job expires for some other reason. If we don't know about the job, just ignore it.
   # Never attempts to fetch a new job in here, always do that asynchronously!
-  # This needs to be very lightweight and fast. We don't care whether it's a
-  # graceful cancellation for this module because the work upload overhead is low. 
+  # This needs to be very lightweight and fast.
   def notify_canceled(self, job, graceful):
     # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.wakeup:
       # If the currently being processed, or currently being uploaded job are affected,
       # wake up the main thread so that it can request and upload a new job immediately.
-      if self.job == job or self.nextjob == job:
-        self.wakeup.notify()
+      if self.job == job: self.wakeup.notify()
 
         
 #  # Report custom statistics. This is not neccessary for this worker module,
 #  # but might be interesting for other modules, so it is kept here for reference.
 #  def _get_statistics(self, stats, childstats):
 #    # Let our superclass handle everything that isn't specific to this worker module
-#    super(SimpleRS232Worker, self)._get_statistics(stats, childstats)
+#    super(IcarusWorker, self)._get_statistics(stats, childstats)
 #    stats.field1 = self.stats.field1
 #    stats.field2 = self.stats.field2 + childstats.calculatefieldsum("field2")
 #    stats.field3 = self.stats.field3 + childstats.calculatefieldavg("field3")
@@ -161,30 +175,26 @@ class SimpleRS232Worker(BaseWorker):
         # Exception container: If an exception occurs in the listener thread, the listener thread
         # will store it here and terminate, and the main thread will rethrow it and then restart.
         self.error = None
+        self.hasheswithoutshare = 0
 
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
+        self.offset = 0
 
-        # Job that the device is currently working on (found nonces are coming from this one).
+        # Initialize clocking tracking data
+        self.speed = 0
+        self.recentshares = 0
+        self.recentinvalid = 0
+        
+        # Job that the device is currently working on, or that is currently being uploaded.
         # This variable is used by BaseWorker to figure out the current work source for statistics.
         self.job = None
-        # Job that is currently being uploaded to the device but not yet being processed.
-        self.nextjob = None
+        # Job that was previously being procesed. Has been destroyed, but there might be some late nonces.
+        self.oldjob = None
 
         # Open the serial port
         import serial
         self.handle = serial.Serial(self.port, self.baudrate, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
-
-        # Send enough zero bytes to make sure that the device is not expecting data any more.
-        # Command zero is a ping request, which is answered by a zero byte from the device.
-        # This means that superfluous zero bytes (but at least one) will just bounce back to us.
-        self.handle.write(struct.pack("45B", *([0] * 45)))
-        # Read the device's response.
-        # There should be at least one byte, and the last byte must be zero.
-        # If not, something is wrong with the device or communication channel.
-        data = self.handle.read(100)
-        if len(data) == 0: raise Exception("Failed to sync with mining device: Device does not respond")
-        if data[-1:] != b"\0": raise Exception("Failed to sync with mining device: Device sends garbage")
 
         # We keep control of the wakeup lock at all times unless we're sleeping
         self.wakeup.acquire()
@@ -195,23 +205,20 @@ class SimpleRS232Worker(BaseWorker):
         self.listenerthread.daemon = True
         self.listenerthread.start()
 
+        # Configure core clock
+        self.initialramp = True
+        self._set_speed(self.settings.initialspeed // 2.5)
+        
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
         self._sendjob(job)
 
-        # Wait for validation job to be accepted by the device
-        self.wakeup.wait(1)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
-        # Honor shutdown flag
-        if self.shutdown: break
-        # If the job that was enqueued above has not been moved from nextjob to job by the
-        # listener thread yet, something went wrong. Throw an exception to make everything restart.
-        if self.nextjob != None: raise Exception("Timeout waiting for job ACK")
 
         # Wait for the validation job to complete. The wakeup flag will be set by the listener
         # thread when the validation job completes. 60 seconds should be sufficient for devices
-        # down to about 1.3MH/s, for slower devices this timeout will need to be increased.
+        # down to about 2.6MH/s, for slower devices this timeout will need to be increased.
         self.wakeup.wait(60)
         # If an exception occurred in the listener thread, rethrow it
         if self.error != None: raise self.error
@@ -220,18 +227,6 @@ class SimpleRS232Worker(BaseWorker):
         # We woke up, but the validation job hasn't succeeded in the mean time.
         # This usually means that the wakeup timeout has expired.
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
-        # self.stats.mhps has now been populated by the listener thread
-        self.core.log(self, "Running at %f MH/s\n" % self.stats.mhps, 300, "B")
-        # Calculate the time that the device will need to process 2**32 nonces.
-        # This is limited at 60 seconds in order to have some regular communication,
-        # even with very slow devices (and e.g. detect if the device was unplugged).
-        interval = min(60, 2**32 / 1000000. / self.stats.mhps)
-        # Add some safety margin and take user's interval setting (if present) into account.
-        self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
-        self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
-        # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-        self.jobspersecond = 1. / self.jobinterval
-        self.core.notify_speed_changed(self)
 
         # Main loop, continues until something goes wrong or we're shutting down.
         while not self.shutdown:
@@ -242,8 +237,16 @@ class SimpleRS232Worker(BaseWorker):
           self.wakeup.release()
           job = self.core.get_job(self, self.jobinterval + 2)
           self.wakeup.acquire()
+
+          # If the job could be interpreted as a command, ignore it.
+          if job.data[68:72] == unhexlify(b"ffffffff"):
+            job.destroy()
+            continue
+
+          # Go through the safety checks and adjust the clock if necessary
+          self.safetycheck()
           
-          # If a new block was found while we were fetching that job, just discard it and get a new one.
+          # If a new block was found while we were fetching this job, just discard it and get a new one.
           if job.canceled:
             job.destroy()
             continue
@@ -253,15 +256,8 @@ class SimpleRS232Worker(BaseWorker):
 
           # Upload the job to the device
           self._sendjob(job)
-          # Wait for up to one second for the device to accept it
-          self.wakeup.wait(1)
-          # Honor shutdown flag
-          if self.shutdown: break
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
-          # If the job that was send above has not been moved from nextjob to job by the listener
-          # thread yet, something went wrong. Throw an exception to make everything restart.
-          if self.nextjob != None: raise Exception("Timeout waiting for job ACK")
           # If the job was already caught by a long poll while we were uploading it,
           # jump back to the beginning of the main loop in order to immediately fetch new work.
           # Don't check for the canceled flag before the job was accepted by the device,
@@ -317,79 +313,62 @@ class SimpleRS232Worker(BaseWorker):
         # If the main thread has a problem, make sure we die before it restarts
         if self.error != None: break
 
+        # If there were suspiciously many hashes without even a single share,
+        # assume that PL2303 did it's job (i.e. serial port locked up),
+        # and restart the board worker.
+        if self.hasheswithoutshare > 16 * 2**32:
+          raise Exception("Watchdog triggered: %.6f MHashes without share" % (self.hasheswithoutshare / 1000000.))
+
         # Try to read a response from the device
-        data = self.handle.read(1)
+        nonce = self.handle.read(4)
         # If no response was available, retry
-        if len(data) == 0: continue
-        # Decode the response
-        result = struct.unpack("B", data)[0]
+        if len(nonce) != 4: continue
+        nonce = struct.pack("<I", struct.unpack(">I", nonce)[0] - self.offset)
 
-        if result == 1:
-          # Got a job acknowledgement message.
-          # If we didn't expect one (no job waiting to be accepted in nextjob), throw an exception.
-          if self.nextjob == None: raise Exception("Got spurious job ACK from mining device")
-          # The job has been uploaded. Start counting time for the new job, and if there was a
-          # previous one, calculate for how long that one was running and destroy it.
-          now = time.time()
-          self._jobend(now)
-
-          # Acknowledge the job by moving it from nextjob to job and wake up
-          # the main thread that's waiting for the job acknowledgement.
+        # Snapshot the current jobs to avoid race conditions
+        newjob = self.job
+        oldjob = self.oldjob
+        # If there is no job, this must be a leftover from somewhere, e.g. previous invocation
+        # or reiterating the keyspace because we couldn't provide new work fast enough.
+        # In both cases we can't make any use of that nonce, so just discard it.
+        if not oldjob and not newjob: return
+        # Stop time measurement
+        now = time.time()
+        self.hasheswithoutshare = 0
+        # Pass the nonce that we found to the work source, if there is one.
+        # Do this before calculating the hash rate as it is latency critical.
+        job = None
+        if newjob:
+          if newjob.nonce_found(nonce, oldjob): job = newjob
+        if not job and oldjob:
+          if oldjob.nonce_found(nonce): job = oldjob
+        self.recentshares += 1
+        if not job: self.recentinvalid += 1
+        if not job and isinstance(newjob, ValidationJob): job = newjob
+        # If the nonce is too low, the measurement may be inaccurate.
+        nonceval = struct.unpack("<I", nonce)[0]
+        if job and job.starttime and nonceval >= 0x04000000:
+          # Calculate actual on-device processing time (not including transfer times) of the job.
+          delta = (now - job.starttime) - 40. / self.baudrate
+          # Calculate the hash rate based on the processing time and number of neccessary MHashes.
+          # This assumes that the device processes all nonces (starting at zero) sequentially.
+          self.stats.mhps = nonceval / 1000000. / delta
+          self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
+        # This needs self.stats.mhps to be set.
+        if isinstance(newjob, ValidationJob):
+          # This is a validation job. Validate that the nonce is correct, and complain if not.
+          if newjob.nonce != nonce and struct.unpack("<I", newjob.nonce)[0] != struct.unpack("<I", nonce)[0] + 256:
+            raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(newjob.nonce).decode("ascii")))
+          else:
+            # The nonce was correct. Wake up the main thread.
+            self.offset = struct.unpack("<I", nonce)[0] - struct.unpack("<I", newjob.nonce)[0]
+            with self.wakeup:
+              self.checksuccess = True
+              self.wakeup.notify()
+        else:
           with self.wakeup:
-            self.job = self.nextjob
-            self.job.starttime = now
-            self.nextjob = None
+            self._jobend(now)
             self.wakeup.notify()
-          continue
-
-        elif result == 2:
-          # We found a share! Download the nonce.
-          nonce = self.handle.read(4)[::-1]
-          # If there is no job, this must be a leftover from somewhere, e.g. previous invocation
-          # or reiterating the keyspace because we couldn't provide new work fast enough.
-          # In both cases we can't make any use of that nonce, so just discard it.
-          if self.job == None: continue
-          # Stop time measurement
-          now = time.time()
-          # Pass the nonce that we found to the work source, if there is one.
-          # Do this before calculating the hash rate as it is latency critical.
-          self.job.nonce_found(nonce)
-          # If the nonce is too low, the measurement may be inaccurate.
-          nonceval = struct.unpack("<I", nonce)[0]
-          if nonceval >= 0x02000000:
-            # Calculate actual on-device processing time (not including transfer times) of the job.
-            delta = (now - self.job.starttime) - 40. / self.baudrate
-            # Calculate the hash rate based on the processing time and number of neccessary MHashes.
-            # This assumes that the device processes all nonces (starting at zero) sequentially.
-            self.stats.mhps = nonceval / delta / 1000000.
-            self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
-          # This needs self.mhps to be set.
-          if isinstance(self.job, ValidationJob):
-            # This is a validation job. Validate that the nonce is correct, and complain if not.
-            if self.job.nonce != nonce:
-              raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(self.job.nonce).decode("ascii")))
-            else:
-              # The nonce was correct. Wake up the main thread.
-              with self.wakeup:
-                self.checksuccess = True
-                self.wakeup.notify()
-          continue
-
-        if result == 3:
-          # The device managed to process the whole 2**32 keyspace before we sent it new work.
-          self.core.log(self, "Exhausted keyspace!\n", 200, "y")
-          # If it was a validation job, this probably means that there is a hardware/firmware bug
-          # or that the "found share" message was lost on the communication channel.
-          if isinstance(self.job, ValidationJob): raise Exception("Validation job terminated without finding a share")
-          # Stop measuring time because the device is doing duplicate work right now
-          self._jobend()
-          # Wake up the main thread to fetch new work ASAP.
-          with self.wakeup: self.wakeup.notify()
-          continue
-
-        # If we end up here, we received a message from the device that was invalid or unexpected.
-        # All valid cases are terminated with a "continue" statement above.
-        raise Exception("Got bad message from mining device: %d" % result)
 
     # If an exception is thrown in the listener thread...
     except Exception as e:
@@ -404,12 +383,21 @@ class SimpleRS232Worker(BaseWorker):
 
   # This function uploads a job to the device
   def _sendjob(self, job):
-    # Put it into nextjob. It will be moved to job by the listener
-    # thread as soon as it gets acknowledged by the device.
-    self.nextjob = job
+    # Move previous job to oldjob, and new one to job
+    self.oldjob = self.job
+    self.job = job
     # Send it to the device
-    self.handle.write(struct.pack("B", 1) + job.midstate[::-1] + job.data[75:63:-1])
+    now = time.time()
+    self.handle.write(job.midstate[::-1] + b"\0" * 20 + job.data[75:63:-1])
     self.handle.flush()
+    self.job.starttime = time.time()
+    # Calculate how long the old job was running
+    if self.oldjob and self.oldjob.starttime:
+      if self.oldjob.starttime:
+        hashes = min(2**32, (now - self.oldjob.starttime) * self.stats.mhps * 1000000)
+        self.hasheswithoutshare += hashes
+        self.oldjob.hashes_processed(hashes)
+      self.oldjob.destroy()
 
     
   # This function needs to be called whenever the device terminates working on a job.
@@ -419,11 +407,75 @@ class SimpleRS232Worker(BaseWorker):
     if not now: now = time.time()
     # Calculate how long the job was actually running and multiply that by the hash
     # rate to get the number of hashes calculated for that job and update statistics.
-    if self.job != None:
-      if self.job.starttime != None:
-        self.job.hashes_processed((now - self.job.starttime) * self.stats.mhps * 1000000)
-        self.job.starttime = None
+    if self.job:
+      if self.job.starttime:
+        hashes = min(2**32, (now - self.job.starttime) * self.stats.mhps * 1000000)
+        self.hasheswithoutshare += hashes
+        self.job.hashes_processed(hashes)
       # Destroy the job, which is neccessary to actually account the calculated amount
       # of work to the worker and work source, and to remove the job from cancelation lists.
+      self.oldjob = self.job
       self.job.destroy()
       self.job = None
+  
+  
+  # Check the invalid rate and adjust the FPGA clock accordingly
+  def safetycheck(self):
+
+    warning = False
+    critical = False
+    if self.recentinvalid >= self.settings.invalidwarning: warning = True
+    if self.recentinvalid >= self.settings.invalidcritical: critical = True
+
+    threshold = self.settings.warmupstepshares if self.initialramp and not self.recentinvalid else self.settings.speedupthreshold
+
+    if warning: self.core.log(self, "Detected overload condition!\n", 200, "y")
+    if critical: self.core.log(self, "Detected CRITICAL condition!\n", 100, "rB")
+
+    if critical:
+      speedstep = -10
+      self.initialramp = False
+    elif warning:
+      speedstep = -1
+      self.initialramp = False
+    elif not self.recentinvalid and self.recentshares >= threshold:
+      speedstep = 1
+    else: speedstep = 0
+
+    if speedstep: self._set_speed(self.speed + speedstep)
+
+    if speedstep or self.recentshares >= threshold:
+      self.recentinvalid = 0
+      self.recentshares = 0
+
+
+  def _set_speed(self, speed):
+    speed = min(max(speed, 2), self.settings.maximumspeed // 2.5)
+    if self.speed == speed: return
+    if speed == self.settings.maximumspeed // 2.5: self.initialramp = False
+    self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed * 2.5), 500, "B")
+    command_id = 0
+    command_data = int(speed)
+    command_prefix = 0b10110111
+    command_validator = (command_id ^ command_data ^ command_prefix ^ 0b01101101)
+    commandpacket = struct.pack("BBBB", command_validator, command_data, command_id, command_prefix)
+    self.handle.write(b"\0" * 32 + commandpacket + b"\xff" * 28)
+    self.handle.flush()
+    self.speed = speed
+    self.stats.mhps = speed * 2.5
+    self._update_job_interval()
+
+
+  def _update_job_interval(self):
+    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
+    # Calculate the time that the device will need to process 2**32 nonces.
+    # This is limited at 60 seconds in order to have some regular communication,
+    # even with very slow devices (and e.g. detect if the device was unplugged).
+    interval = min(60, 2**32 / 1000000. / self.stats.mhps)
+    # Add some safety margin and take user's interval setting (if present) into account.
+    self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
+    self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
+    # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
+    self.jobs_per_second = 1. / self.jobinterval
+    self.core.notify_speed_changed(self)
+  

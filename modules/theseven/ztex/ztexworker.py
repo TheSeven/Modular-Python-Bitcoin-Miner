@@ -40,7 +40,7 @@ except: from Queue import Queue
 # Worker main class, referenced from __init__.py
 class ZtexWorker(BaseWorker):
   
-  version = "theseven.ztex worker v0.1.0beta"
+  version = "theseven.ztex worker v0.1.0"
   default_name = "Untitled ZTEX worker"
   settings = dict(BaseWorker.settings, **{
     "serial": {"title": "Board serial number", "type": "string", "position": 1000},
@@ -76,7 +76,7 @@ class ZtexWorker(BaseWorker):
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
     # We can't switch the device on the fly, so trigger a restart if they changed.
     # self.serial is a cached copy of self.settings.serial.
-    if self.settings.serial != self.serial: self.async_restart()
+    if self.started and self.settings.serial != self.serial: self.async_restart()
     # We need to inform the proxy about a poll interval change
     if self.started and self.settings.pollinterval != self.pollinterval: self._notify_poll_interval_changed()
     
@@ -164,7 +164,7 @@ class ZtexWorker(BaseWorker):
         while not self.shutdown:
           data = self.rxconn.recv()
           if self.dead: break
-          if data[0] == "log": self.core.log("%s: Proxy: %s" % (self.settings.name, data[1]), data[2], data[3])
+          if data[0] == "log": self.core.log(self, "Proxy: %s" % data[1], data[2], data[3])
           elif data[0] == "ping": self._proxy_message("pong")
           elif data[0] == "pong": pass
           elif data[0] == "dying": raise Exception("Proxy died!")
@@ -180,7 +180,7 @@ class ZtexWorker(BaseWorker):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+        self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
       finally:
         with self.workloopwakeup: self.workloopwakeup.notify()
         try:
@@ -251,14 +251,15 @@ class ZtexWorker(BaseWorker):
 
   def _notify_speed_changed(self, speed):
     self.stats.mhps = speed / 1000000.
-    self.core.log(self.settings.name + ": Running at %f MH/s\n" % self.stats.mhps, 300, "B")
+    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
+    self.core.log(self, "Running at %f MH/s\n" % self.stats.mhps, 300, "B")
     # Calculate the time that the device will need to process 2**32 nonces.
     # This is limited at 60 seconds in order to have some regular communication,
     # even with very slow devices (and e.g. detect if the device was unplugged).
     interval = min(60, 2**32 / speed)
     # Add some safety margin and take user's interval setting (if present) into account.
     self.jobinterval = min(self.settings.jobinterval, max(0.5, interval * 0.8 - 1))
-    self.core.log(self.settings.name + ": Job interval: %f seconds\n" % self.jobinterval, 400, "B")
+    self.core.log(self, "Job interval: %f seconds\n" % self.jobinterval, 400, "B")
     # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
     self.jobs_per_second = 1. / self.jobinterval
     self.core.notify_speed_changed(self)
@@ -270,7 +271,7 @@ class ZtexWorker(BaseWorker):
       
   def _notify_keyspace_exhausted(self):
     with self.workloopwakeup: self.workloopwakeup.notify()
-    self.core.log(self.settings.name + " exhausted keyspace!\n", 200, "y")
+    self.core.log(self, "Exhausted keyspace!\n", 200, "y")
 
       
   def _send_job(self, job):
@@ -278,11 +279,12 @@ class ZtexWorker(BaseWorker):
 
 
   # This function should interrupt processing of the specified job if possible.
-  # This is neccesary to avoid producing stale shares after a new block was found,
+  # This is necesary to avoid producing stale shares after a new block was found,
   # or if a job expires for some other reason. If we don't know about the job, just ignore it.
   # Never attempts to fetch a new job in here, always do that asynchronously!
-  # This needs to be very lightweight and fast.
-  def notify_canceled(self, job):
+  # This needs to be very lightweight and fast. We don't care whether it's a
+  # graceful cancellation for this module because the work upload overhead is low. 
+  def notify_canceled(self, job, graceful):
     # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.workloopwakeup:
       # If the currently being processed, or currently being uploaded job are affected,
@@ -333,7 +335,7 @@ class ZtexWorker(BaseWorker):
     # If something went wrong...
     except Exception as e:
       # ...complain about it!
-      self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+      self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
     finally:
       # We're not doing productive work any more, update stats and destroy current job
       self._jobend()

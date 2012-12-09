@@ -20,24 +20,24 @@
 
 
 
-##################################################
-# ZTEX USB FPGA Module hotplug controller module #
-##################################################
+##########################################################
+# Generic FTDI JTAG bitbanging hotplug controller module #
+##########################################################
 
 
 
 import traceback
 from threading import Condition, Thread
 from core.baseworker import BaseWorker
-from .ztexworker import ZtexWorker
+from .ftdijtagworker import FTDIJTAGWorker
 
 
 
 # Worker main class, referenced from __init__.py
-class ZtexHotplugWorker(BaseWorker):
+class FTDIJTAGHotplugWorker(BaseWorker):
   
-  version = "theseven.ztex hotplug manager v0.1.0"
-  default_name = "ZTEX hotplug manager"
+  version = "theseven.ftdijtag hotplug manager v0.1.0beta"
+  default_name = "FTDIJTAG hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{
     "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
@@ -58,6 +58,14 @@ class ZtexHotplugWorker(BaseWorker):
       "position": 2100
     },
     "scaninterval": {"title": "Bus scan interval", "type": "float", "position": 2200},
+    "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 3000},
+    "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 3100},
+    "tempwarning": {"title": "Warning temperature", "type": "int", "position": 4000},
+    "tempcritical": {"title": "Critical temperature", "type": "int", "position": 4100},
+    "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 4200},
+    "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 4300},
+    "warmupstepshares": {"title": "Shares per warmup step", "type": "int", "position": 4400},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 4500},
     "jobinterval": {"title": "Job interval", "type": "float", "position": 5100},
     "pollinterval": {"title": "Poll interval", "type": "float", "position": 5200},
   })
@@ -66,25 +74,28 @@ class ZtexHotplugWorker(BaseWorker):
   @classmethod
   def autodetect(self, core):
     try:
+      import usb
       found = False
       try:
-        import usb
         for bus in usb.busses():
           for dev in bus.devices:
-            if dev.idVendor == 0x221a and dev.idProduct >= 0x100 and dev.idProduct <= 0x1ff:
+            if dev.idVendor == 0x0403 and dev.idProduct == 0x6001:
               try:
                 handle = dev.open()
+                manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
+                product = handle.getString(dev.iProduct, 100).decode("latin1")
                 serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                try:
-                  configuration = dev.configurations[0]
-                  interface = configuration.interfaces[0][0]
-                  handle.setConfiguration(configuration.value)
-                  handle.claimInterface(interface.interfaceNumber)
-                  handle.releaseInterface()
-                  handle.setConfiguration(0)
-                  found = True
-                  break
-                except: pass
+                if (manufacturer == "FTDI" and product == "FT232R USB UART") or (manufacturer == "FPGA Mining LLC" and product == "X6500 FPGA Miner") or (manufacturer == "BTCFPGA" and product == "ModMiner"):
+                  try:
+                    configuration = dev.configurations[0]
+                    interface = configuration.interfaces[0][0]
+                    handle.setConfiguration(configuration.value)
+                    handle.claimInterface(interface.interfaceNumber)
+                    handle.releaseInterface()
+                    handle.setConfiguration(0)
+                    found = True
+                    break
+                  except: pass
               except: pass
           if found: break
       except: pass
@@ -98,27 +109,44 @@ class ZtexHotplugWorker(BaseWorker):
     self.wakeup = Condition()
 
     # Let our superclass do some basic initialization and restore the state if neccessary
-    super(ZtexHotplugWorker, self).__init__(core, state)
+    super(FTDIJTAGHotplugWorker, self).__init__(core, state)
 
     
   # Validate settings, filling them with default values if neccessary.
   # Called from the constructor and after every settings change.
   def apply_settings(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(ZtexHotplugWorker, self).apply_settings()
+    super(FTDIJTAGHotplugWorker, self).apply_settings()
     if not "serial" in self.settings: self.settings.serial = None
     if not "takeover" in self.settings: self.settings.takeover = True
     if not "firmware" in self.settings or not self.settings.firmware:
-      self.settings.firmware = "modules/ztex/firmware/"
+      self.settings.firmware = "modules/theseven/ftdijtag/firmware/"
     if not "blacklist" in self.settings: self.settings.blacklist = True
     if self.settings.blacklist == "false": self.settings.blacklist = False
     else: self.settings.blacklist = not not self.settings.blacklist
     if not "boards" in self.settings: self.settings.boards = []
+    if not "initialspeed" in self.settings: self.settings.initialspeed = 150
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 200
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
+    if not "tempwarning" in self.settings: self.settings.tempwarning = 45
+    self.settings.tempwarning = min(max(self.settings.tempwarning, 0), 60)
+    if not "tempcritical" in self.settings: self.settings.tempcritical = 55
+    self.settings.tempcritical = min(max(self.settings.tempcritical, 0), 80)
+    if not "invalidwarning" in self.settings: self.settings.invalidwarning = 2
+    self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
+    if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
+    self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "warmupstepshares" in self.settings: self.settings.warmupstepshares = 5
+    self.settings.warmupstepshares = min(max(self.settings.warmupstepshares, 1), 10000)
+    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
+    self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
     if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval = 10
     # Push our settings down to our children
-    fields = ["takeover", "firmware", "jobinterval", "pollinterval"]
+    fields = ["takeover", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical", "invalidwarning",
+              "invalidcritical", "warmupstepshares", "speedupthreshold", "jobinterval", "pollinterval"]
     for child in self.children:
       for field in fields: child.settings[field] = self.settings[field]
       child.apply_settings()
@@ -129,15 +157,13 @@ class ZtexHotplugWorker(BaseWorker):
   # Reset our state. Called both from the constructor and from self.start().
   def _reset(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(ZtexHotplugWorker, self)._reset()
-    # These need to be set here in order to make the equality check in apply_settings() happy,
-    # when it is run before starting the module for the first time. (It is called from the constructor.)
+    super(FTDIJTAGHotplugWorker, self)._reset()
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _start(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(ZtexHotplugWorker, self)._start()
+    super(FTDIJTAGHotplugWorker, self)._start()
     # Initialize child map
     self.childmap = {}
     # Reset the shutdown flag for our threads
@@ -151,7 +177,7 @@ class ZtexHotplugWorker(BaseWorker):
   # Shut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(ZtexHotplugWorker, self)._stop()
+    super(FTDIJTAGHotplugWorker, self)._stop()
     # Set the shutdown flag for our threads, making them terminate ASAP.
     self.shutdown = True
     # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
@@ -175,25 +201,32 @@ class ZtexHotplugWorker(BaseWorker):
 
     # Loop until we are shut down
     while not self.shutdown:
-    
       try:
         boards = {}
         for bus in usb.busses():
           for dev in bus.devices:
-            if dev.idVendor == 0x221a and dev.idProduct >= 0x100 and dev.idProduct <= 0x1ff:
+            if dev.idVendor == 0x0403 and dev.idProduct == 0x6001:
               try:
                 handle = dev.open()
+                manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
+                product = handle.getString(dev.iProduct, 100).decode("latin1")
                 serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                try:
-                  configuration = dev.configurations[0]
-                  interface = configuration.interfaces[0][0]
-                  handle.setConfiguration(configuration.value)
-                  handle.claimInterface(interface.interfaceNumber)
-                  handle.releaseInterface()
-                  handle.setConfiguration(0)
-                  available = True
-                except: available = False
-                boards[serial] = available
+                boardtype = None
+                if (manufacturer == "FTDI" and product == "FT232R USB UART") or (manufacturer == "FPGA Mining LLC" and product == "X6500 FPGA Miner"):
+                  boardtype = "X6500"
+                elif manufacturer == "BTCFPGA" and product == "ModMiner":
+                  boardtype = "ModMiner"
+                if boardtype:
+                  try:
+                    configuration = dev.configurations[0]
+                    interface = configuration.interfaces[0][0]
+                    handle.setConfiguration(configuration.value)
+                    handle.claimInterface(interface.interfaceNumber)
+                    handle.releaseInterface()
+                    handle.setConfiguration(0)
+                    available = True
+                  except: available = False
+                  boards[serial] = (available, boardtype)
               except: pass
                 
         for serial in boards.keys():
@@ -221,8 +254,8 @@ class ZtexHotplugWorker(BaseWorker):
           del self.childmap[serial]
           try: self.children.remove(child)
           except: pass
-              
-        for serial, available in boards.items():
+                
+        for serial, (available, boardtype) in boards.items():
           if serial in self.childmap: continue
           if not available and self.settings.takeover:
             try:
@@ -230,10 +263,12 @@ class ZtexHotplugWorker(BaseWorker):
                 if available: break
                 for dev in bus.devices:
                   if available: break
-                  if dev.idVendor == 0x221a and dev.idProduct >= 0x100 and dev.idProduct <= 0x1ff:
+                  if dev.idVendor == 0x0403 and dev.idProduct == 0x6001:
                     handle = dev.open()
+                    manufacturer = handle.getString(dev.iManufacturer, 100).decode("latin1")
+                    product = handle.getString(dev.iProduct, 100).decode("latin1")
                     _serial = handle.getString(dev.iSerialNumber, 100).decode("latin1")
-                    if _serial == serial:
+                    if ((manufacturer == "FTDI" and product == "FT232R USB UART") or (manufacturer == "FPGA Mining LLC" and product == "X6500 FPGA Miner") or (manufacturer == "BTCFPGA" and product == "ModMiner")) and _serial == serial:
                       handle.reset()
                       time.sleep(1)
                       configuration = dev.configurations[0]
@@ -247,10 +282,11 @@ class ZtexHotplugWorker(BaseWorker):
                       available = True
             except: pass
           if available:
-            child = ZtexWorker(self.core)
-            child.settings.name = "Ztex board " + serial
+            child = FTDIJTAGWorker(self.core)
+            child.settings.name = boardtype + " board " + serial
             child.settings.serial = serial
-            fields = ["takeover", "firmware", "jobinterval", "pollinterval"]
+            fields = ["takeover", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical", "invalidwarning",
+                      "invalidcritical", "warmupstepshares",  "speedupthreshold", "jobinterval", "pollinterval"]
             for field in fields: child.settings[field] = self.settings[field]
             child.apply_settings()
             self.childmap[serial] = child

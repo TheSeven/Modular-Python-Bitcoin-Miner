@@ -51,6 +51,7 @@ class ZtexBoardProxy(Process):
 
   def run(self):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
     self.lock = RLock()
     self.wakeup = Condition()
     self.error = None

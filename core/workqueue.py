@@ -29,6 +29,7 @@
 import time
 from threading import Condition, RLock, Thread
 from .startable import Startable
+from .util import Bunch
 try: from queue import Queue
 except: from Queue import Queue
 
@@ -38,43 +39,55 @@ class WorkQueue(Startable):
 
   
   def __init__(self, core):
-    super(WorkQueue, self).__init__()
     self.core = core
+    self.id = -3
+    self.settings = Bunch(name = "Work queue")
+    super(WorkQueue, self).__init__()
     # Initialize global work queue lock and wakeup condition
     self.lock = Condition()
     self.cancelqueue = Queue()
     
     
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting work queue state")
     super(WorkQueue, self)._reset()
     # Initialize job list container and count
     self.lists = {}
+    self.target = 5
     self.count = 0
     self.expirycutoff = 0
     # Initialize taken job list container
     self.takenlists = {}
     
     
-  def add_job(self, job):
+  def add_job(self, job, source = None, subsource = "unknown source"):
+    if not source: source = self
     with self.lock:
       if not job.blockchain.check_job(job):
         mhashes = job.hashes_remaining / 1000000.
         job.worksource.add_pending_mhashes(-mhashes)
         job.worksource.add_deferred_mhashes(mhashes)
-        return
+        self.core.log(source, "Discarding one job from %s because it is stale\n" % subsource, 500)
+        return False
       expiry = int(job.expiry)
       if not expiry in self.lists: self.lists[expiry] = [job]
       else: self.lists[expiry].append(job)
       if expiry > self.expirycutoff: self.count += 1
       job.register()
       self.lock.notify_all()
+      self.core.log(source, "Got one job from %s\n" % subsource, 500)
+      return True
     
     
-  def add_jobs(self, jobs):
+  def add_jobs(self, jobs, source = None, subsource = "unknown source"):
+    if not source: source = self
     with self.lock:
       seen = {}
+      accepted = 0
+      dropped = 0
       for job in jobs:
         if not job.blockchain.check_job(job):
+          dropped += 1
           if not job.worksource in seen:
             mhashes = 2**32 / 1000000.
             job.worksource.add_pending_mhashes(-mhashes)
@@ -86,12 +99,16 @@ class WorkQueue(Startable):
           else: self.lists[expiry].append(job)
           if expiry > self.expirycutoff: self.count += 1
           job.register()
+          accepted += 1
       self.lock.notify_all()
+      if accepted: self.core.log(source, "Got %d jobs from %s\n" % (accepted, subsource), 500)
+      if dropped: self.core.log(source, "Discarding %d jobs from %s because they are stale\n" % (dropped, subsource), 500)
+      return accepted
     
     
-  def cancel_jobs(self, jobs):
+  def cancel_jobs(self, jobs, graceful = False):
     if not jobs: return
-    self.cancelqueue.put(jobs)
+    self.cancelqueue.put((jobs, graceful))
     
     
   def remove_job(self, job):
@@ -107,23 +124,6 @@ class WorkQueue(Startable):
       except: pass
       
       
-  def flush_all_of_work_source(self, worksource):
-    cancel = []
-    with self.lock:
-      for list in self.lists:
-        for job in list:
-          if job.worksource == worksource:
-            list.remove(job)
-            if int(job.expiry) > self.expirycutoff: self.count -= 1
-            job.destroy()
-      for list in self.takenlists:
-        for job in list:
-          if job.worksource == worksource:
-            list.remove(job)
-            cancel.append(job)
-    self.cancel_jobs(cancel)
-    
-    
   def get_job(self, worker, expiry_min_ahead, async = False):
     with self.lock:
       job = self._get_job_internal(expiry_min_ahead, async)
@@ -207,8 +207,9 @@ class WorkQueue(Startable):
   
   def _cancelloop(self):
     while True:
-      jobs = self.cancelqueue.get()
-      if not jobs: return
+      data = self.cancelqueue.get()
+      if not data: return
+      jobs, graceful = data
       for job in jobs:
-        try: job.cancel()
-        except: self.core.log("Fetcher: Error while canceling job: %s\n" % traceback.format_exc(), 100, "r")
+        try: job.cancel(graceful)
+        except: self.core.log(self.core, "Error while canceling job: %s\n" % traceback.format_exc(), 100, "r")

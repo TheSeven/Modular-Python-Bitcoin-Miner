@@ -48,8 +48,8 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
 
   def __init__(self, core, state = None):
     StatisticsProvider.__init__(self)
-    Startable.__init__(self)
     Inflatable.__init__(self, core, state)
+    Startable.__init__(self)
 
     self.parent = None
     self.statelock = RLock()
@@ -70,6 +70,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     
     
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting work source state", worksource = self)
     Startable._reset(self)
     self.mhashes_pending = 0
     self.mhashes_deferred = 0
@@ -84,6 +85,7 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     self.stats.sharesaccepted = 0
     self.stats.sharesrejected = 0
     self.stats.difficulty = 0
+    self.jobs = []
     
     
   def _get_statistics(self, stats, childstats):
@@ -110,6 +112,25 @@ class BaseWorkSource(StatisticsProvider, Startable, Inflatable):
     return self.parent
 
     
+  def add_job(self, job):
+    if not job in self.jobs: self.jobs.append(job)
+  
+
+  def remove_job(self, job):
+    while job in self.jobs: self.jobs.remove(job)
+
+
+  def _cancel_jobs(self, graceful = False):
+    cancel = []
+    with self.core.workqueue.lock:
+      while self.jobs:
+        job = self.jobs.pop(0)
+        if job.worker: cancel.append(job)
+        else: job.destroy()
+    if not graceful: self.jobs = []
+    self.core.workqueue.cancel_jobs(cancel, graceful)
+  
+
   def add_pending_mhashes(self, mhashes):
     with self.statelock: self.mhashes_pending += mhashes
     if self.parent: self.parent.add_pending_mhashes(mhashes)

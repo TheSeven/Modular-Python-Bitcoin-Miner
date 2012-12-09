@@ -45,8 +45,8 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
   
   def __init__(self, core, state = None):
     StatisticsProvider.__init__(self)
-    Startable.__init__(self)
     Inflatable.__init__(self, core, state)
+    Startable.__init__(self)
     
     self.worksourcelock = RLock()
     self.blocklock = RLock()
@@ -77,9 +77,10 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
     
     
   def _reset(self):    
+    self.core.event(300, self, "reset", None, "Resetting blockchain state", blockchain = self)
     Startable._reset(self)
-    self.currentidentifier = b""#None
-    self.knownidentifiers = []
+    self.currentprevhash = None
+    self.knownprevhashes = []
     self.timeoutend = 0
     self.jobs = []
     self.stats.starttime = time.time()
@@ -121,26 +122,27 @@ class Blockchain(StatisticsProvider, Startable, Inflatable):
 
 
   def check_job(self, job):
-    if self.currentidentifier == job.identifier: return True
+    if self.currentprevhash == job.prevhash: return True
     cancel = []
-    with self.blocklock:
-      now = time.time()
-      timeout_expired = now > self.timeoutend
-      self.timeoutend = now + self.settings.timeout
-      if job.identifier in self.knownidentifiers: return False
-      if timeout_expired: self.knownidentifiers = [self.currentidentifier]
-      else: self.knownidentifiers.append(self.currentidentifier)
-      self.currentidentifier = job.identifier
-      with self.core.workqueue.lock:
+    # Needs to be locked outside of blocklock to prevent race condition
+    with self.core.workqueue.lock:
+      with self.blocklock:
+        now = time.time()
+        timeout_expired = now > self.timeoutend
+        self.timeoutend = now + self.settings.timeout
+        if job.prevhash in self.knownprevhashes: return False
+        if timeout_expired: self.knownprevhashes = [self.currentprevhash]
+        else: self.knownprevhashes.append(self.currentprevhash)
+        self.currentprevhash = job.prevhash
         while self.jobs:
           job = self.jobs.pop(0)
           if job.worker: cancel.append(job)
           else: job.destroy()
-      self.jobs = []
-      with self.stats.lock:
-        self.stats.blocks += 1
-        self.stats.lastblock = now
-    self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
+        self.jobs = []
+        with self.stats.lock:
+          self.stats.blocks += 1
+          self.stats.lastblock = now
+    self.core.log(self, "New block detected\n", 300, "B")
     self.core.workqueue.cancel_jobs(cancel)
     return True
  
@@ -152,11 +154,12 @@ class DummyBlockchain(object):
   def __init__(self, core):
     self.core = core
     self.id = 0
+    self.settings = Bunch(name = "Dummy blockchain")
     
     # Initialize job list (protected by global job queue lock)
     self.jobs = []
-    self.currentidentifier = None
-    self.knownidentifiers = []
+    self.currentprevhash = None
+    self.knownprevhashes = []
     self.timeoutend = 0
     self.blocklock = RLock()
     
@@ -178,22 +181,22 @@ class DummyBlockchain(object):
 
   
   def check_job(self, job):
-    if self.currentidentifier == job.identifier: return True
+    if self.currentprevhash == job.prevhash: return True
     cancel = []
     with self.blocklock:
       now = time.time()
       timeout_expired = now > self.timeoutend
       self.timeoutend = now + 10
-      if job.identifier in self.knownidentifiers: return False
-      if timeout_expired: self.knownidentifiers = [self.currentidentifier]
-      else: self.knownidentifiers.append(self.currentidentifier)
-      self.currentidentifier = job.identifier
+      if job.prevhash in self.knownprevhashes: return False
+      if timeout_expired: self.knownprevhashes = [self.currentprevhash]
+      else: self.knownprevhashes.append(self.currentprevhash)
+      self.currentprevhash = job.prevhash
       with self.core.workqueue.lock:
         while self.jobs:
           job = self.jobs.pop(0)
           if job.worker: cancel.append(job)
           else: job.destroy()
       self.jobs = []
-    self.core.log("%s: New block detected\n" % job.worksource.settings.name, 300, "B")
+    self.core.log(self, "New block detected\n", 300, "B")
     self.core.workqueue.cancel_jobs(cancel)
     return True

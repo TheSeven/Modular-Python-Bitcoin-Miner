@@ -26,8 +26,6 @@
 
 
 
-import os
-import serial
 import time
 import traceback
 from threading import Condition, Thread
@@ -39,7 +37,7 @@ from core.baseworker import BaseWorker
 # Worker main class, referenced from __init__.py
 class BFLSingleWorker(BaseWorker):
   
-  version = "theseven.bflsingle worker v0.1.0beta"
+  version = "theseven.bflsingle worker v0.1.0"
   default_name = "Untitled BFL Single worker"
   settings = dict(BaseWorker.settings, **{
     "port": {"title": "Port", "type": "string", "position": 1000},
@@ -65,7 +63,7 @@ class BFLSingleWorker(BaseWorker):
     if not "port" in self.settings or not self.settings.port: self.settings.port = "/dev/ttyUSB0"
     # We can't change the port name on the fly, so trigger a restart if they changed.
     # self.port is a cached copy of self.settings.port.
-    if self.settings.port != self.port: self.async_restart()
+    if self.started and self.settings.port != self.port: self.async_restart()
     
 
   # Reset our state. Called both from the constructor and from self.start().
@@ -115,8 +113,10 @@ class BFLSingleWorker(BaseWorker):
   # This is neccesary to avoid producing stale shares after a new block was found,
   # or if a job expires for some other reason. If we don't know about the job, just ignore it.
   # Never attempts to fetch a new job in here, always do that asynchronously!
-  # This needs to be very lightweight and fast.
-  def notify_canceled(self, job):
+  # This needs to be very lightweight and fast. Canceling a job is very expensive
+  # for this module due to bad firmware design, so completely ignore graceful cancellation.
+  def notify_canceled(self, job, graceful):
+    if graceful: return
     # Acquire the wakeup lock to make sure that nobody modifies job/nextjob while we're looking at them.
     with self.wakeup:
       # If the currently being processed, or currently being uploaded job are affected,
@@ -152,6 +152,7 @@ class BFLSingleWorker(BaseWorker):
         self.job = None
 
         # Open the serial port
+        import serial
         self.handle = serial.Serial(self.port, 115200, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
 
         # We keep control of the wakeup lock at all times unless we're sleeping
@@ -161,7 +162,7 @@ class BFLSingleWorker(BaseWorker):
         response = self.handle.readline()
         if response[:31] != b">>>ID: BitFORCE SHA256 Version " or response[-4:] != b">>>\n":
           raise Exception("Bad ZGX response: %s\n" % response.decode("ascii", "replace").strip())
-        self.core.log("%s: Firmware: %s\n" % (self.settings.name, response[7:-4].decode("ascii", "replace")), 400, "B")
+        self.core.log(self, "Firmware: %s\n" % (response[7:-4].decode("ascii", "replace")), 400, "B")
 
         # Main loop, continues until something goes wrong or we're shutting down.
         while not self.shutdown:
@@ -203,6 +204,7 @@ class BFLSingleWorker(BaseWorker):
           if response[:23] != b"Temperature (celcius): " or response[-1:] != b"\n":
             raise Exception("Bad ZLX response: %s\n" % response.decode("ascii", "replace").strip())
           self.stats.temperature = float(response[23:-1])
+          self.core.event(350, self, "temperature", self.stats.temperature * 1000, "%f \xc2\xb0C" % self.stats.temperature, worker = self)
           if self.shutdown: break
 
           # Wait while the device is processing the job. If the job gets canceled, we will be woken up.
@@ -230,6 +232,7 @@ class BFLSingleWorker(BaseWorker):
           if not self.job.canceled:
             delta = now - self.job.starttime
             self.stats.mhps = 2**32 / delta / 1000000.
+            self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
             self.jobinterval = delta - 0.2
             self.jobspersecond = 1. / self.jobinterval
             self.core.notify_speed_changed(self)
@@ -238,7 +241,7 @@ class BFLSingleWorker(BaseWorker):
       # If something went wrong...
       except Exception as e:
         # ...complain about it!
-        self.core.log(self.settings.name + ": %s\n" % traceback.format_exc(), 100, "rB")
+        self.core.log(self, "%s\n" % traceback.format_exc(), 100, "rB")
       finally:
         # We're not doing productive work any more, update stats and destroy current job
         self._jobend()

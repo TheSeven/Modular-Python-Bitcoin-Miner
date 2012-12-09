@@ -1,6 +1,23 @@
 Modular Python Bitcoin Miner
 Copyright (C) 2012 Michael Sparmann (TheSeven)
 
+v0.1.0 (final)
+===================
+- Handle SIGTERM gracefully
+- HTTP keepalive
+- Reworked work fetcher architecture (reduce work fetching overshoot, improve load balancing)
+- Share upload queueing (upload a limited number of shares in parallel, queue the rest for upload)
+- Improved long polling (and long poll aggregation) behavior
+- Warmup clock ramping (warm up chips gracefully, yet reach full speed quicker)
+- X6500Worker: Upload bitstream only if necessary (uncheck "Force bitstream upload" to enable)
+- FTDIJTAGWorker: Detect crashed (deconfigured) FPGAs and reboot them
+- WebUI: Add displaying of cgminer-style Utility value and effective hashrate (as seen by pool)
+- New frontend module: SQLite statistics logger
+- New worker module: FTDIJTAG (replaces X6500, reduces CPU load by 50%)
+- New worker module: Cairnsmore (for Enterpoint Cairnsmore1 boards running Glasswalker bitstreams with auto-clocking)
+- New worker module: MMQ (for BTCFPGA ModMiner Quad boards)
+- Lots of bug fixes and improvements
+
 v0.1.0 (beta)
 ===================
 - Completely new architecture

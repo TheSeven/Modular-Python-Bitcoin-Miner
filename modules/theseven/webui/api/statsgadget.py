@@ -27,8 +27,13 @@ from ..decorators import jsonapi
 
 @jsonapi
 def getworkerstats(core, webui, httprequest, path, request, privileges):
+  now = time.time()
+  ghashes = core.stats.ghashes
   return {
-    "timestamp": time.time(),
+    "timestamp": now,
+    "starttime": core.stats.starttime,
+    "ghashes": ghashes,
+    "avgmhps": 1000. * ghashes / (now - core.stats.starttime),
     "workers": core.get_worker_statistics(),
   }
 
@@ -51,8 +56,13 @@ def getblockchainstats(core, webui, httprequest, path, request, privileges):
 
 @jsonapi
 def getallstats(core, webui, httprequest, path, request, privileges):
+  now = time.time()
+  ghashes = core.stats.ghashes
   return {
-    "timestamp": time.time(),
+    "timestamp": now,
+    "starttime": core.stats.starttime,
+    "ghashes": ghashes,
+    "avgmhps": 1000. * ghashes / (now - core.stats.starttime),
     "workers": core.get_worker_statistics(),
     "worksources": core.get_work_source_statistics(),
     "blockchains": core.get_blockchain_statistics(),

@@ -20,12 +20,13 @@
 
 
 
-###########################################################
-# FPGA Mining LLC X6500 FPGA Miner Board interface module #
-###########################################################
+########################################################
+# Generic FTDI JTAG bitbanging worker interface module #
+########################################################
 
 
 
+import usb
 import time
 import struct
 import traceback
@@ -34,30 +35,20 @@ from threading import RLock, Condition, Thread
 from binascii import hexlify, unhexlify
 from core.baseworker import BaseWorker
 from core.job import ValidationJob
-from .boardproxy import X6500BoardProxy
+from .boardproxy import FTDIJTAGBoardProxy
 try: from queue import Queue
 except: from Queue import Queue
 
 
 
 # Worker main class, referenced from __init__.py
-class X6500Worker(BaseWorker):
+class FTDIJTAGWorker(BaseWorker):
   
-  version = "fpgamining.x6500 worker v0.1.0"
-  default_name = "Untitled X6500 worker"
+  version = "theseven.ftdijtag worker v0.1.0"
+  default_name = "Untitled FTDIJTAG worker"
   settings = dict(BaseWorker.settings, **{
     "serial": {"title": "Board serial number", "type": "string", "position": 1000},
-    "useftd2xx": {
-      "title": "Driver",
-      "type": "enum",
-      "values": [
-        {"value": False, "title": "PyUSB"},
-        {"value": True, "title": "D2XX"},
-      ],
-      "position": 1100
-    },
     "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
-    "uploadfirmware": {"title": "Force firmware upload", "type": "boolean", "position": 1300},
     "firmware": {"title": "Firmware file location", "type": "string", "position": 1400},
     "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
     "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
@@ -74,19 +65,8 @@ class X6500Worker(BaseWorker):
   
   # Constructor, gets passed a reference to the miner core and the saved worker state, if present
   def __init__(self, core, state = None):
-    self.pyusb_available = False
-    try:
-      import usb
-      self.pyusb_available = True
-    except: pass
-    self.d2xx_available = False
-    try:
-      import d2xx
-      self.d2xx_available = True
-    except: pass
-
     # Let our superclass do some basic initialization and restore the state if neccessary
-    super(X6500Worker, self).__init__(core, state)
+    super(FTDIJTAGWorker, self).__init__(core, state)
 
     # Initialize proxy access locks and wakeup event
     self.lock = RLock()
@@ -98,16 +78,11 @@ class X6500Worker(BaseWorker):
   # Called from the constructor and after every settings change.
   def apply_settings(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500Worker, self).apply_settings()
+    super(FTDIJTAGWorker, self).apply_settings()
     if not "serial" in self.settings: self.settings.serial = None
-    if not "useftd2xx" in self.settings:
-      self.settings.useftd2xx = self.d2xx_available and not self.pyusb_available
-    if self.settings.useftd2xx == "false": self.settings.useftd2xx = False
-    else: self.settings.useftd2xx = not not self.settings.useftd2xx
     if not "takeover" in self.settings: self.settings.takeover = False
-    if not "uploadfirmware" in self.settings: self.settings.uploadfirmware = True
     if not "firmware" in self.settings or not self.settings.firmware:
-      self.settings.firmware = "modules/fpgamining/x6500/firmware/x6500.bit"
+      self.settings.firmware = "modules/theseven/ftdijtag/firmware/"
     if not "initialspeed" in self.settings: self.settings.initialspeed = 150
     self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
     if not "maximumspeed" in self.settings: self.settings.maximumspeed = 200
@@ -126,10 +101,9 @@ class X6500Worker(BaseWorker):
     self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
     if not "pollinterval" in self.settings or not self.settings.pollinterval: self.settings.pollinterval = 0.1
-    # We can't switch the device or driver on the fly, so trigger a restart if they changed.
-    # self.serial/self.useftd2xx are cached copys of self.settings.serial/self.settings.useftd2xx
-    if self.started and (self.settings.serial != self.serial or self.settings.useftd2xx != self.useftd2xx):
-      self.async_restart()
+    # We can't switch the device on the fly, so trigger a restart if it changed.
+    # self.serial is a cached copys of self.settings.serial
+    if self.started and self.settings.serial != self.serial: self.async_restart()
     # We need to inform the proxy about a poll interval change
     if self.started and self.settings.pollinterval != self.pollinterval: self._notify_poll_interval_changed()
     for child in self.children: child.apply_settings()
@@ -138,21 +112,19 @@ class X6500Worker(BaseWorker):
   # Reset our state. Called both from the constructor and from self.start().
   def _reset(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500Worker, self)._reset()
+    super(FTDIJTAGWorker, self)._reset()
     # These need to be set here in order to make the equality check in apply_settings() happy,
     # when it is run before starting the module for the first time. (It is called from the constructor.)
     self.serial = None
-    self.useftd2xx = None
     self.pollinterval = None
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _start(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500Worker, self)._start()
+    super(FTDIJTAGWorker, self)._start()
     # Cache the port number and baud rate, as we don't like those to change on the fly
     self.serial = self.settings.serial
-    self.useftd2xx = self.settings.useftd2xx
     # Reset the shutdown flag for our threads
     self.shutdown = False
     # Start up the main thread, which handles pushing work to the device.
@@ -164,7 +136,7 @@ class X6500Worker(BaseWorker):
   # Stut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500Worker, self)._stop()
+    super(FTDIJTAGWorker, self)._stop()
     # Set the shutdown flag for our threads, making them terminate ASAP.
     self.shutdown = True
     # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
@@ -196,9 +168,8 @@ class X6500Worker(BaseWorker):
         proxy_rxconn, self.txconn = Pipe(False)
         self.rxconn, proxy_txconn = Pipe(False)
         self.pollinterval = self.settings.pollinterval
-        self.proxy = X6500BoardProxy(proxy_rxconn, proxy_txconn, self.serial, self.useftd2xx,
-                                     self.settings.takeover, self.settings.uploadfirmware,
-                                     self.settings.firmware, self.pollinterval)
+        self.proxy = FTDIJTAGBoardProxy(proxy_rxconn, proxy_txconn, self.serial, self.settings.takeover,
+                                   self.settings.firmware, self.pollinterval)
         self.proxy.daemon = True
         self.proxy.start()
         proxy_txconn.close()
@@ -217,7 +188,7 @@ class X6500Worker(BaseWorker):
           elif data[0] == "response": self.response_queue.put(data[1:])
           elif data[0] == "started_up": self._notify_proxy_started_up(*data[1:])
           elif data[0] == "nonce_found": self._notify_nonce_found(*data[1:])
-          elif data[0] == "temperature_read": self._notify_temperature_read(*data[1:])
+          elif data[0] == "temperatures_read": self._notify_temperatures_read(*data[1:])
           else: raise Exception("Proxy sent unknown message: %s" % str(data))
         
         
@@ -270,10 +241,10 @@ class X6500Worker(BaseWorker):
     except: pass
     
     
-  def _notify_proxy_started_up(self, fpga0version, fpga1version):
+  def _notify_proxy_started_up(self, fpgacount):
     # The proxy is up and running, start up child workers
-    self.children = [X6500FPGA(self.core, self, 0, fpga0version),
-                     X6500FPGA(self.core, self, 1, fpga1version)]
+    for i in range(fpgacount):
+        self.children.append(FTDIJTAGFPGA(self.core, self, i))
     for child in self.children: child.start()
 
     
@@ -283,24 +254,17 @@ class X6500Worker(BaseWorker):
       except Exception as e: self.children[fpga].error = e
 
 
-  def _notify_temperature_read(self, fpga0, fpga1):
+  def _notify_temperatures_read(self, temperatures):
     if self.children:
-      self.children[0].stats.temperature = fpga0
-      self.children[1].stats.temperature = fpga1
-      if fpga0: self.core.event(350, self.children[0], "temperature", fpga0 * 1000, "%f \xc2\xb0C" % fpga0, worker = self.children[0])
-      if fpga1: self.core.event(350, self.children[1], "temperature", fpga1 * 1000, "%f \xc2\xb0C" % fpga1, worker = self.children[1])
+      for fpga in temperatures:
+        if len(self.children) > fpga:
+          self.children[fpga].stats.temperature = temperatures[fpga]
+          if temperatures[fpga]:
+            self.core.event(350, self.children[fpga], "temperature", temperatures[fpga] * 1000, "%f \xc2\xb0C" % temperatures[fpga], worker = self.children[fpga])
 
       
   def send_job(self, fpga, job):
     return self._proxy_transaction("send_job", fpga, job.midstate + job.data[64:76])
-
-
-  def clear_queue(self, fpga):
-    self._proxy_message("clear_queue", fpga)
-
-
-  def shutdown_fpga(self, fpga):
-    self._proxy_message("shutdown_fpga", fpga)
 
 
   def set_speed(self, fpga, speed):
@@ -312,18 +276,17 @@ class X6500Worker(BaseWorker):
 
 
 
-# FPGA handler main class, child worker of X6500Worker
-class X6500FPGA(BaseWorker):
+# FPGA handler main class, child worker of FTDIJTAGWorker
+class FTDIJTAGFPGA(BaseWorker):
 
-  # Constructor, gets passed a reference to the miner core, the X6500Worker,
+  # Constructor, gets passed a reference to the miner core, the FTDIJTAGWorker,
   # its FPGA id, and the bitstream version currently running on that FPGA
-  def __init__(self, core, parent, fpga, bitstreamversion):
+  def __init__(self, core, parent, fpga):
     self.parent = parent
     self.fpga = fpga
-    self.firmware_rev = bitstreamversion
 
     # Let our superclass do some basic initialization
-    super(X6500FPGA, self).__init__(core, None)
+    super(FTDIJTAGFPGA, self).__init__(core, None)
     
     # Initialize wakeup flag for the main thread.
     # This serves as a lock at the same time.
@@ -336,22 +299,21 @@ class X6500FPGA(BaseWorker):
   def apply_settings(self):
     self.settings.name = "%s FPGA%d" % (self.parent.settings.name, self.fpga)
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500FPGA, self).apply_settings()
+    super(FTDIJTAGFPGA, self).apply_settings()
     
 
   # Reset our state. Called both from the constructor and from self.start().
   def _reset(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500FPGA, self)._reset()
+    super(FTDIJTAGFPGA, self)._reset()
     self.stats.temperature = None
-    self.stats.speed = None
     self.initialramp = True
 
 
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _start(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500FPGA, self)._start()
+    super(FTDIJTAGFPGA, self)._start()
     # Assume a default job interval to make the core start fetching work for us.
     # The actual hashrate will be measured (and this adjusted to the correct value) later.
     self.jobs_per_second = 1. / self.parent.settings.jobinterval
@@ -369,13 +331,13 @@ class X6500FPGA(BaseWorker):
   # Stut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500FPGA, self)._stop()
+    super(FTDIJTAGFPGA, self)._stop()
     # Set the shutdown flag for our threads, making them terminate ASAP.
     self.shutdown = True
     # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
     with self.wakeup: self.wakeup.notify()
     # Wait for the main thread to terminate.
-    self.mainthread.join(2)
+    self.mainthread.join(1)
 
       
   # This function should interrupt processing of the specified job if possible.
@@ -395,7 +357,7 @@ class X6500FPGA(BaseWorker):
   # Report custom statistics.
   def _get_statistics(self, stats, childstats):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(X6500FPGA, self)._get_statistics(stats, childstats)
+    super(FTDIJTAGFPGA, self)._get_statistics(stats, childstats)
     stats.temperature = self.stats.temperature
 
 
@@ -411,6 +373,7 @@ class X6500FPGA(BaseWorker):
       try:
         # Record our starting timestamp, in order to back off if we repeatedly die
         starttime = time.time()
+        self.error = None
 
         # Initialize megahashes per second to zero, will be measured later.
         self.stats.mhps = 0
@@ -429,8 +392,6 @@ class X6500FPGA(BaseWorker):
         if self.shutdown: break
         # Set validation success flag to false
         self.checksuccess = False
-        # Set validation job second iteration flag to false
-        self.seconditeration = False
         
         # Initialize hash rate tracking data
         self.lasttime = None
@@ -441,28 +402,20 @@ class X6500FPGA(BaseWorker):
         self.recentinvalid = 0
 
         # Configure core clock, if the bitstream supports that
-        if self.firmware_rev > 0: self._set_speed(self.parent.settings.initialspeed)
+        self._set_speed(self.parent.settings.initialspeed)
         
-        # Clear FPGA's nonce queue
-        self.parent.clear_queue(self.fpga)
-
         # Send validation job to device
         job = ValidationJob(self.core, unhexlify(b"00000001c3bf95208a646ee98a58cf97c3a0c4b7bf5de4c89ca04495000005200000000024d1fff8d5d73ae11140e4e48032cd88ee01d48c67147f9a09cd41fdec2e25824f5c038d1a0b350c5eb01f04"))
         self._sendjob(job)
 
-        # Wait for the validation job to complete. The wakeup flag will be set by the listener
-        # thread when the validation job completes. 180 seconds should be sufficient for devices
-        # down to about 50MH/s, for slower devices this timeout will need to be increased.
-        if self.stats.speed: self.wakeup.wait((2**32 / 1000000. / self.stats.speed) * 1.1)
-        else: self.wakeup.wait(180)
+        # Wait for the validation job to complete. The wakeup flag will be
+        # set by the listener thread when the validation job completes.
+        self.wakeup.wait((100. / self.stats.mhps) + 1)
         # Honor shutdown flag
         if self.shutdown: break
         # We woke up, but the validation job hasn't succeeded in the mean time.
         # This usually means that the wakeup timeout has expired.
         if not self.checksuccess: raise Exception("Timeout waiting for validation job to finish")
-        # self.stats.mhps has now been populated by the listener thread
-        self.core.log(self, "Running at %f MH/s\n" % self.stats.mhps, 300, "B")
-        self._update_job_interval()
 
         # Main loop, continues until something goes wrong or we're shutting down.
         while not self.shutdown:
@@ -473,6 +426,7 @@ class X6500FPGA(BaseWorker):
           self.wakeup.release()
           job = self.core.get_job(self, self.jobinterval + 2)
           self.wakeup.acquire()
+          if self.error: raise self.error
           
           # If a new block was found while we were fetching that job, just discard it and get a new one.
           if job.canceled:
@@ -481,6 +435,7 @@ class X6500FPGA(BaseWorker):
 
           # Upload the job to the device
           self._sendjob(job)
+          if self.error: raise self.error
           
           # Go through the safety checks and reduce the clock if necessary
           self.safetycheck()
@@ -493,6 +448,7 @@ class X6500FPGA(BaseWorker):
           # Wait while the device is processing the job. If nonces are sent by the device, they
           # will be processed by the listener thread. If the job gets canceled, we will be woken up.
           self.wakeup.wait(self.jobinterval)
+          if self.error: raise self.error
 
       # If something went wrong...
       except Exception as e:
@@ -533,54 +489,19 @@ class X6500FPGA(BaseWorker):
     if not job and oldjob:
       if oldjob.nonce_found(nonce): job = oldjob
     self.recentshares += 1
-    if not job: self.recentinvalid += 1
     nonceval = struct.unpack("<I", nonce)[0]
+    if not job:
+      self.recentinvalid += 1
+      if not nonceval: raise Exception("Firmware might have crashed, restarting!")
     if isinstance(newjob, ValidationJob):
       # This is a validation job. Validate that the nonce is correct, and complain if not.
       if newjob.nonce != nonce:
         raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (hexlify(nonce).decode("ascii"), hexlify(newjob.nonce).decode("ascii")))
       else:
         # The nonce was correct
-        if self.firmware_rev > 0:
-          # The FPGA is running overclocker firmware, so we don't need to use this method to calculate the hashrate.
-          # In fact, it will not work because the FPGA will go to sleep after working through all possible nonces.
-          with self.wakeup:
-            self.checksuccess = True
-            self.wakeup.notify()
-        else:
-          if self.seconditeration == True:
-            with self.wakeup:
-              # This is the second iteration. We now know the actual nonce rotation time.
-              delta = (now - newjob.starttime)
-              # Calculate the hash rate based on the nonce rotation time.
-              self.stats.mhps = 2**32 / 1000000. / delta
-              # Update hash rate tracking information
-              self.lasttime = now
-              self.lastnonce = nonceval
-              # Wake up the main thread
-              self.checksuccess = True
-              self.wakeup.notify()
-          else:
-            with self.wakeup:
-              # This was the first iteration. Wait for another one to figure out nonce rotation time.
-              newjob.starttime = now
-              self.seconditeration = True
-    else:
-      if self.firmware_rev == 0:
-        # Adjust hash rate tracking
-        delta = (now - self.lasttime)
-        estimatednonce = int(round(self.lastnonce + self.stats.mhps * 1000000 * delta))
-        noncediff = nonceval - (estimatednonce & 0xffffffff)
-        if noncediff < -0x80000000: noncediff = noncediff + 0x100000000
-        elif noncediff > 0x7fffffff: noncediff = noncediff - 0x100000000
-        estimatednonce = estimatednonce + noncediff
-        # Calculate the hash rate based on adjusted tracking information
-        currentmhps = (estimatednonce - self.lastnonce) / 1000000. / delta
-        weight = min(0.5, delta / 100.)
-        self.stats.mhps = (1 - weight) * self.stats.mhps + weight * currentmhps
-        # Update hash rate tracking information
-        self.lasttime = now
-        self.lastnonce = nonceval
+        with self.wakeup:
+          self.checksuccess = True
+          self.wakeup.notify()
       
 
   # This function uploads a job to the device
@@ -641,14 +562,7 @@ class X6500FPGA(BaseWorker):
       speedstep = 2
     else: speedstep = 0    
 
-    if self.firmware_rev > 0:
-      if speedstep: self._set_speed(self.stats.speed + speedstep)
-    elif warning or critical:
-      self.core.log(self, "Firmware too old, can not automatically reduce clock!\n", 200, "yB")
-      if critical:
-        self.core.log(self, "Shutting down FPGA to protect it!\n", 100, "rB")
-        self.parent.shutdown_fpga(self.fpga)
-        self.async_stop(2)
+    if speedstep: self._set_speed(self.stats.mhps + speedstep)
 
     if speedstep or self.recentshares >= threshold:
       self.recentinvalid = 0
@@ -657,19 +571,18 @@ class X6500FPGA(BaseWorker):
    
   def _set_speed(self, speed):
     speed = min(max(speed, 4), self.parent.settings.maximumspeed)
-    if self.stats.speed == speed: return
+    if self.stats.mhps == speed: return
     if speed == self.parent.settings.maximumspeed: self.initialramp = False
     self.core.log(self, "%s: Setting clock speed to %.2f MHz...\n" % ("Warmup" if self.initialramp else "Tracking", speed), 500, "B")
     self.parent.set_speed(self.fpga, speed)
-    self.stats.speed = self.parent.get_speed(self.fpga)
-    self.stats.mhps = self.stats.speed
+    self.stats.mhps = self.parent.get_speed(self.fpga)
     self._update_job_interval()
-    if self.stats.speed != speed:
+    if self.stats.mhps != speed:
       self.core.log(self, "Setting clock speed failed!\n", 100, "rB")
    
    
   def _update_job_interval(self):
-    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, self)
+    self.core.event(350, self, "speed", self.stats.mhps * 1000, "%f MH/s" % self.stats.mhps, worker = self)
     # Calculate the time that the device will need to process 2**32 nonces.
     # This is limited at 60 seconds in order to have some regular communication,
     # even with very slow devices (and e.g. detect if the device was unplugged).

@@ -38,6 +38,7 @@ class BaseFrontend(Startable, Inflatable):
   can_log = False
   can_show_stats = False
   can_configure = False
+  can_handle_events = False
   can_autodetect = False
   settings = dict(Inflatable.settings, **{
     "name": {"title": "Name", "type": "string", "position": 100},
@@ -45,10 +46,11 @@ class BaseFrontend(Startable, Inflatable):
 
 
   def __init__(self, core, state = None):
-    Startable.__init__(self)
     Inflatable.__init__(self, core, state)
+    Startable.__init__(self)
     self.does_log = self.__class__.can_log
     self.does_show_stats = self.__class__.can_show_stats
+    self.does_handle_events = self.__class__.can_handle_events
     
     
   def destroy(self):
@@ -63,6 +65,5 @@ class BaseFrontend(Startable, Inflatable):
 
 
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting frontend state")
     Startable._reset(self)
-    self.jobs_per_second = 0
-    self.parallel_jobs = 0

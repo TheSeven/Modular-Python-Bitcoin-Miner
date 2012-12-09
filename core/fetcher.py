@@ -30,6 +30,7 @@ import time
 import traceback
 from threading import RLock, Condition, Thread, current_thread
 from .startable import Startable
+from .util import Bunch
 
 
 
@@ -37,8 +38,10 @@ class Fetcher(Startable):
 
   
   def __init__(self, core):
-    super(Fetcher, self).__init__()
     self.core = core
+    self.id = -2
+    self.settings = Bunch(name = "Fetcher controller")
+    super(Fetcher, self).__init__()
     # Initialize global fetcher lock and wakeup condition
     self.lock = Condition()
     # Fetcher controller thread
@@ -46,11 +49,10 @@ class Fetcher(Startable):
     
     
   def _reset(self):
+    self.core.event(300, self, "reset", None, "Resetting fetcher state")
     super(Fetcher, self)._reset()
     self.speedchanged = True
     self.queuetarget = 5
-    self.fetchercount = 0
-    self.threads = []
     
 
   def _start(self):
@@ -65,7 +67,6 @@ class Fetcher(Startable):
     self.shutdown = True
     self.wakeup()
     self.controllerthread.join(10)
-    for thread in self.threads: thread.join(10)
     super(Fetcher, self)._stop()
       
       
@@ -90,25 +91,28 @@ class Fetcher(Startable):
             for worker in self.core.workers:
               jobspersecond += worker.get_jobs_per_second()
               paralleljobs += worker.get_parallel_jobs()
-          self.queuetarget = max(2, paralleljobs, jobspersecond * 30)
-        while self.core.workqueue.count + self.fetchercount < self.queuetarget:
-          try:
-            thread = Thread(None, self.fetcherthread, "fetcher_worker")
-            thread.daemon = True
-            thread.start()
-            self.threads.append(thread)
-            self.fetchercount += 1
-          except:
-            self.core.log("Fetcher: Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
-            time.sleep(1)
-        self.lock.wait()
-
+          self.queuetarget = max(5, paralleljobs * 2, jobspersecond * 30)
+          self.core.workqueue.target = self.queuetarget
         
-  def fetcherthread(self):
-    try:
-      jobs = self.core.get_root_work_source().get_job()
-      if jobs: self.core.workqueue.add_jobs(jobs)
-    except: self.core.log("Fetcher: Error while fetching job: %s\n" % traceback.format_exc(), 200, "r")
-    with self.lock:
-      self.threads.remove(current_thread())
-      self.fetchercount -= 1
+        worksource = self.core.get_root_work_source()
+        queuecount = self.core.workqueue.count
+        fetchercount, jobcount = worksource.get_running_fetcher_count()
+        needjobs = self.queuetarget - queuecount - jobcount
+        startfetchers = max(0, min(5, (self.queuetarget - queuecount - jobcount // 2) // 2))
+        if not startfetchers and queuecount == 0 and fetchercount < 3: startfetchers = 1
+        if not startfetchers:
+          if self.core.workqueue.count * 2 > self.queuetarget: self.lock.wait()
+          else: self.lock.wait(0.1)
+          continue
+        try:
+          if startfetchers:
+            started, startedjobs = worksource.start_fetchers(startfetchers if self.core.workqueue.count * 4 < self.queuetarget else 1, needjobs)
+            if not started:
+              self.lock.wait(0.1)
+              continue
+          else: self.lock.wait(0.1)
+          lockout = time.time() + min(5, 4 * self.core.workqueue.count / self.queuetarget - 1)
+          while time.time() < lockout and self.core.workqueue.count > self.queuetarget / 4: self.lock.wait(0.1)
+        except:
+          self.core.log(self, "Error while starting fetcher thread: %s\n" % traceback.format_exc(), 100, "rB")
+          time.sleep(1)

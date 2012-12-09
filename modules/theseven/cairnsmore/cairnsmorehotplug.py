@@ -20,28 +20,37 @@
 
 
 
-#################################################################
-# Butterfly Labs Inc. BitFORCE Single hotplug controller module #
-#################################################################
+########################################
+# Cairnsmore hotplug controller module #
+########################################
 
 
 
+import re
 import traceback
 from glob import glob
 from threading import Condition, Thread
 from core.baseworker import BaseWorker
-from .bflsingleworker import BFLSingleWorker
+from .cairnsmoreworker import CairnsmoreWorker
 
 
 
 # Worker main class, referenced from __init__.py
-class BFLSingleHotplugWorker(BaseWorker):
+class CairnsmoreHotplugWorker(BaseWorker):
 
-  version = "theseven.bflsingle hotplug manager v0.1.0"
-  default_name = "BFL Single hotplug manager"
+  version = "theseven.cairnsmore hotplug manager v0.1.0"
+  default_name = "Cairnsmore hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{
-    "scaninterval": {"title": "Bus scan interval", "type": "float", "position": 2200},
+    "baudrate": {"title": "Baud rate", "type": "int", "position": 1100},
+    "jobinterval": {"title": "Job interval", "type": "float", "position": 1200},
+    "initialspeed": {"title": "Initial clock frequency", "type": "int", "position": 2000},
+    "maximumspeed": {"title": "Maximum clock frequency", "type": "int", "position": 2100},
+    "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 3200},
+    "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 3300},
+    "warmupstepshares": {"title": "Shares per warmup step", "type": "int", "position": 3400},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 3500},
+    "scaninterval": {"title": "Bus scan interval", "type": "float", "position": 4000},
   })
 
 
@@ -50,7 +59,7 @@ class BFLSingleHotplugWorker(BaseWorker):
     try:
       import serial
       found = False
-      for port in glob("/dev/serial/by-id/usb-Butterfly_Labs_Inc._BitFORCE_SHA256-*"):
+      for port in glob("/dev/serial/by-id/usb-FTDI_Cairnsmore1_*-if0?-port0"):
         try:
           handle = serial.Serial(port, 115200, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
           handle.close()
@@ -67,15 +76,35 @@ class BFLSingleHotplugWorker(BaseWorker):
     self.wakeup = Condition()
 
     # Let our superclass do some basic initialization and restore the state if neccessary
-    super(BFLSingleHotplugWorker, self).__init__(core, state)
+    super(CairnsmoreHotplugWorker, self).__init__(core, state)
 
 
   # Validate settings, filling them with default values if neccessary.
   # Called from the constructor and after every settings change.
   def apply_settings(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(BFLSingleHotplugWorker, self).apply_settings()
+    super(CairnsmoreHotplugWorker, self).apply_settings()
     if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval = 10
+    if not "baudrate" in self.settings or not self.settings.baudrate: self.settings.baudrate = 115200
+    if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 20
+    if not "initialspeed" in self.settings: self.settings.initialspeed = 150
+    self.settings.initialspeed = min(max(self.settings.initialspeed, 4), 250)
+    if not "maximumspeed" in self.settings: self.settings.maximumspeed = 200
+    self.settings.maximumspeed = min(max(self.settings.maximumspeed, 4), 300)
+    if not "invalidwarning" in self.settings: self.settings.invalidwarning = 2
+    self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
+    if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
+    self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "warmupstepshares" in self.settings: self.settings.warmupstepshares = 5
+    self.settings.warmupstepshares = min(max(self.settings.warmupstepshares, 1), 10000)
+    if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
+    self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
+    # Push our settings down to our children
+    fields = ["baudrate", "jobinterval", "initialspeed", "maximumspeed", "invalidwarning",
+              "invalidcritical", "warmupstepshares", "speedupthreshold"]
+    for child in self.children:
+      for field in fields: child.settings[field] = self.settings[field]
+      child.apply_settings()
     # Rescan the bus immediately to apply the new settings
     with self.wakeup: self.wakeup.notify()
 
@@ -83,7 +112,7 @@ class BFLSingleHotplugWorker(BaseWorker):
   # Reset our state. Called both from the constructor and from self.start().
   def _reset(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(BFLSingleHotplugWorker, self)._reset()
+    super(CairnsmoreHotplugWorker, self)._reset()
     # These need to be set here in order to make the equality check in apply_settings() happy,
     # when it is run before starting the module for the first time. (It is called from the constructor.)
 
@@ -91,7 +120,7 @@ class BFLSingleHotplugWorker(BaseWorker):
   # Start up the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _start(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(BFLSingleHotplugWorker, self)._start()
+    super(CairnsmoreHotplugWorker, self)._start()
     # Initialize child map
     self.childmap = {}
     # Reset the shutdown flag for our threads
@@ -105,7 +134,7 @@ class BFLSingleHotplugWorker(BaseWorker):
   # Shut down the worker module. This is protected against multiple calls and concurrency by a wrapper.
   def _stop(self):
     # Let our superclass handle everything that isn't specific to this worker module
-    super(BFLSingleHotplugWorker, self)._stop()
+    super(CairnsmoreHotplugWorker, self)._stop()
     # Set the shutdown flag for our threads, making them terminate ASAP.
     self.shutdown = True
     # Trigger the main thread's wakeup flag, to make it actually look at the shutdown flag.
@@ -126,14 +155,13 @@ class BFLSingleHotplugWorker(BaseWorker):
   # This thread is responsible for scanning for boards and spawning worker modules for them
   def main(self):
     import serial
-    number = 0
 
     # Loop until we are shut down
     while not self.shutdown:
 
       try:
         boards = {}
-        for port in glob("/dev/serial/by-id/usb-Butterfly_Labs_Inc._BitFORCE_SHA256-*"):
+        for port in glob("/dev/serial/by-id/usb-FTDI_Cairnsmore1_*-if0?-port0"):
           available = False
           try:
             handle = serial.Serial(port, 115200, serial.EIGHTBITS, serial.PARITY_NONE, serial.STOPBITS_ONE, 1, False, False, 5, False, None)
@@ -164,10 +192,12 @@ class BFLSingleHotplugWorker(BaseWorker):
 
         for port, available in boards.items():
           if port in self.childmap or not available: continue
-          number += 1
-          child = BFLSingleWorker(self.core)
-          child.settings.name = "Autodetected BFL Single %d" % number
+          child = CairnsmoreWorker(self.core)
+          child.settings.name = "Cairnsmore1 board %s FPGA%s" % (re.match("/dev/serial/by-id/usb-FTDI_Cairnsmore1_([0-9A-Z]+)-if0([0-3])-port0", port).group(1, 2))
           child.settings.port = port
+          fields = ["jobinterval", "baudrate", "initialspeed", "maximumspeed", "invalidwarning",
+                    "invalidcritical", "warmupstepshares",  "speedupthreshold"]
+          for field in fields: child.settings[field] = self.settings[field]
           child.apply_settings()
           self.childmap[port] = child
           self.children.append(child)

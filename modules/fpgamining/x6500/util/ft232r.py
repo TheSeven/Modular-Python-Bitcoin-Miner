@@ -347,7 +347,7 @@ class FT232R_PyUSB:
       if permissionproblem:
         raise Exception("Can not open the specified device, possibly due to insufficient permissions")
       raise Exception("Can not open the specified device")
-    self.handle.controlMsg(0x40, 3, None, 0, 0)
+    self.handle.controlMsg(0x40, 3, None, 0, 0, 1000)
     
   def __enter__(self): 
     return self
@@ -371,18 +371,18 @@ class FT232R_PyUSB:
   def purgeBuffers(self):
     if self.handle is None:
       raise DeviceNotOpened()
-    self.handle.controlMsg(0x40, 0, None, 1, self.index)
-    self.handle.controlMsg(0x40, 0, None, 2, self.index)
+    self.handle.controlMsg(0x40, 0, None, 1, self.index, 1000)
+    self.handle.controlMsg(0x40, 0, None, 2, self.index, 1000)
     
   def setBitMode(self, mask, mode):
     if self.handle is None:
       raise DeviceNotOpened()
-    self.handle.controlMsg(0x40, 0xb, None, (mode << 8) | mask, self.index)
+    self.handle.controlMsg(0x40, 0xb, None, (mode << 8) | mask, self.index, 1000)
   
   def getBitMode(self):
     if self.handle is None:
       raise DeviceNotOpened()
-    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index))))[0]
+    return struct.unpack("B", bytes(bytearray(self.handle.controlMsg(0xc0, 0xc, 1, 0, self.index, 1000))))[0]
     
   def write(self, data):
     if self.handle is None:
@@ -391,7 +391,7 @@ class FT232R_PyUSB:
     offset = 0
     while offset < size:
       write_size = min(4096, size - offset)
-      ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size])
+      ret = self.handle.bulkWrite(self.outep, data[offset : offset + write_size], 1000)
       offset = offset + ret
     
   def read(self, size, timeout):
@@ -401,7 +401,7 @@ class FT232R_PyUSB:
     data = b""
     offset = 0
     while offset < size and time.time() < timeout:
-      ret = bytes(bytearray(self.handle.bulkRead(self.inep, min(64, size - offset + 2))))
+      ret = bytes(bytearray(self.handle.bulkRead(self.inep, min(64, size - offset + 2), 1000)))
       data = data + ret[2:]
       offset = offset + len(ret) - 2
     return data

@@ -34,7 +34,7 @@ from core.basefrontend import BaseFrontend
 
 class StderrLogger(BaseFrontend):
 
-  version = "theseven.basicloggers stderr logger v0.1.0beta"
+  version = "theseven.basicloggers stderr logger v0.1.0"
   default_name = "stderr logger"
   can_log = True
   can_autodetect = True
@@ -67,10 +67,10 @@ class StderrLogger(BaseFrontend):
     else: self.core.stderr.write("\n" * 100)
   
   
-  def write_log_message(self, timestamp, loglevel, messages):
+  def write_log_message(self, source, timestamp, loglevel, messages):
     if not self.started: return
     if loglevel > self.settings.loglevel: return
-    prefix = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") + " [%3d]: " % loglevel
+    prefix = "%s [%3d] %s: " % (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"), loglevel, source.settings.name)
     newline = True
     for message, format in messages:
       for line in message.splitlines(True):

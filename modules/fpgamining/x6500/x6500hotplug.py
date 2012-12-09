@@ -36,7 +36,7 @@ from .x6500worker import X6500Worker
 # Worker main class, referenced from __init__.py
 class X6500HotplugWorker(BaseWorker):
   
-  version = "fpgamining.x6500 hotplug manager v0.1.0beta"
+  version = "fpgamining.x6500 hotplug manager v0.1.0"
   default_name = "X6500 hotplug manager"
   can_autodetect = True
   settings = dict(BaseWorker.settings, **{
@@ -50,7 +50,7 @@ class X6500HotplugWorker(BaseWorker):
       "position": 1100
     },
     "takeover": {"title": "Reset board if it appears to be in use", "type": "boolean", "position": 1200},
-    "uploadfirmware": {"title": "Upload firmware", "type": "boolean", "position": 1300},
+    "uploadfirmware": {"title": "Force firmware upload", "type": "boolean", "position": 1300},
     "firmware": {"title": "Firmware file location", "type": "string", "position": 1400},
     "blacklist": {
       "title": "Board list type",
@@ -74,7 +74,8 @@ class X6500HotplugWorker(BaseWorker):
     "tempcritical": {"title": "Critical temperature", "type": "int", "position": 4100},
     "invalidwarning": {"title": "Warning invalids", "type": "int", "position": 4200},
     "invalidcritical": {"title": "Critical invalids", "type": "int", "position": 4300},
-    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 4400},
+    "warmupstepshares": {"title": "Shares per warmup step", "type": "int", "position": 4400},
+    "speedupthreshold": {"title": "Speedup threshold", "type": "int", "position": 4500},
     "jobinterval": {"title": "Job interval", "type": "float", "position": 5100},
     "pollinterval": {"title": "Poll interval", "type": "float", "position": 5200},
   })
@@ -82,6 +83,7 @@ class X6500HotplugWorker(BaseWorker):
   
   @classmethod
   def autodetect(self, core):
+    return  #Disabled in favor of FTDIJTAG module
     try:
       found = False
       try:
@@ -175,6 +177,8 @@ class X6500HotplugWorker(BaseWorker):
     self.settings.invalidwarning = min(max(self.settings.invalidwarning, 1), 10)
     if not "invalidcritical" in self.settings: self.settings.invalidcritical = 10
     self.settings.invalidcritical = min(max(self.settings.invalidcritical, 1), 50)
+    if not "warmupstepshares" in self.settings: self.settings.warmupstepshares = 5
+    self.settings.warmupstepshares = min(max(self.settings.warmupstepshares, 1), 10000)
     if not "speedupthreshold" in self.settings: self.settings.speedupthreshold = 100
     self.settings.speedupthreshold = min(max(self.settings.speedupthreshold, 50), 10000)
     if not "jobinterval" in self.settings or not self.settings.jobinterval: self.settings.jobinterval = 60
@@ -182,10 +186,10 @@ class X6500HotplugWorker(BaseWorker):
     if not "scaninterval" in self.settings or not self.settings.scaninterval: self.settings.scaninterval = 10
     # We can't switch the driver on the fly, so trigger a restart if it changed.
     # self.useftd2xx is a cached copy of self.settings.useftd2xx
-    if self.settings.useftd2xx != self.useftd2xx: self.async_restart()
+    if self.started and self.settings.useftd2xx != self.useftd2xx: self.async_restart()
     # Push our settings down to our children
     fields = ["takeover", "uploadfirmware", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
-              "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
+              "invalidwarning", "invalidcritical", "warmupstepshares", "speedupthreshold", "jobinterval", "pollinterval"]
     for child in self.children:
       for field in fields: child.settings[field] = self.settings[field]
       child.apply_settings()
@@ -232,10 +236,10 @@ class X6500HotplugWorker(BaseWorker):
     while self.children:
       child = self.children.pop(0)
       try:
-        self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
+        self.core.log(self, "Shutting down worker %s...\n" % (child.settings.name), 800)
         child.stop()
       except Exception as e:
-        self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+        self.core.log(self, "Could not stop worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
 
       
   # Main thread entry point
@@ -284,24 +288,28 @@ class X6500HotplugWorker(BaseWorker):
           if self.settings.blacklist:
             if serial in self.settings.boards: del boards[serial]
           else:
-            if serial not in self.settings.board: del boards[serial]
+            if serial not in self.settings.boards: del boards[serial]
                 
+        kill = []
         for serial, child in self.childmap.items():
           if not serial in boards:
-            try:
-              self.core.log("%s: Shutting down worker %s...\n" % (self.settings.name, child.settings.name), 800)
-              child.stop()
-            except Exception as e:
-              self.core.log("%s: Could not stop worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
-            childstats = child.get_statistics()
-            fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
-            for field in fields: self.stats[field] += childstats[field]
-            try: self.child.destroy()
-            except: pass
-            del self.childmap[serial]
-            try: self.children.remove(child)
-            except: pass
-                
+            kill.append((serial, child))
+            
+        for serial, child in kill:
+          try:
+            self.core.log(self, "Shutting down worker %s...\n" % (child.settings.name), 800)
+            child.stop()
+          except Exception as e:
+            self.core.log(self, "Could not stop worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
+          childstats = child.get_statistics()
+          fields = ["ghashes", "jobsaccepted", "jobscanceled", "sharesaccepted", "sharesrejected", "sharesinvalid"]
+          for field in fields: self.stats[field] += childstats[field]
+          try: self.child.destroy()
+          except: pass
+          del self.childmap[serial]
+          try: self.children.remove(child)
+          except: pass
+              
         for serial, available in boards.items():
           if serial in self.childmap: continue
           if not available and self.settings.takeover:
@@ -332,18 +340,18 @@ class X6500HotplugWorker(BaseWorker):
             child = X6500Worker(self.core)
             child.settings.name = "X6500 board " + serial
             child.settings.serial = serial
-            fields = ["takeover", "useftd2xx", "uploadfirmware", "firmware", "initialspeed", "maximumspeed", "tempwarning",
-                      "tempcritical", "invalidwarning", "invalidcritical", "speedupthreshold", "jobinterval", "pollinterval"]
+            fields = ["takeover", "useftd2xx", "uploadfirmware", "firmware", "initialspeed", "maximumspeed", "tempwarning", "tempcritical",
+                      "invalidwarning", "invalidcritical", "warmupstepshares", "speedupthreshold", "jobinterval", "pollinterval"]
             for field in fields: child.settings[field] = self.settings[field]
             child.apply_settings()
             self.childmap[serial] = child
             self.children.append(child)
             try:
-              self.core.log("%s: Starting up worker %s...\n" % (self.settings.name, child.settings.name), 800)
+              self.core.log(self, "Starting up worker %s...\n" % (child.settings.name), 800)
               child.start()
             except Exception as e:
-              self.core.log("%s: Could not start worker %s: %s\n" % (self.settings.name, child.settings.name, traceback.format_exc()), 100, "rB")
+              self.core.log(self, "Could not start worker %s: %s\n" % (child.settings.name, traceback.format_exc()), 100, "rB")
               
-      except: self.core.log("Caught exception: %s\n" % traceback.format_exc(), 100, "rB")
+      except: self.core.log(self, "Caught exception: %s\n" % traceback.format_exc(), 100, "rB")
           
       with self.wakeup: self.wakeup.wait(self.settings.scaninterval)

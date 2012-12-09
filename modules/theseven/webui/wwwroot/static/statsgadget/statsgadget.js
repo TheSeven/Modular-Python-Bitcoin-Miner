@@ -108,6 +108,10 @@ mod.statsgadget = {
                 var time = data["timestamp"];
                 var gHashesTotalDefinition = {"title": "GHashes total", "renderer": intRenderer};
                 var averageMHpsDefinition = {"title": "Average MH/s", "renderer": floatRenderer, "rendererconfig": {"precision": 2}};
+                var effectiveMHpsDefinition = {"title": "Effective MH/s", "transform": effectiveMHpsTransform, "renderer": floatPercentageRenderer,
+                                               "rendererconfig": {"precision": 1, "reference": makeReference("avgmhps"), "percentagePrecision": 1}};
+                var utilityDefinition = {"title": "Utility [shares/min]", "transform": perMinuteTransform,
+                                         "renderer": floatRenderer, "rendererconfig": {"precision": 2}};
                 var jobRequestsDefinition = {"title": "Job requests", "renderer": intRenderer};
                 var uploadRetriesDefinition = {"title": "Upload retries", "renderer": intRenderer};
                 var acceptedJobsDefinition = {"title": "Accepted jobs", "renderer": intRenderer};
@@ -154,10 +158,10 @@ mod.statsgadget = {
                     "temperature": {210: {"title": "Temperature [°C]", "renderer": floatRenderer, "rendererconfig": {"precision": 2}}},
                     "errorrate": {220: {"title": "Error rate", "renderer": percentageRenderer, "rendererconfig": {"percentagePrecision": 2}}},
                     "avgmhps": {230: averageMHpsDefinition},
-                    "ghashes": {240: gHashesTotalDefinition},
+                    "ghashes": {260: gHashesTotalDefinition},
                     "jobsaccepted": {300: acceptedJobsDefinition, 310: makePerHourDefinition("Jobs per hour", 2)},
                     "jobscanceled": {320: canceledJobsDefinition, 330: makePerHourDefinition("Canceled per hour", 2)},
-                    "sharesaccepted": {400: acceptedSharesDefinition},
+                    "sharesaccepted": {240: effectiveMHpsDefinition, 250: utilityDefinition, 400: acceptedSharesDefinition},
                     "sharesrejected": {410: rejectedSharesDefinition, 420: makePerHourDefinition("Rejects per hour", 2)},
                     "sharesinvalid": {430: invalidSharesDefinition, 440: makePerHourDefinition("Invalids per hour", 2)},
                     "starttime": {1000: uptimeDefinition},
@@ -181,14 +185,14 @@ mod.statsgadget = {
                     "job_expiry": {140: {"title": "Job validity timeframe", "renderer": timespanRenderer}},
                     "difficulty": {150: {"title": "Difficulty", "renderer": floatRenderer, "rendererconfig": {"precision": 2}}},
                     "avgmhps": {200: averageMHpsDefinition},
-                    "ghashes": {210: gHashesTotalDefinition},
+                    "ghashes": {230: gHashesTotalDefinition},
                     "jobrequests": {300: jobRequestsDefinition, 310: makePerHourDefinition("Requests per hour", 2)},
                     "failedjobreqs": {320: failedJobRequestsDefinition, 330: makePerHourDefinition("Failed requests per hour", 2)},
                     "uploadretries": {340: uploadRetriesDefinition, 350: makePerHourDefinition("Upload retries per hour", 2)},
                     "jobsreceived": {400: receivedJobsDefinition, 410: makePerHourDefinition("Received per hour", 2)},
                     "jobsaccepted": {420: acceptedJobsPercentageDefinition, 430: makePerHourDefinition("Accepted per hour", 2)},
                     "jobscanceled": {440: canceledJobsDefinition, 450: makePerHourDefinition("Canceled per hour", 2)},
-                    "sharesaccepted": {500: acceptedSharesDefinition},
+                    "sharesaccepted": {210: effectiveMHpsDefinition, 220: utilityDefinition, 500: acceptedSharesDefinition},
                     "sharesrejected": {510: rejectedSharesDefinition, 520: makePerHourDefinition("Rejects per hour", 2)},
                     "starttime": {1000: uptimeDefinition},
                     "consecutive_errors": {1100: {"title": "Consecutive errors", "renderer": intRenderer}},
@@ -202,11 +206,11 @@ mod.statsgadget = {
                     "blocks": {200: {"title": "Blocks seen", "renderer": intRenderer}, 210: makePerHourDefinition("Blocks per hour", 2)},
                     "lastblock": {220: {"title": "Last block", "renderer": timestampRenderer}, 230: timeAgoDefinition},
                     "avgmhps": {300: averageMHpsDefinition},
-                    "ghashes": {310: gHashesTotalDefinition},
+                    "ghashes": {330: gHashesTotalDefinition},
                     "jobsreceived": {400: receivedJobsDefinition, 410: makePerHourDefinition("Received per hour", 2)},
                     "jobsaccepted": {420: acceptedJobsPercentageDefinition, 430: makePerHourDefinition("Accepted per hour", 2)},
                     "jobscanceled": {440: canceledJobsDefinition, 450: makePerHourDefinition("Canceled per hour", 2)},
-                    "sharesaccepted": {500: acceptedSharesDefinition},
+                    "sharesaccepted": {310: effectiveMHpsDefinition, 320: utilityDefinition, 500: acceptedSharesDefinition},
                     "sharesrejected": {510: rejectedSharesDefinition, 520: makePerHourDefinition("Rejects per hour", 2)},
                     "starttime": {1000: uptimeDefinition},
                 });
@@ -218,9 +222,19 @@ mod.statsgadget = {
                 div.appendChild(blockchainTable);
                 timeout = setTimeout(refresh, mod.uiconfig.data.statsgadget.refreshinterval * 1000);
                 
+                function perMinuteTransform(stats, value, def)
+                {
+                    return value * 60 / (time - stats.starttime);
+                }
+                
                 function perHourTransform(stats, value, def)
                 {
                     return value * 3600 / (time - stats.starttime);
+                }
+                
+                function effectiveMHpsTransform(stats, value, def)
+                {
+                    return value * Math.pow(2, 32) / 1000000 / (time - stats.starttime);
                 }
                 
                 function timeAgoTransform(stats, value, def)

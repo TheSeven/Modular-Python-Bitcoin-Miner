@@ -29,14 +29,15 @@
 class OutputRedirector(object):
 
 
-  def __init__(self, core, loglevel, flags = ""):
+  def __init__(self, core, source, loglevel, flags = ""):
     self.core = core
+    self.source = source
     self.loglevel = loglevel
     self.flags = flags
 
     
   def write(self, data):
-    self.core.log(data, self.loglevel, self.flags)
+    self.core.log(self.source, data, self.loglevel, self.flags)
 
     
   def flush(self): pass
