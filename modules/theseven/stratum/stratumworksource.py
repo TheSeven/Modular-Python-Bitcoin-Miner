@@ -26,6 +26,7 @@
 
 
 
+import sys
 import socket
 import time
 import json
@@ -182,8 +183,12 @@ class StratumWorkSource(ActualWorkSource):
         with self.txnlock:
           self.conn = socket.create_connection((self.host, self.port), self.settings.connecttimeout)
           self.conn.settimeout(None)
-          self.connr = self.conn.makefile("r", buffering = 1, encoding = "utf_8", newline = "\n")
-          self.connw = self.conn.makefile("w", buffering = 1, encoding = "utf_8", newline = "\n")
+          if sys.version_info[0] < 3:
+            self.connr = self.conn.makefile("r", 1)
+            self.connw = self.conn.makefile("w", 1)
+          else:
+            self.connr = self.conn.makefile("r", buffering = 1, encoding = "utf_8", newline = "\n")
+            self.connw = self.conn.makefile("w", buffering = 1, encoding = "utf_8", newline = "\n")
           self._txn("mining.authorize", [self.username, self.password], self._authorized, self._setup_failed, self._setup_timeout)
         while not self.shutdown:
           msgs = json.loads(self.connr.readline())
