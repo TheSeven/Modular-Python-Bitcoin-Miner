@@ -171,6 +171,7 @@ class StratumWorkSource(ActualWorkSource):
       try: self.conn.close()
       except: pass
       self.conn = None
+    self._cancel_jobs()
       
   
   def _listener(self):
@@ -216,10 +217,13 @@ class StratumWorkSource(ActualWorkSource):
                   "difficulty": self.difficulty,
                   "target": self.target,
                 }
+              self.core.log(self, "Received new job generation data (%sflushing old jobs)\n" % ("" if msg["params"][8] else "not "), 500)
               if msg["params"][8]: self._cancel_jobs()
+              self.blockchain.check_job(Job(self.core, self, 0, self.data["version"] + self.data["prevhash"] + b"\0" * 68 + self.data["nbits"] + self.tail, self.target, True))
             elif msg["method"] == "mining.set_difficulty":
               self.difficulty = float(msg["params"][0])
               self._calculate_target()
+              self.core.log(self, "Received new job difficulty: %f\n" % self.difficulty, 500)
             else: self.core.log(self, "Received unknown Stratum notification: %s\n" % msg, 300, "y")
       except:
         with self.datalock: self.data = None
