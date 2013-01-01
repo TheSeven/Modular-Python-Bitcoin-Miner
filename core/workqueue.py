@@ -128,13 +128,13 @@ class WorkQueue(Startable):
     with self.lock:
       job = self._get_job_internal(expiry_min_ahead, async)
       if job:
-        self.core.fetcher.wakeup()
         job.set_worker(worker)
         expiry = int(job.expiry)
         if int(job.expiry) <= self.expirycutoff: self.count += 1
         if not expiry in self.takenlists: self.takenlists[expiry] = [job]
         else: self.takenlists[expiry].append(job)
-      return job
+    self.core.fetcher.wakeup()
+    return job
 
 
   def _get_job_internal(self, expiry_min_ahead, async = False):
