@@ -126,39 +126,45 @@ class WorkQueue(Startable):
       
   def get_job(self, worker, expiry_min_ahead, async = False):
     with self.lock:
-      job = self._get_job_internal(expiry_min_ahead, async)
-      if job:
-        job.set_worker(worker)
-        expiry = int(job.expiry)
-        if int(job.expiry) <= self.expirycutoff: self.count += 1
-        if not expiry in self.takenlists: self.takenlists[expiry] = [job]
-        else: self.takenlists[expiry].append(job)
+      while True:
+        job = self._get_job_internal(expiry_min_ahead)
+        if job:
+          job.set_worker(worker)
+          expiry = int(job.expiry)
+          if int(job.expiry) <= self.expirycutoff: self.count += 1
+          if not expiry in self.takenlists: self.takenlists[expiry] = [job]
+          else: self.takenlists[expiry].append(job)
+          break
+        elif async: return None
+        self.lock.release()
+        with self.core.fetcher.lock:
+          self.lock.acquire()
+          self.core.fetcher.wakeup()
+        self.lock.wait()
     self.core.fetcher.wakeup()
     return job
 
 
-  def _get_job_internal(self, expiry_min_ahead, async = False):
-    self.count -= 1
-    while True:
-      keys = sorted(self.lists.keys())
-      min_expiry = time.time() + expiry_min_ahead
-      # Look for a job that meets min_expiry as closely as possible
-      for expiry in keys:
-        if expiry <= min_expiry: continue
-        list = self.lists[expiry]
-        if not list: continue
-        return list.pop(0)
-      # If there was none, look for the job with the latest expiry
-      keys.reverse()
-      for expiry in keys:
-        if expiry > min_expiry: continue
-        list = self.lists[expiry]
-        if not list: continue
-        return list.pop(0)
-      # There were no jobs at all => Wait for some to arrive
-      self.core.fetcher.wakeup()
-      if async: return None
-      self.lock.wait()
+  def _get_job_internal(self, expiry_min_ahead):
+    keys = sorted(self.lists.keys())
+    min_expiry = time.time() + expiry_min_ahead
+    # Look for a job that meets min_expiry as closely as possible
+    for expiry in keys:
+      if expiry <= min_expiry: continue
+      list = self.lists[expiry]
+      if not list: continue
+      self.count -= 1
+      return list.pop(0)
+    # If there was none, look for the job with the latest expiry
+    keys.reverse()
+    for expiry in keys:
+      if expiry > min_expiry: continue
+      list = self.lists[expiry]
+      if not list: continue
+      self.count -= 1
+      return list.pop(0)
+    # There were no jobs at all
+    return None
 
         
   def _start(self):
