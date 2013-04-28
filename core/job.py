@@ -47,7 +47,9 @@ class Job(object):
     self.target = target
     self.identifier = identifier
     self.prevhash = data[4:36]
-    self.difficulty = 65535. * 2**48 / struct.unpack("<Q", self.target[-12:-4])[0]
+    difficulty_inverse = struct.unpack("<Q", self.target[-12:-4])[0]
+    if difficulty_inverse: self.difficulty = 65535. * 2**48 / difficulty_inverse
+    else: self.difficulty = 65535. / 65536
     with self.worksource.stats.lock: self.worksource.stats.difficulty = self.difficulty
     if midstate: self.midstate = midstate
     else: self.midstate = Job.calculate_midstate(data)
