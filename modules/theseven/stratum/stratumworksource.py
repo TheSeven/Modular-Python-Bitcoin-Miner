@@ -229,6 +229,7 @@ class StratumWorkSource(ActualWorkSource):
               self.difficulty = float(msg["params"][0])
               self._calculate_target()
               self.core.log(self, "Received new job difficulty: %f\n" % self.difficulty, 500)
+              self._cancel_jobs()
             else: self.core.log(self, "Received unknown Stratum notification: %s\n" % msg, 300, "y")
       except:
         with self.datalock: self.data = None
