@@ -300,4 +300,5 @@ class StratumWorkSource(ActualWorkSource):
     submitted = lambda txn, result: job.nonce_handled_callback(nonce, noncediff, result)
     submit_failed = lambda txn, error: job.nonce_handled_callback(nonce, noncediff, error)
     submit_timeout = lambda txn, shutdown: job.nonce_handled_callback(nonce, noncediff, self._nonce_timeout_err(shutdown))
-    self._txn("mining.submit", data, submitted, submit_failed, submit_timeout)
+    try: self._txn("mining.submit", data, submitted, submit_failed, submit_timeout)
+    except Exception as e: job.nonce_handled_callback(nonce, noncediff, str(e))
