@@ -183,15 +183,16 @@ class DummyBlockchain(object):
   def check_job(self, job):
     if self.currentprevhash == job.prevhash: return True
     cancel = []
-    with self.blocklock:
-      now = time.time()
-      timeout_expired = now > self.timeoutend
-      self.timeoutend = now + 10
-      if job.prevhash in self.knownprevhashes: return False
-      if timeout_expired: self.knownprevhashes = [self.currentprevhash]
-      else: self.knownprevhashes.append(self.currentprevhash)
-      self.currentprevhash = job.prevhash
-      with self.core.workqueue.lock:
+    # Needs to be locked outside of blocklock to prevent race condition
+    with self.core.workqueue.lock:
+      with self.blocklock:
+        now = time.time()
+        timeout_expired = now > self.timeoutend
+        self.timeoutend = now + 10
+        if job.prevhash in self.knownprevhashes: return False
+        if timeout_expired: self.knownprevhashes = [self.currentprevhash]
+        else: self.knownprevhashes.append(self.currentprevhash)
+        self.currentprevhash = job.prevhash
         while self.jobs:
           job = self.jobs.pop(0)
           if job.worker: cancel.append(job)
@@ -200,3 +201,4 @@ class DummyBlockchain(object):
     self.core.log(self, "New block detected\n", 300, "B")
     self.core.workqueue.cancel_jobs(cancel)
     return True
+
